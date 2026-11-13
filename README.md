@@ -1,7 +1,7 @@
-# livescope
+# scope
 
-A watch-only, STARS-style scope of air traffic on a globe, and the shared code behind several sites
-built on it:
+A watch-only, STARS-style scope of air traffic on a globe: the shared code behind several sites, one per
+traffic source:
 
 | site | traffic | address |
 |---|---|---|
@@ -11,13 +11,15 @@ built on it:
 Every site shares the scope client, the server, airports, procedures and ground maps. A site is one
 small file in `sites/` that names its data sources and links ([Adding a site](#adding-a-site)).
 
-What follows describes livescope, the real-world site.
+## livescope
+
+The real-world site.
 
 ADS-B positions come from adsb.lol, with adsb.fi as a fallback. The feed covers up to 250 nm around the
 middle of the view, and positions are eased between reports. You can zoom out to an orthographic globe,
 or search for any airport by ICAO, IATA or name. Close in, runways are drawn to scale.
 
-## Features
+### Features
 
 - **Procedures:** US airports show their SIDs, STARs and approaches (FAA CIFP). Pick one in the airport
   card to highlight it with its fixes.

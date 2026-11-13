@@ -106,7 +106,7 @@ class Ground:
 
     def overpass(self, q):
         data = urllib.parse.urlencode({"data": q}).encode()
-        req = urllib.request.Request(self.URL, data=data, headers={"User-Agent": "livescope/1 (livescope.kyleboas.com)"})
+        req = urllib.request.Request(self.URL, data=data, headers={"User-Agent": "scope/1 (+https://github.com/kyleboas/scope)"})
         with urllib.request.urlopen(req, timeout=120) as r:
             return json.load(r).get("elements") or []
 

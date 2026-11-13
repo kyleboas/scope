@@ -1,4 +1,4 @@
-"""The scope web server: the page, its map files and the /api/live endpoints for one site.
+"""scope's web server: the page, its map files and the /api/live endpoints for one site.
 
     python3 server.py livescope [--host 127.0.0.1] [--port 8799]
 
