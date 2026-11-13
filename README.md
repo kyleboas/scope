@@ -6,7 +6,7 @@ traffic source:
 | site | traffic | address |
 |---|---|---|
 | `livescope` | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
-| `ifscope` | Infinite Flight (planned) | ifscope.kyleboas.com |
+| `ifscope` | Infinite Flight's live multiplayer servers | https://ifscope.kyleboas.com |
 
 Every site shares the scope client, the server, airports, procedures and ground maps. A site is one
 small file in `sites/` that names its data sources and links ([Adding a site](#adding-a-site)).
@@ -49,6 +49,37 @@ or search for any airport by ICAO, IATA or name. Close in, runways are drawn to 
 - **Views:** GND / FLD / APP / CTR / GLOBE set the zoom. The URL keeps the view (`#EGLL/40`,
   `#lat,lon,half-width-nm`).
 
+## ifscope
+
+The Infinite Flight site: the Casual, Training and Expert servers' flights and controllers, from the
+[Infinite Flight Live API](https://infiniteflight.com/guide/developer-reference). It needs credentials in
+the environment, server side only:
+
+- `IF_API_KEY`: a Live API v2 key (Infinite Flight no longer issues these), or
+- `IF_CLIENT_ID` / `IF_CLIENT_SECRET`: a PublicApi v3 *Confidential* client with *Allow server-to-server
+  access*, created at https://infiniteflight.com/account/api-keys and approved by Infinite Flight.
+- `IF_RPM` (optional): requests per minute to allow, 25 by default. The limit is 30, or 100 when the
+  account that owns the key has Pro.
+
+Everything above works the same, plus:
+
+- **Servers** (header): Casual / Training / Expert with their pilot counts.
+- **All flights:** each server's whole flight list comes in one request, so the globe shows every
+  flight, refreshed every 15 s.
+- **ATC on duty:** airports with controllers get a cyan box and their facilities (C G T A D). The
+  airport card lists the controllers, any Center within 400 nm, the in-game ATIS and the real METAR.
+- **Flight plans:** each aircraft's origin and destination come from its filed plan, so ARR / DEP use
+  that first. Selecting an aircraft shows its pilot, livery and full plan (dashed). On Expert and
+  Training it also shows the route it has flown (blue), from Infinite Flight.
+- **Infinite Flight's API rules** ([usage and data rules](https://infiniteflight.com/guide/developer-reference/api-rules/usage-and-data-rules))
+  are built in (`sources/infinite_flight.py`):
+  - one shared in-memory cache, never written to disk or logged, and dropped after 50 minutes;
+  - minimum intervals: flights 15 s, ATC and world status 60 s, sessions 10 min, aircraft/liveries
+    60 min; a flight's plan or route only when someone selects it;
+  - a 429 pauses all requests for its `Retry-After`;
+  - no history trails, which would be collected positions;
+  - the page stops polling while hidden and after 15 minutes without input.
+
 ## Run
 
 ```
@@ -65,8 +96,12 @@ Write `sites/<name>.py` with two things:
 - `SITE`, a dict:
   - required: `name` (also the localStorage prefix), `title` and `url`
   - optional: `port`; `old_hosts`, host prefixes to 301-redirect to `url`; `src_links`, feed name → URL
-    for the status line; `hex_link`, `[url with {hex}, label with {HEX}]`; `world_link`, `[url, name]`
-- `providers()`, which returns a dict:
+    for the status line; `hex_link`, `[url with {hex}, label with {HEX}]`; `world_link`, `[url, name]`;
+    `no_history` (no trails); `stale_s` (how long to dead-reckon a report, default 20); `idle_min` (stop
+    polling while hidden or after that many minutes without input); `poll_ms`, `world_ms` (page refresh,
+    defaults 2000 and 30000); `start` (hash to open on, default `KSFO/52`; `None` = the globe);
+    `metar_label`
+- `providers()` (or `providers(airports=None)` to get the shared `core.Airports`), which returns a dict:
   - `traffic` (required): an object whose `get(lat, lon, nm)` returns
     `{ok, t, center:[lat, lon], nm, src, aircraft:[...]}`. Each aircraft is
     `{id, cs, lat, lon, alt, gs, hdg, vs, ts, ground, air, type, reg, sq, emer}`, optionally with `hex`.
@@ -75,6 +110,12 @@ Write `sites/<name>.py` with two things:
     `sources/adsb.py` World).
   - `routes` (optional): `get([callsigns])` returns `{cs: [from, lat, lon, to, lat, lon]}` for the callsigns it knows.
   - `atis` (optional): `get(ident)` returns `{atis:[{type, code, text, time}], metar:{raw, cat} | None}`.
+  - `features` (optional): extra page features: `servers` (a server picker; then `traffic`, `world` and
+    `atis` get a `server=` keyword, from the page's `srv`), `atc` and `flight`.
+  - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the
+    query string. ifscope's: `servers`, `atc` (`{ok, atc:[{icao, type, user, lat, lon, since}]}`) and
+    `flight` (`{plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}`).
+  - An aircraft may carry `route` (`[from, lat, lon, to, lat, lon]`): it is trusted over `routes`.
 
 A provider left out turns its feature off in the page (no world dots, no ATIS block, no route lookups).
 Put a site's data-source code in `sources/<source>.py`; anything every site can use belongs in `scope/`
@@ -94,6 +135,7 @@ or `web/scope.html`.
 server.py        HTTP server for one site: the page (with the site's settings), map files, /api/live*
 sites/           one file per site: settings + which providers it uses
 sources/adsb.py  livescope's data: ADS-B traffic, OpenSky world + ocean estimates, adsbdb routes, D-ATIS/METAR
+sources/infinite_flight.py  ifscope's data: Infinite Flight Live API (flights, ATC, ATIS, flight plans)
 scope/core.py    shared: geometry, airports (OurAirports), procedures (FAA CIFP), ground maps (OSM)
 web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals

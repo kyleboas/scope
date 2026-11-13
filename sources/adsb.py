@@ -104,6 +104,7 @@ class Atis:
     """Current ATIS for an airport: the FAA's D-ATIS text through atis.info (US airports that have it),
     plus the latest METAR from aviationweather.gov for any airport. Fetched when asked, kept a few minutes."""
     UA = {"User-Agent": "livescope/1 (livescope.kyleboas.com)"}
+    DATIS = True               # False: the METAR only
 
     def __init__(self):
         self.cache, self.lock = {}, threading.Lock()
@@ -129,7 +130,7 @@ class Atis:
             c = self.cache.get(ident) or {}
             if "atis" not in c or now > c["atisT"]:
                 atis = None
-                if ident[0] in "KPT" and len(ident) == 4:
+                if self.DATIS and ident[0] in "KPT" and len(ident) == 4:
                     d = self.fetch("https://atis.info/api/" + ident)
                     if isinstance(d, list):
                         atis = [{"type": x.get("type") or "", "code": x.get("code") or "", "text": x.get("datis") or "",

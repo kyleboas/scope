@@ -29,11 +29,11 @@ def load(name):
         raise SystemExit(f"bad site name {name!r}")
     mod = importlib.import_module("sites." + name)
     SITE.update(mod.SITE)
-    P.update(mod.providers())
     AIRPORTS = core.Airports()
+    P.update(mod.providers(airports=AIRPORTS) if "airports" in mod.providers.__code__.co_varnames else mod.providers())
     PROCS = core.Procs(AIRPORTS)
     GROUND = core.Ground(AIRPORTS)
-    feats = ["procs", "ground"] + [k for k in ("world", "routes", "atis") if P.get(k)]
+    feats = ["procs", "ground"] + [k for k in ("world", "routes", "atis") if P.get(k)] + list(P.get("features", []))
     client = {k: v for k, v in SITE.items() if k not in ("old_hosts", "port")} | {"features": feats}
     page = open(os.path.join(HERE, "web", "scope.html"), encoding="utf-8").read()
     page = page.replace("<title>livescope</title>", f"<title>{html.escape(SITE['title'])}</title>", 1)
@@ -89,8 +89,9 @@ class Handler(BaseHTTPRequestHandler):
         q = parse_qs(qs)
         f = lambda k, d=0.0: float((q.get(k) or [d])[0])       # noqa: E731
         s = lambda k, n=12: (q.get(k) or [""])[0][:n]          # noqa: E731
+        kw = {"server": s("srv", 10)} if "servers" in P.get("features", []) else {}   # sites with several servers (ifscope)
         if path == "/api/live":
-            return self.send(200, P["traffic"].get(f("lat"), f("lon"), max(5.0, min(P["max_nm"], f("nm", 60)))))
+            return self.send(200, P["traffic"].get(f("lat"), f("lon"), max(5.0, min(P["max_nm"], f("nm", 60))), **kw))
         if path == "/api/live/area":
             return self.send(200, AIRPORTS.area(f("lat"), f("lon"), f("nm", 30)))
         if path == "/api/live/airport":
@@ -105,12 +106,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"state": state})
             return self.send(200, gzip.decompress(gz), gz=gz)
         if path == "/api/live/atis" and P.get("atis"):
-            return self.send(200, P["atis"].get(s("id")))
+            return self.send(200, P["atis"].get(s("id"), **kw))
         if path == "/api/live/world" and P.get("world"):
-            body, gz = P["world"].get()
+            body, gz = P["world"].get(**kw)
             return self.send(200, body, gz=gz)
         if path == "/api/live/routes" and P.get("routes"):
             return self.send(200, P["routes"].get(s("cs", 2000).split(",")[:80]))
+        name = path[len("/api/live/"):] if path.startswith("/api/live/") else ""
+        if name in P.get("endpoints", {}):                 # a site's own endpoints (ifscope: servers, atc, flight)
+            return self.send(200, P["endpoints"][name](s))
         self.send(404, {"error": "not found"})
 
 

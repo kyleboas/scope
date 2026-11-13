@@ -86,10 +86,20 @@
   .layers label:hover { background:#1c1c1e; }
   .layers input { accent-color:#8e8e93; margin:0; }
   #listBtn { display:none; }
+  #srvs { display:flex; gap:0; }
+  #srvs button { padding:5px 6px; } #srvs button.on { color:var(--fg); background:var(--alt); }
+  #srvs button i { font-style:normal; color:var(--dim); margin-left:4px; }
+  #idle { position:absolute; inset:0; z-index:4; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.55);
+          font:13px var(--mono); color:var(--fg2); cursor:pointer; text-align:center; padding:20px; }
+  body.idle #idle { display:flex; }
+  #card .atc { display:grid; grid-template-columns:max-content 1fr max-content; gap:0 10px; margin:5px 0; color:var(--dim); }
+  #card .atc span:nth-child(3n+1) { color:#5ac8fa; }
+  #card .atc span:nth-child(3n+2) { color:var(--fg); overflow:hidden; text-overflow:ellipsis; }
+  #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   @media (max-width: 820px) {
     body { grid-template-columns:1fr; }
     header { grid-column:1; padding:3px max(8px, env(safe-area-inset-right)) 3px max(8px, env(safe-area-inset-left)); }
-    #q { width:120px; } .altf input { width:5.5ch; } #res { width:min(340px, 90vw); }
+    #q { width:120px; } #srvs button i { display:none; } .altf input { width:5.5ch; } #res { width:min(340px, 90vw); }
     #status { display:none; }
     #listBtn { display:inline-block; } body.noApt #listBtn { display:none; }
     #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 88vw); z-index:3; background:rgba(28,28,30,.97); display:none; }
@@ -109,12 +119,14 @@
   <div class="srch"><input id="q" placeholder="Airport: KSFO, LHR, Narita…" autocomplete="off" spellcheck="false"><div id="res"></div></div>
   <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out without tags.">ALT
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">–<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
+  <span id="srvs" title="Server"></span>
   <span id="status"></span>
   <button id="listBtn">List</button>
 </header>
 <div id="wrap">
   <div id="tiles" class="one"></div>
   <div id="gnote"></div>
+  <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
   <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out without tags">
     <button data-f="all">ALL</button><button data-f="arr">ARR</button><button data-f="dep">DEP</button><button data-f="both">ARR+DEP</button>
   </div>
@@ -129,6 +141,9 @@
 // (procs, ground, world, routes, atis); a feature a site doesn't have is skipped.
 const has = f => SITE.features.includes(f);
 const KEY = SITE.name;                 // localStorage prefix
+// optional site settings: no_history (no trails), stale_s (dead reckoning limit), idle_min (stop polling after that
+// long without input), poll_ms, world_ms, start (hash to open on; null = the globe), metar_label
+const STALE_S = SITE.stale_s || 20, POLL_MS = SITE.poll_ms || 2000, WORLD_MS = SITE.world_ms || 30000;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[ch]));
 const dpr = () => devicePixelRatio || 1;
@@ -143,10 +158,10 @@ const PROC_SEL = '#4fb3ff';
 const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
-                ['borders', 'Borders'], ['coast', 'Coastlines'], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
+                ['borders', 'Borders'], ['coast', 'Coastlines'], ['atc', 'Airports with ATC on duty'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
                 ['tags', 'Data tags'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:true, fixes:true, fixnames:true, rings:true, airports:true, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, trails:true, ptl:true, tags:true, ground:true, world:true, est:true };
+            finals:true, taxi:true, states:true, borders:true, coast:true, atc:true, plan:true, trails:true, ptl:true, tags:true, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -176,7 +191,7 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  lp.innerHTML = LAYERS.filter(([k]) => has('world') || (k !== 'world' && k !== 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
+  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('atc') || k !== 'atc') && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
@@ -316,6 +331,21 @@ function drawMap() {
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
     if (label && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
   }
+  if (has('atc') && L.atc) drawAtc(c);
+}
+// airports with controllers on duty (ifscope): a cyan box with the facilities (C G T A D, I for ATIS)
+const ATC_LETTER = { Clearance:'C', Ground:'G', Tower:'T', Approach:'A', Departure:'D', Center:'CTR', ATIS:'I', Unicom:'U' };
+function drawAtc(c) {
+  const d = dpr(); c.font = FONT(10);
+  for (const [icao, fs] of atcBy) {
+    if (!icao) continue;
+    const ap = areaAps.get(icao) || MAJOR.find(m => m[0] === icao), la = ap ? ap[5] : fs[0].lat, lo = ap ? ap[6] : fs[0].lon;
+    if (la == null) continue;
+    const [x, y, z] = proj(la, lo); if (z < 0 || x < -40 || y < -40 || x > P0.w + 40 || y > P0.h + 40) continue;
+    c.strokeStyle = '#5ac8fa'; c.lineWidth = d; c.strokeRect(x - 4*d, y - 4*d, 8*d, 8*d);
+    if (view.half < 3) continue;
+    c.fillStyle = '#5ac8fa'; c.fillText(`${icao} ${[...new Set(fs.map(f => ATC_LETTER[f.type] || '?'))].join('')}`, x + 7*d, y + 12*d);
+  }
 }
 
 // SIDs, STARs and approaches: all of them for the airport you picked, faint for its neighbours close in,
@@ -405,8 +435,8 @@ function drawGround(c) {
 }
 
 // ------------------------------------------------------------------ aircraft
-function deadReckon(a) {               // the last report, carried along its track at its ground speed (20 s at most)
-  const dt = Math.max(0, Math.min(20, Date.now() / 1000 - a.ts));
+function deadReckon(a) {               // the last report, carried along its track at its ground speed (STALE_S, 20 s by default)
+  const dt = Math.max(0, Math.min(STALE_S, Date.now() / 1000 - a.ts));
   return a.gs > 2 && dt > 0 ? dest(a.lat, a.lon, a.hdg, a.gs / 3600 * dt) : [a.lat, a.lon];
 }
 const GLIDE_MS = 1500;                 // a new report: ease from where it was drawn onto the new track
@@ -429,7 +459,7 @@ function drawAircraft() {
     if (!matches(a) && !isSel && !isHov && !emer) {     // filtered out: a grey dot, no tag, no trail
       ctx.fillStyle = '#3a3a3a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill(); continue;
     }
-    if (L.trails && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
+    if (L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
       const [hx, hy, hz] = proj(q[0], q[1]); if (hz < 0) continue;
       ctx.globalAlpha = 0.25 + i * 0.12; ctx.fillStyle = COL.hist; ctx.beginPath(); ctx.arc(hx, hy, (a.ground ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
     }
@@ -452,7 +482,7 @@ function drawAircraft() {
     ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
     const l2 = a.ground ? (a.gs > 2 ? 'TAXI ' + a.gs : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
     if (l2) ctx.fillText(l2, bx, ly - 2*d + lh);
-    if (isSel || isHov) { ctx.fillText(`${a.type || '----'} ${a.sq}`.trim(), bx, ly - 2*d + 2*lh); if (a.reg) ctx.fillText(a.reg, bx, ly - 2*d + 3*lh); }
+    if (isSel || isHov) { ctx.fillText([a.type || '----', a.sq, a.route && a.route[3]].filter(Boolean).join(' '), bx, ly - 2*d + 2*lh); if (a.reg || a.user) ctx.fillText(a.reg || a.user, bx, ly - 2*d + 3*lh); }
   }
 }
 function hitAircraft(mx, my, r) {
@@ -474,9 +504,9 @@ let WORLD = null, worldPts = [], worldPtsT = 0, worldFetchT = 0;
 function worldShown() { return L.world && viewNm() > MAX_LIVE_NM * 1.05; }
 async function loadWorld() {
   if (!has('world')) return;
-  if (!eachScope(worldShown).some(Boolean) || Date.now() - worldFetchT < 30000) return;
+  if (!eachScope(worldShown).some(Boolean) || Date.now() - worldFetchT < WORLD_MS) return;
   worldFetchT = Date.now();
-  try { const j = await (await fetch('/api/live/world')).json(); if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
+  try { const j = await (await fetch(`/api/live/world?${srvQ()}`)).json(); if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
 }
 let worldHover = null;                 // the worldwide dot under the mouse: {r: record, p: [lat, lon]}
 function drawWorld() {
@@ -529,16 +559,38 @@ function hitWorld(mx, my) {
   return best;
 }
 
+// ------------------------------------------------------------------ the selected flight's filed plan and flown route (ifscope)
+let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}
+let flAsked = 0;
+async function loadFlight() {
+  if (!has('flight') || !sel || (FL && FL.id === sel && Date.now() - FL.t < 60000) || Date.now() - flAsked < 5000) return;
+  flAsked = Date.now(); const id = sel;
+  try { const j = await (await fetch(`/api/live/flight?${srvQ()}id=${encodeURIComponent(id)}`)).json();
+    if (sel === id) { FL = { ...j, id, t: Date.now() }; renderCard(); } } catch (e) {}
+}
+function drawFlight() {
+  if (!FL || FL.id !== sel || !L.plan) return;
+  const d = dpr();
+  if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2c46ff', null, 1.5);
+  const pts = (FL.plan && FL.plan.pts) || [];
+  if (pts.length > 1) {
+    geoLine(ctx, pts.map(p => [p[1], p[2]]), '#c86bd8', [6, 4], 1);
+    ctx.font = FONT(9);
+    for (const [n, la, lo] of pts) { const [x, y, z] = proj(la, lo); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      ctx.fillStyle = '#c86bd8'; ctx.fillRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); if (view.half < 120) ctx.fillText(n, x + 4*d, y - 3*d); }
+  }
+}
+
 // ------------------------------------------------------------------ frame
 function frame() {
   if (mapKey === '') { for (const s of scopes) s.key = ''; mapKey = 'ok'; }
   for (const s of scopes) {
     if (!s.cv.width || !s.cv.height || !s.el.offsetWidth) continue;
     use(s); setFrame();
-    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
+    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    drawWorld(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    drawWorld(); drawFlight(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
@@ -660,7 +712,8 @@ $('listBtn').onclick = () => document.body.classList.toggle('listOpen');
 
 // ------------------------------------------------------------------ selection, airports, URL
 function select(id) {
-  sel = id; renderCard(); renderList();
+  if (id !== sel) FL = null;
+  sel = id; renderCard(); renderList(); loadFlight();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
@@ -682,7 +735,19 @@ function updateSide() {
 function renderCard() { renderCard1(); updateSide(); }
 function renderCard1() {
   const card = $('card'), a = S && sel && S.aircraft.find(o => o.id === sel);
-  if (a) {
+  if (a && has('flight')) {
+    const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
+    const r = routeOf(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
+    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)}${a.away ? ' ' + dim('pilot away') : ''}<br>` +
+      dim(esc(a.acName) + (a.livery ? ' · ' + esc(a.livery) : '')) + '<br>' +
+      (a.user || a.vo ? `${esc(a.user || 'unlinked account')}${a.vo ? ' ' + dim(esc(a.vo)) : ''}<br>` : '') +
+      `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
+      `${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
+      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')} ${dim('filed' + (plan ? (plan.ifr ? ' IFR' : ' VFR') : ''))}<br>` : dim('no flight plan filed') + '<br>') +
+      (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}`) + '<br>' : '') +
+      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '') +
+      (FL && FL.id === a.id && FL.track ? dim('flown route in blue, plan dashed') : FL && FL.id === a.id && plan ? dim('plan dashed' + (srv === 'casual' ? ' · flown routes are kept only on Expert and Training' : '')) : '');
+  } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
       `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
@@ -690,6 +755,14 @@ function renderCard1() {
       (routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeFits(a, routeOf(a)) ? 'scheduled route' : "scheduled route, but it doesn't fit where it is"}</span><br>` : '') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
       (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '');
+  } else if (home && has('atc')) {
+    // controllers on duty here (and Centers within 400 nm), then the ATIS block
+    const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < 400);
+    const since = t => t ? new Date(t * 1000).toISOString().slice(11, 16) + 'Z' : '';
+    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
+      `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
+      (fs.length || ctr.length ? `<div class="atc">${fs.concat(ctr).map(f => `<span>${esc(f.type)}</span><span>${esc(f.user || 'controller')}</span><span>since ${since(f.since)}</span>`).join('')}</div>`
+        : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard();
   } else if (home) {
     // its radio frequencies (OurAirports) and a link to listen on LiveATC.net, which has the audio for many airports
     const fq = (homeInfo && homeInfo[0] === home[0] && homeInfo[10]) || [];
@@ -710,20 +783,20 @@ const atis = new Map();                // ident -> {atis:[{type, code, text, tim
 const atisAsked = new Map();
 function atisCard() {
   if (!has('atis')) return '';
-  const id = home[0], d = atis.get(id);
+  const id = home[0], ak = srv + id, d = atis.get(ak);
   if ((!d || Date.now() - d.t > 120000) && Date.now() - (atisAsked.get(id) || 0) > 30000) {
     atisAsked.set(id, Date.now());
-    fetch('/api/live/atis?id=' + encodeURIComponent(id)).then(r => r.json()).then(j => {
-      const old = atis.get(id); j.t = Date.now(); atis.set(id, j);
+    fetch(`/api/live/atis?${srvQ()}id=` + encodeURIComponent(id)).then(r => r.json()).then(j => {
+      const old = atis.get(ak); j.t = Date.now(); atis.set(ak, j);
       if (!old || JSON.stringify([old.atis, old.metar]) !== JSON.stringify([j.atis, j.metar])) if (home && home[0] === id && !sel) renderCard();
     }).catch(() => {});
   }
   if (!d) return '<div class="atis"><i>ATIS</i><span class="dim">loading…</span></div>';
-  const kind = { arr:'ARRIVAL ', dep:'DEPARTURE ', combined:'' };
+  const kind = { arr:'ARRIVAL ', dep:'DEPARTURE ', combined:'', if:'INFINITE FLIGHT ' };
   let h = '';
   for (const x of d.atis || []) h += `<div class="atis"><i>${kind[x.type] ?? ''}ATIS${x.code ? ' <b>' + esc(x.code) + '</b>' : ''}${x.time ? ' · ' + esc(x.time) + 'Z' : ''}</i>${esc(x.text)}</div>`;
-  if (d.metar && d.metar.raw) h += `<div class="atis"><i>METAR${d.metar.cat ? ' · ' + esc(d.metar.cat) : ''}</i>${esc(d.metar.raw)}</div>`;
-  if (!(d.atis || []).length) h += `<div class="atis"><span class="dim">${home[4] === 'US' ? 'No D-ATIS published for this airport.' : 'ATIS text is only available for US airports (FAA D-ATIS).'}</span></div>`;
+  if (d.metar && d.metar.raw) h += `<div class="atis"><i>${SITE.metar_label || 'METAR'}${d.metar.cat ? ' · ' + esc(d.metar.cat) : ''}</i>${esc(d.metar.raw)}</div>`;
+  if (!(d.atis || []).length) h += `<div class="atis"><span class="dim">${has('servers') ? `No ATIS open here on ${esc(srvName())}.` : home[4] === 'US' ? 'No D-ATIS published for this airport.' : 'ATIS text is only available for US airports (FAA D-ATIS).'}</span></div>`;
   return h;
 }
 function procCard() {
@@ -783,10 +856,12 @@ async function loadProcs(lat, lon, nm, want) {
 function schedule(ms) { clearTimeout(pollT); pollT = setTimeout(poll, ms); }
 async function poll() {
   if (polling) return schedule(300);
+  if (SITE.idle_min && (document.hidden || idle())) return schedule(1000);
   polling = true;
   const nm = Math.max(10, Math.min(250, viewNm() * 1.05));
   try {
-    const s = await (await fetch(`/api/live?lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
+    const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
+    if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; liveOff.clear(); }
     const now = performance.now();
     if (S && s.t !== S.t) {
       const old = new Map(S.aircraft.map(a => [a.id, a]));
@@ -798,9 +873,9 @@ async function poll() {
     }
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
-      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < 20 && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
+      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote();
+    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
@@ -811,7 +886,7 @@ async function poll() {
       if (areaAps.size > 4000) areaAps.clear(); for (const a of aps) areaAps.set(a[0], a); mapKey = ''; } catch (e) {}
     if (pr) loadProcs(la, lo, pr); }
   polling = false;
-  schedule(2000);
+  schedule(POLL_MS);
 }
 // ------------------------------------------------------------------ arrivals / departures of the picked airport
 // ADS-B carries no flight plan and callsign route databases are often stale, so this guesses from the
@@ -838,8 +913,9 @@ let flowNeighbours = [];               // the other big airports near the picked
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
 const routes = new Map(), routeAsked = new Map();
-function routeOf(a) { return routes.get(a.cs.toUpperCase()); }
+function routeOf(a) { return a.route || routes.get(a.cs.toUpperCase()); }     // a.route: the site's own (ifscope: the filed plan)
 function routeFits(a, r) {
+  if (r && r === a.route) return true;
   const [, ola, olo, , dla, dlo] = r; if (ola == null || dla == null) return false;
   const dO = gc(a.lat, a.lon, ola, olo), dD = gc(a.lat, a.lon, dla, dlo), tot = gc(ola, olo, dla, dlo);
   if (dO + dD > tot * 1.3 + 80) return false;
@@ -930,13 +1006,13 @@ document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
 let lastHistT = 0;
 function ingest() {
   updateFlow();
-  if (S.t - lastHistT >= 4 || S.t < lastHistT) {
+  if (!SITE.no_history && (S.t - lastHistT >= 4 || S.t < lastHistT)) {
     lastHistT = S.t; const ids = new Set();
     for (const a of S.aircraft) { ids.add(a.id); const h = hist.get(a.id) || []; h.push(pos(a)); if (h.length > 8) h.shift(); hist.set(a.id, h); }
     for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
   }
   const air = S.aircraft.filter(a => a.air).length;
-  $('status').innerHTML = `${air} airborne, ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.ok ? '' : ' <span class="bad">· feed down, retrying</span>') +
+  $('status').innerHTML = `${air} airborne, ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.ok ? '' : ` <span class="bad">· ${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`) +
     (worldShown() && WORLD ? ` · ${WORLD.ac.filter(r => !r[8]).length.toLocaleString()} airborne worldwide, ${Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60))} min old (<a href="${esc(SITE.world_link[0])}" target="_blank" rel="noopener">${esc(SITE.world_link[1])}</a>)` : '') +
     (S.src ? ' · ' + ((SITE.src_links || {})[S.src] ? `<a href="${esc(SITE.src_links[S.src])}" target="_blank" rel="noopener">${esc(S.src)}</a>` : esc(S.src)) : '');
   renderList(); if (sel) renderCard();
@@ -957,6 +1033,43 @@ $('list').onclick = e => { const r = e.target.closest('.tr[data-id]'); if (!r) r
   const a = S.aircraft.find(o => o.id === sel); if (a) { const [la, lo] = pos(a); view.lat = la; view.lon = lo; if (view.half > 300) view.half = 60; viewChanged(); } };
 setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; if (sel) renderCard(); }, 1000);
 
+// ------------------------------------------------------------------ servers (ifscope: Casual / Training / Expert)
+const ERRS = { 'no API key':'no API key on the server yet', 'not approved yet':'API client waiting for approval', busy:'over the API rate limit, retrying', 'rate limited':'rate limited, retrying' };
+let srv = has('servers') && (() => { try { return localStorage.getItem(KEY + '.srv'); } catch (e) { return null; } })() || (has('servers') ? 'expert' : ''), SERVERS = [];
+const srvQ = () => srv ? `srv=${srv}&` : '';
+const srvName = () => (SERVERS.find(o => o.key === srv) || { name: srv ? srv[0].toUpperCase() + srv.slice(1) + ' Server' : '' }).name;
+async function loadServers() {
+  try { const j = await (await fetch('/api/live/servers')).json(); SERVERS = j.servers || []; } catch (e) {}
+  renderServers(); setTimeout(loadServers, 600000);
+}
+function renderServers() {
+  const list = SERVERS.length ? SERVERS : ['casual', 'training', 'expert'].map(key => ({ key, name: key, users: null }));
+  $('srvs').innerHTML = list.map(o => `<button data-srv="${o.key}" class="${o.key === srv ? 'on' : ''}" title="${esc(o.name)}">${o.key[0].toUpperCase() + o.key.slice(1)}${o.users != null ? `<i>${o.users}</i>` : ''}</button>`).join('');
+}
+$('srvs').onclick = e => { const b = e.target.closest('[data-srv]'); if (!b || b.dataset.srv === srv) return;
+  srv = b.dataset.srv; try { localStorage.setItem(KEY + '.srv', srv); } catch (err) {}
+  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; flowMem.clear(); liveOff.clear();
+  renderServers(); renderCard(); renderList(); mapKey = ''; schedule(0); };
+// controllers on duty, every minute: by airport ICAO ('' for Center)
+let atcBy = new Map(), atcT = 0, atcGen = 0;
+async function loadAtc() {
+  if (!has('atc') || Date.now() - atcT < 60000) return; atcT = Date.now();
+  try { const j = await (await fetch(`/api/live/atc?${srvQ()}`)).json(); if (!j.ok) { atcT = Date.now() - 45000; return; }
+    const m = new Map(); for (const f of j.atc) { const k = f.type === 'Center' ? '' : f.icao; if (!m.has(k)) m.set(k, []); m.get(k).push(f); }
+    atcBy = m; atcGen++; mapKey = ''; if (home && !sel) renderCard();
+  } catch (e) { atcT = Date.now() - 45000; }
+}
+// SITE.idle_min: stop downloading after that long without input (ifscope: Infinite Flight's API rules), until there is some
+let lastInput = Date.now();
+const idle = () => !!SITE.idle_min && Date.now() - lastInput > SITE.idle_min * 60000;
+if (SITE.idle_min) {
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, () => {
+    const was = idle(); lastInput = Date.now(); if (was) { document.body.classList.remove('idle'); schedule(0); } }, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastInput = Date.now(); schedule(0); } });
+  setInterval(() => document.body.classList.toggle('idle', idle()), 5000);
+  $('idle').onclick = () => { lastInput = Date.now(); document.body.classList.remove('idle'); schedule(0); };
+}
+
 // ------------------------------------------------------------------ start: #KSFO, #KSFO/40 or #lat,lon,half
 (async () => {
   makeScope({ lat:37.62, lon:-122.38, half:52 }); makeScope({ lat:37.62, lon:-122.38, half:3 }); use(scopes[0]);
@@ -967,7 +1080,9 @@ setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 
   let want = null;
   const m = h.match(/^(-?[\d.]+),(-?[\d.]+),([\d.]+)$/);
   if (m) { Object.assign(view, { lat:+m[1], lon:+m[2], half:Math.max(HALF_MIN, Math.min(HALF_GLOBE, +m[3])) }); Object.assign(scopes[1].view, { lat:+m[1], lon:+m[2] }); }
-  else want = (h || 'KSFO/52').split('/');
+  else if (h || SITE.start !== null) want = (h || SITE.start || 'KSFO/52').split('/');
+  else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
+  if (has('servers')) { renderServers(); loadServers(); }
   poll();
   fetch('/live/lines.json').then(r => r.json()).then(j => { LINES = { coast:prepLines(j.coast), borders:prepLines(j.borders), states:prepLines(j.states) }; mapKey = ''; });
   fetch('/live/ksfo.json').then(r => r.json()).then(j => { KSFO = j; mapKey = ''; });
