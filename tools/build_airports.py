@@ -1,6 +1,6 @@
-"""Build livescope's map data from public-domain sources (run again to refresh).
+"""Build scope's map data from public-domain sources (run again to refresh).
 
-    python3 -I tools/build_livescope.py SRC_DIR
+    python3 -I tools/build_airports.py SRC_DIR
 
 SRC_DIR holds the downloads:
   OurAirports (public domain)  https://davidmegginson.github.io/ourairports-data/{airports,runways,airport-frequencies}.csv

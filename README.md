@@ -1,97 +1,38 @@
 # scope
 
-A watch-only, STARS-style scope of air traffic on a globe: the shared code behind several sites, one per
-traffic source:
+A watch-only, STARS-style scope of air traffic that zooms out to a globe: the shared server and client
+behind several sites. Each site is its own repo that plugs in one traffic source:
 
 | site | traffic | address |
 |---|---|---|
-| `livescope` | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
-| `ifscope` | Infinite Flight's live multiplayer servers | https://ifscope.kyleboas.com |
+| [livescope](https://github.com/kyleboas/livescope) | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
+| [ifscope](https://github.com/kyleboas/ifscope) | Infinite Flight's live multiplayer servers | https://ifscope.kyleboas.com |
 
-Every site shares the scope client, the server, airports, procedures and ground maps. A site is one
-small file in `sites/` that names its data sources and links ([Adding a site](#adding-a-site)).
-
-## livescope
-
-The real-world site.
-
-ADS-B positions come from adsb.lol, with adsb.fi as a fallback. The feed covers up to 250 nm around the
-middle of the view, and positions are eased between reports. You can zoom out to an orthographic globe,
-or search for any airport by ICAO, IATA or name. Close in, runways are drawn to scale.
-
-### Features
-
-- **Procedures:** US airports show their SIDs, STARs and approaches (FAA CIFP). Pick one in the airport
-  card to highlight it with its fixes.
-- **Airport card:** frequencies, the current ATIS (FAA D-ATIS through atis.info, US only) and the latest
-  METAR (aviationweather.gov), plus a link to listen on LiveATC.net.
-- **Ground maps:** zoomed in to an airport (GND / FLD), its taxiways, aprons, terminals and gates come
-  from OpenStreetMap. The server fetches them once through Overpass, in the background, and caches them
-  for 30 days in `livedata/ground/`. Taxiing aircraft leave history trails.
-- **ALL / ARR / DEP / ARR+DEP** (bottom right) greys out and untags everything except the picked
-  airport's arrivals and/or departures.
-  - ADS-B has no flight plan, so these are guessed from track, altitude and climb/descent. Traffic goes
-    to a nearby airport when it fits that one better.
-  - Scheduled routes from adsbdb.com take precedence when the aircraft's position fits them.
-- **ALT min–max** (header) greys out and untags traffic outside the band. It takes hundreds of feet,
-  feet or FL350.
-- **Worldwide traffic:** zoomed out past the 250 nm the live feeds cover, the globe shows every
-  airborne aircraft as a dot, from OpenSky's `/states/all`.
-  - Anonymously, that's one snapshot every 15 min. Set `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET`
-    (a free OpenSky API client) to get one every 90 s.
-  - No free feed covers the oceans, so airliners that leave every receiver's range at cruise are
-    carried on toward their scheduled destination as estimates (hollow rings).
-- **Split view:** the layout button (bottom left) cycles between one scope, big + small, and an even
-  split. Each scope has its own view and layers; the second opens on the airport's field.
-- **Measure:** right-drag or shift-drag (long-press then drag on touch) shows distance and bearing. If
-  the line starts or ends on an aircraft, it also shows the time at that aircraft's ground speed.
-- **Layers:** the stack button turns map layers on and off.
-- **Views:** GND / FLD / APP / CTR / GLOBE set the zoom. The URL keeps the view (`#EGLL/40`,
-  `#lat,lon,half-width-nm`).
-
-## ifscope
-
-The Infinite Flight site: the Casual, Training and Expert servers' flights and controllers, from the
-[Infinite Flight Live API](https://infiniteflight.com/guide/developer-reference). It needs credentials in
-the environment, server side only:
-
-- `IF_API_KEY`: a Live API v2 key (Infinite Flight no longer issues these), or
-- `IF_CLIENT_ID` / `IF_CLIENT_SECRET`: a PublicApi v3 *Confidential* client with *Allow server-to-server
-  access*, created at https://infiniteflight.com/account/api-keys and approved by Infinite Flight.
-- `IF_RPM` (optional): requests per minute to allow, 25 by default. The limit is 30, or 100 when the
-  account that owns the key has Pro.
-
-Everything above works the same, plus:
-
-- **Servers** (header): Casual / Training / Expert with their pilot counts.
-- **All flights:** each server's whole flight list comes in one request, so the globe shows every
-  flight, refreshed every 15 s.
-- **ATC on duty:** airports with controllers get a cyan box and their facilities (C G T A D). The
-  airport card lists the controllers, any Center within 400 nm, the in-game ATIS and the real METAR.
-- **Flight plans:** each aircraft's origin and destination come from its filed plan, so ARR / DEP use
-  that first. Selecting an aircraft shows its pilot, livery and full plan (dashed). On Expert and
-  Training it also shows the route it has flown (blue), from Infinite Flight.
-- **Infinite Flight's API rules** ([usage and data rules](https://infiniteflight.com/guide/developer-reference/api-rules/usage-and-data-rules))
-  are built in (`sources/infinite_flight.py`):
-  - one shared in-memory cache, never written to disk or logged, and dropped after 50 minutes;
-  - minimum intervals: flights 15 s, ATC and world status 60 s, sessions 10 min, aircraft/liveries
-    60 min; a flight's plan or route only when someone selects it;
-  - a 429 pauses all requests for its `Retry-After`;
-  - no history trails, which would be collected positions;
-  - the page stops polling while hidden and after 15 minutes without input.
+scope gives every site the page (canvas, no build step), airports and runways, US procedures, OSM ground
+maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
+[livescope's README](https://github.com/kyleboas/livescope#readme) for the full feature list.
 
 ## Run
 
+Check scope out next to a site and point the server at the site's directory:
+
 ```
-python3 server.py livescope --port 8799     # Python 3.10+, standard library only; any site in sites/
+git clone https://github.com/kyleboas/scope
+git clone https://github.com/kyleboas/livescope
+python3 scope/server.py livescope --port 8799     # Python 3.10+, standard library only
 ```
 
 Then open http://localhost:8799. `/` and `/live` serve the page; the API is under `/api/live`. Each site
-runs as its own process (its own port and hostname), all from the same checkout.
+runs as its own process (its own port and hostname); they can all share one scope checkout.
 
-## Adding a site
+Environment: `SCOPE_GROUND_DIR` moves the ground-map cache (default `livedata/ground/` in this checkout),
+for example when the server runs as a user that can't write here.
 
-Write `sites/<name>.py` with two things:
+## Writing a site
+
+A site is a directory (normally its own repo) with `site.py`. The server puts scope and the site's
+directory on `sys.path`, so `site.py` can `import` the site's other modules and anything in `scope`
+(`scope.core` geometry, `scope.weather.Atis`). `site.py` holds two things:
 
 - `SITE`, a dict:
   - required: `name` (also the localStorage prefix), `title` and `url`
@@ -107,7 +48,7 @@ Write `sites/<name>.py` with two things:
     `{id, cs, lat, lon, alt, gs, hdg, vs, ts, ground, air, type, reg, sq, emer}`, optionally with `hex`.
   - `max_nm` (required): the most the traffic source covers around a point.
   - `world` (optional): `get()` returns `(json_bytes, gzipped)` in OpenSky's compact form (see
-    `sources/adsb.py` World).
+    livescope's `adsb.py` World).
   - `routes` (optional): `get([callsigns])` returns `{cs: [from, lat, lon, to, lat, lon]}` for the callsigns it knows.
   - `atis` (optional): `get(ident)` returns `{atis:[{type, code, text, time}], metar:{raw, cat} | None}`.
   - `features` (optional): extra page features: `servers` (a server picker; then `traffic`, `world` and
@@ -118,12 +59,11 @@ Write `sites/<name>.py` with two things:
   - An aircraft may carry `route` (`[from, lat, lon, to, lat, lon]`): it is trusted over `routes`.
 
 A provider left out turns its feature off in the page (no world dots, no ATIS block, no route lookups).
-Put a site's data-source code in `sources/<source>.py`; anything every site can use belongs in `scope/`
-or `web/scope.html`.
+Anything every site can use belongs in scope (`scope/` or `web/scope.html`), not in a site.
 
 ## Data
 
-- `python3 -I tools/build_livescope.py <downloads>` (see the script) writes `livedata/airports.json` and
+- `python3 -I tools/build_airports.py <downloads>` (see the script) writes `livedata/airports.json` and
   `web/geo/lines.json` from OurAirports and Natural Earth.
 - `python3 -I tools/build_procs.py FAACIFP18 livedata/procs.json` rebuilds the procedures. The FAA
   publishes a new CIFP every 28 days; the one included is cycle 2611.
@@ -133,10 +73,8 @@ or `web/scope.html`.
 
 ```
 server.py        HTTP server for one site: the page (with the site's settings), map files, /api/live*
-sites/           one file per site: settings + which providers it uses
-sources/adsb.py  livescope's data: ADS-B traffic, OpenSky world + ocean estimates, adsbdb routes, D-ATIS/METAR
-sources/infinite_flight.py  ifscope's data: Infinite Flight Live API (flights, ATC, ATIS, flight plans)
-scope/core.py    shared: geometry, airports (OurAirports), procedures (FAA CIFP), ground maps (OSM)
+scope/core.py    geometry, airports (OurAirports), procedures (FAA CIFP), ground maps (OSM)
+scope/weather.py D-ATIS (atis.info) and METARs (aviationweather.gov)
 web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals
 livedata/        airports (OurAirports), procedures (FAA CIFP); ground/ is a runtime cache

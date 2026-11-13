@@ -1,4 +1,4 @@
-"""Every airport's SIDs, STARs and approaches from an FAA CIFP file, as lat/lon polylines for livescope.
+"""Every airport's SIDs, STARs and approaches from an FAA CIFP file, as lat/lon polylines for scope.
 
 Usage (the CIFP file is untrusted data, read only as text):
     python3 -I tools/build_procs.py FAACIFP18 livedata/procs.json

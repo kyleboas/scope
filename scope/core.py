@@ -1,6 +1,6 @@
 """The shared scope core: geometry, airports and runways (OurAirports), US procedures (FAA CIFP) and
 airport ground maps (OpenStreetMap). Every site (livescope, ifscope, ...) uses these; a site's own
-traffic and extras live in sources/ and are picked in sites/.
+traffic code lives in its own repo.
 """
 import gzip
 import json
@@ -91,7 +91,7 @@ class Ground:
 
     def __init__(self, airports):
         self.airports = airports
-        self.dir = os.path.join(HERE, "livedata", "ground")
+        self.dir = os.environ.get("SCOPE_GROUND_DIR") or os.path.join(HERE, "livedata", "ground")
         self.lock = threading.Lock()
         self.queue, self.failed = [], {}
         self.wake = threading.Event()

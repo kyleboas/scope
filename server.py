@@ -1,18 +1,17 @@
 """scope's web server: the page, its map files and the /api/live endpoints for one site.
 
-    python3 server.py livescope [--host 127.0.0.1] [--port 8799]
+    python3 server.py ../livescope [--host 127.0.0.1] [--port 8799]
 
-A site (sites/<name>.py) gives its name, links and data providers; everything else is shared (scope/,
-web/scope.html). livescope's optional environment: OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET (a free
-OpenSky API client) refresh the worldwide picture every 90 s instead of every 15 min.
+A site is its own repo (a directory with site.py) that gives its name, links and data providers;
+everything else is shared (scope/, web/scope.html). Site code can import its own modules and scope's.
 """
 import argparse
 import gzip
 import html
-import importlib
+import importlib.util
 import json
 import os
-import re
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
@@ -23,11 +22,16 @@ SITE, P, STATIC = {}, {}, {}          # the site's settings, its providers, path
 AIRPORTS = PROCS = GROUND = None
 
 
-def load(name):
+def load(site_dir):
     global AIRPORTS, PROCS, GROUND
-    if not re.fullmatch(r"[a-z0-9_]+", name):
-        raise SystemExit(f"bad site name {name!r}")
-    mod = importlib.import_module("sites." + name)
+    site_dir = os.path.abspath(site_dir)
+    path = os.path.join(site_dir, "site.py")
+    if not os.path.isfile(path):
+        raise SystemExit(f"no site.py in {site_dir}")
+    sys.path[:0] = [HERE, site_dir]             # scope's package, then the site's own modules
+    spec = importlib.util.spec_from_file_location("scope_site", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
     SITE.update(mod.SITE)
     AIRPORTS = core.Airports()
     P.update(mod.providers(airports=AIRPORTS) if "airports" in mod.providers.__code__.co_varnames else mod.providers())
@@ -120,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("site", nargs="?", default="livescope", help="a module in sites/ (default livescope)")
+    ap.add_argument("site", help="the site's directory (its repo checkout, with site.py)")
     ap.add_argument("--port", type=int)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
