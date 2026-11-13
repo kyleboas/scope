@@ -6,7 +6,7 @@ behind several sites. Each site is its own repo that plugs in one traffic source
 | site | traffic | address |
 |---|---|---|
 | [livescope](https://github.com/kyleboas/livescope) | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
-| [ifscope](https://github.com/kyleboas/ifscope) | Infinite Flight's live multiplayer servers | https://ifscope.kyleboas.com |
+| [infinitescope](https://github.com/kyleboas/infinitescope) | Infinite Flight's live multiplayer servers | https://infinitescope.kyleboas.com |
 
 scope gives every site the page (canvas, no build step), airports and runways, US procedures, OSM ground
 maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
@@ -54,7 +54,7 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
   - `features` (optional): extra page features: `servers` (a server picker; then `traffic`, `world` and
     `atis` get a `server=` keyword, from the page's `srv`), `atc` and `flight`.
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the
-    query string. ifscope's: `servers`, `atc` (`{ok, atc:[{icao, type, user, lat, lon, since}]}`) and
+    query string. infinitescope's: `servers`, `atc` (`{ok, atc:[{icao, type, user, lat, lon, since}]}`) and
     `flight` (`{plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}`).
   - An aircraft may carry `route` (`[from, lat, lon, to, lat, lon]`): it is trusted over `routes`.
 

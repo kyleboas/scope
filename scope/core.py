@@ -1,5 +1,5 @@
 """The shared scope core: geometry, airports and runways (OurAirports), US procedures (FAA CIFP) and
-airport ground maps (OpenStreetMap). Every site (livescope, ifscope, ...) uses these; a site's own
+airport ground maps (OpenStreetMap). Every site (livescope, infinitescope, ...) uses these; a site's own
 traffic code lives in its own repo.
 """
 import gzip

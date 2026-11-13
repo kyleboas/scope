@@ -93,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
         q = parse_qs(qs)
         f = lambda k, d=0.0: float((q.get(k) or [d])[0])       # noqa: E731
         s = lambda k, n=12: (q.get(k) or [""])[0][:n]          # noqa: E731
-        kw = {"server": s("srv", 10)} if "servers" in P.get("features", []) else {}   # sites with several servers (ifscope)
+        kw = {"server": s("srv", 10)} if "servers" in P.get("features", []) else {}   # sites with several servers (infinitescope)
         if path == "/api/live":
             return self.send(200, P["traffic"].get(f("lat"), f("lon"), max(5.0, min(P["max_nm"], f("nm", 60))), **kw))
         if path == "/api/live/area":
@@ -117,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/live/routes" and P.get("routes"):
             return self.send(200, P["routes"].get(s("cs", 2000).split(",")[:80]))
         name = path[len("/api/live/"):] if path.startswith("/api/live/") else ""
-        if name in P.get("endpoints", {}):                 # a site's own endpoints (ifscope: servers, atc, flight)
+        if name in P.get("endpoints", {}):                 # a site's own endpoints (infinitescope: servers, atc, flight)
             return self.send(200, P["endpoints"][name](s))
         self.send(404, {"error": "not found"})
 

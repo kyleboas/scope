@@ -136,7 +136,7 @@
   <div id="list"></div>
 </div>
 <script>
-// The shared scope client (livescope, ifscope, ...): traffic on a STARS-style scope that zooms out to the globe.
+// The shared scope client (livescope, infinitescope, ...): traffic on a STARS-style scope that zooms out to the globe.
 // Watch only. server.py puts the site's settings in SITE above: name, title, links and its features
 // (procs, ground, world, routes, atis); a feature a site doesn't have is skipped.
 const has = f => SITE.features.includes(f);
@@ -333,7 +333,7 @@ function drawMap() {
   }
   if (has('atc') && L.atc) drawAtc(c);
 }
-// airports with controllers on duty (ifscope): a cyan box with the facilities (C G T A D, I for ATIS)
+// airports with controllers on duty (infinitescope): a cyan box with the facilities (C G T A D, I for ATIS)
 const ATC_LETTER = { Clearance:'C', Ground:'G', Tower:'T', Approach:'A', Departure:'D', Center:'CTR', ATIS:'I', Unicom:'U' };
 function drawAtc(c) {
   const d = dpr(); c.font = FONT(10);
@@ -559,7 +559,7 @@ function hitWorld(mx, my) {
   return best;
 }
 
-// ------------------------------------------------------------------ the selected flight's filed plan and flown route (ifscope)
+// ------------------------------------------------------------------ the selected flight's filed plan and flown route (infinitescope)
 let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}
 let flAsked = 0;
 async function loadFlight() {
@@ -913,7 +913,7 @@ let flowNeighbours = [];               // the other big airports near the picked
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
 const routes = new Map(), routeAsked = new Map();
-function routeOf(a) { return a.route || routes.get(a.cs.toUpperCase()); }     // a.route: the site's own (ifscope: the filed plan)
+function routeOf(a) { return a.route || routes.get(a.cs.toUpperCase()); }     // a.route: the site's own (infinitescope: the filed plan)
 function routeFits(a, r) {
   if (r && r === a.route) return true;
   const [, ola, olo, , dla, dlo] = r; if (ola == null || dla == null) return false;
@@ -1033,7 +1033,7 @@ $('list').onclick = e => { const r = e.target.closest('.tr[data-id]'); if (!r) r
   const a = S.aircraft.find(o => o.id === sel); if (a) { const [la, lo] = pos(a); view.lat = la; view.lon = lo; if (view.half > 300) view.half = 60; viewChanged(); } };
 setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; if (sel) renderCard(); }, 1000);
 
-// ------------------------------------------------------------------ servers (ifscope: Casual / Training / Expert)
+// ------------------------------------------------------------------ servers (infinitescope: Casual / Training / Expert)
 const ERRS = { 'no API key':'no API key on the server yet', 'not approved yet':'API client waiting for approval', busy:'over the API rate limit, retrying', 'rate limited':'rate limited, retrying' };
 let srv = has('servers') && (() => { try { return localStorage.getItem(KEY + '.srv'); } catch (e) { return null; } })() || (has('servers') ? 'expert' : ''), SERVERS = [];
 const srvQ = () => srv ? `srv=${srv}&` : '';
@@ -1059,7 +1059,7 @@ async function loadAtc() {
     atcBy = m; atcGen++; mapKey = ''; if (home && !sel) renderCard();
   } catch (e) { atcT = Date.now() - 45000; }
 }
-// SITE.idle_min: stop downloading after that long without input (ifscope: Infinite Flight's API rules), until there is some
+// SITE.idle_min: stop downloading after that long without input (infinitescope: Infinite Flight's API rules), until there is some
 let lastInput = Date.now();
 const idle = () => !!SITE.idle_min && Date.now() - lastInput > SITE.idle_min * 60000;
 if (SITE.idle_min) {
