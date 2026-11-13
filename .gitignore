@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 livedata/ground/
 .DS_Store
+livedata/timelapse/

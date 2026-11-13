@@ -52,7 +52,8 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
   - `routes` (optional): `get([callsigns])` returns `{cs: [from, lat, lon, to, lat, lon]}` for the callsigns it knows.
   - `atis` (optional): `get(ident)` returns `{atis:[{type, code, text, time}], metar:{raw, cat} | None}`.
   - `features` (optional): extra page features: `servers` (a server picker; then `traffic`, `world` and
-    `atis` get a `server=` keyword, from the page's `srv`), `atc` and `flight`.
+    `atis` get a `server=` keyword, from the page's `srv`), `atc`, `flight` and `timelapse` (a header
+    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the
     query string. infinitescope's: `servers`, `atc` (`{ok, atc:[{icao, type, user, lat, lon, since}]}`) and
     `flight` (`{plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}`).
@@ -77,7 +78,7 @@ scope/core.py    geometry, airports (OurAirports), procedures (FAA CIFP), ground
 scope/weather.py D-ATIS (atis.info) and METARs (aviationweather.gov)
 web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals
-livedata/        airports (OurAirports), procedures (FAA CIFP); ground/ is a runtime cache
+livedata/        airports (OurAirports), procedures (FAA CIFP); ground/ and timelapse/ are written at runtime
 tools/           builders for livedata/ and web/geo/
 ```
 
