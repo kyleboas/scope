@@ -96,20 +96,39 @@
   #card .atc span:nth-child(3n+1) { color:#5ac8fa; }
   #card .atc span:nth-child(3n+2) { color:var(--fg); overflow:hidden; text-overflow:ellipsis; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
-  @media (max-width: 820px) {
+  /* phones and small tablets, either way up: the side panel becomes a drawer (landscape) or a bottom sheet (portrait) */
+  @media (max-width: 820px), (max-height: 500px) {
     body { grid-template-columns:1fr; }
     header { grid-column:1; padding:3px max(8px, env(safe-area-inset-right)) 3px max(8px, env(safe-area-inset-left)); }
     #q { width:120px; } #srvs button i { display:none; } .altf input { width:5.5ch; } #res { width:min(340px, 90vw); }
     #status { display:none; }
-    #listBtn { display:inline-block; } body.noApt #listBtn { display:none; }
-    #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 88vw); z-index:3; background:rgba(28,28,30,.97); display:none; }
+    #listBtn { display:inline-block; margin-left:auto; } body.noApt #listBtn { display:none; }
+    #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 50vw); z-index:3; background:rgba(28,28,30,.97); display:none;
+            padding-right:env(safe-area-inset-right); }
     body.listOpen #side { display:flex; }
-    .views { left:max(8px, env(safe-area-inset-left)); bottom:max(6px, env(safe-area-inset-bottom)); }
+    .views { left:max(8px, env(safe-area-inset-left)); bottom:max(6px, env(safe-area-inset-bottom)); max-width:calc(100% - 16px); overflow-x:auto; scrollbar-width:none; }
+    .views::-webkit-scrollbar { display:none; }
     .views button { padding:8px 9px; font-size:12px; }
     .layers { left:max(8px, env(safe-area-inset-left)); bottom:calc(max(6px, env(safe-area-inset-bottom)) + 40px); }
     .layers label { padding:9px 16px; font-size:13px; }
     .flt { right:max(8px, env(safe-area-inset-right)); bottom:max(6px, env(safe-area-inset-bottom)); }
     .flt button { padding:8px 7px; font-size:12px; }
+  }
+  @media (max-width: 820px) and (max-aspect-ratio: 1/1) {
+    #side { top:auto; left:0; width:auto; max-height:min(55dvh, 520px); border-left:0; border-top:1px solid var(--line); border-radius:12px 12px 0 0;
+            padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-shadow:0 -8px 24px #0008; }
+    #list { min-height:120px; }
+    #card .fq, #card .pr { max-height:120px; }
+  }
+  /* narrow phones: the header takes two rows (clock, search, List / ALT, servers), and ALL/ARR/DEP sits above the view buttons */
+  @media (max-width: 480px) {
+    header { flex-wrap:wrap; row-gap:3px; }
+    header::after { content:""; flex-basis:100%; order:3; }
+    #clock { order:0; font-size:13px; } .srch { order:1; flex:1 1 0; min-width:0; } #q { width:100%; } #listBtn { order:2; }
+    .altf { order:4; } #srvs { order:5; margin-left:auto; }
+    #tiles.one ~ .flt { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 36px); }
+    #gnote { max-width:calc(100% - 16px); overflow:hidden; text-overflow:ellipsis; }
+    #tiles:not(.one) ~ #gnote { top:42px; }
   }
 </style>
 </head>
@@ -708,11 +727,16 @@ window.addEventListener('keydown', e => {
   if (e.key === '-' || e.key === '_') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1.4); use(scopes[0]); }
   if (e.key === '/') { e.preventDefault(); $('q').focus(); }
 });
-$('listBtn').onclick = () => document.body.classList.toggle('listOpen');
+$('listBtn').onclick = () => { document.body.classList.toggle('listOpen'); autoOpen = false; };
 
 // ------------------------------------------------------------------ selection, airports, URL
+const small = matchMedia('(max-width: 820px), (max-height: 500px)');
+let autoOpen = false;                 // the panel was opened by picking an aircraft (small screens), so close it again on deselect
 function select(id) {
   if (id !== sel) FL = null;
+  const b = document.body;
+  if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
+  if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
   sel = id; renderCard(); renderList(); loadFlight();
 }
 let homeInfo = null;
@@ -729,7 +753,7 @@ function setHome(a, fly, half) {
 function updateSide() {
   const b = document.body, was = b.className;
   b.classList.toggle('noApt', !home); b.classList.toggle('noCard', $('card').style.display === 'none');
-  if (!home) b.classList.remove('listOpen');
+  if (!home && !sel) b.classList.remove('listOpen');
   if (b.className !== was) resize();
 }
 function renderCard() { renderCard1(); updateSide(); }
