@@ -124,7 +124,11 @@
   <div id="list"></div>
 </div>
 <script>
-// livescope: real ADS-B traffic anywhere, on a STARS-style scope that zooms out to the globe. Watch only.
+// The shared scope client (livescope, ifscope, ...): traffic on a STARS-style scope that zooms out to the globe.
+// Watch only. server.py puts the site's settings in SITE above: name, title, links and its features
+// (procs, ground, world, routes, atis); a feature a site doesn't have is skipped.
+const has = f => SITE.features.includes(f);
+const KEY = SITE.name;                 // localStorage prefix
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[ch]));
 const dpr = () => devicePixelRatio || 1;
@@ -157,7 +161,7 @@ const ICO = { layers:'<path d="M12 4L4 8l8 4l8-4zm-8 8l8 4l8-4M4 16l8 4l8-4"/>',
 const ico = n => `<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">${ICO[n]}</g></svg>`;
 const LAYOUTS = ['one', 'big', 'even'];
 function setLayout(m) {
-  $('tiles').className = m; try { localStorage.setItem('livescope-tiles', m); } catch (e) {}
+  $('tiles').className = m; try { localStorage.setItem(KEY + '-tiles', m); } catch (e) {}
   const b = document.querySelector('[data-layout]'); b.innerHTML = ico(m); b.title = 'Scope layout: one / big + small / even split (click to change)';
   requestAnimationFrame(resize);
 }
@@ -169,10 +173,10 @@ function makeScope(v) {
   $('tiles').appendChild(el);
   const c = el.querySelector('canvas'), m = document.createElement('canvas');
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
-  const lkey = 'livescope-layers' + (n ? '-' + n : '');
+  const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  lp.innerHTML = LAYERS.map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
+  lp.innerHTML = LAYERS.filter(([k]) => has('world') || (k !== 'world' && k !== 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
@@ -281,7 +285,7 @@ function drawMap() {
   }
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
   if (S && S.center && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
-    const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${Math.round(WORLD.every / 60)} min (OpenSky)` : `traffic within ${S.nm} nm of the centre`, x, y - 6*d); c.textAlign = 'left'; } }
+    const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${Math.round(WORLD.every / 60)} min (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre`, x, y - 6*d); c.textAlign = 'left'; } }
   // KSFO: extended finals (from atcscope's KSFO map)
   if (KSFO && view.half < 200 && gc(view.lat, view.lon, KSFO.arp[0], KSFO.arp[1]) < 400) {
     if (L.finals) for (const f of KSFO.finals) geoLine(c, f, '#2a2a2a', [10, 6]);
@@ -469,6 +473,7 @@ function hitAirport(mx, my) {
 let WORLD = null, worldPts = [], worldPtsT = 0, worldFetchT = 0;
 function worldShown() { return L.world && viewNm() > MAX_LIVE_NM * 1.05; }
 async function loadWorld() {
+  if (!has('world')) return;
   if (!eachScope(worldShown).some(Boolean) || Date.now() - worldFetchT < 30000) return;
   worldFetchT = Date.now();
   try { const j = await (await fetch('/api/live/world')).json(); if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
@@ -684,7 +689,7 @@ function renderCard1() {
       `squawk ${esc(a.sq || '----')}${a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : ''} · ${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
       (routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeFits(a, routeOf(a)) ? 'scheduled route' : "scheduled route, but it doesn't fit where it is"}</span><br>` : '') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
-      (a.hex ? `<a href="https://adsb.lol/?icao=${esc(a.hex)}" target="_blank" rel="noopener">${esc(a.hex.toUpperCase())} on adsb.lol</a>` : '');
+      (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '');
   } else if (home) {
     // its radio frequencies (OurAirports) and a link to listen on LiveATC.net, which has the audio for many airports
     const fq = (homeInfo && homeInfo[0] === home[0] && homeInfo[10]) || [];
@@ -704,6 +709,7 @@ function renderCard1() {
 const atis = new Map();                // ident -> {atis:[{type, code, text, time}], metar:{raw, cat}, t}
 const atisAsked = new Map();
 function atisCard() {
+  if (!has('atis')) return '';
   const id = home[0], d = atis.get(id);
   if ((!d || Date.now() - d.t > 120000) && Date.now() - (atisAsked.get(id) || 0) > 30000) {
     atisAsked.set(id, Date.now());
@@ -811,7 +817,7 @@ async function poll() {
 // ADS-B carries no flight plan and callsign route databases are often stale, so this guesses from the
 // geometry: heading for the field below a generous descent profile = arrival, heading away climbing = departure.
 // A guess is kept for 2 minutes so a downwind or a vector away from the field doesn't drop it.
-let flt = localStorage.getItem('livescope.flt') || 'all';
+let flt = localStorage.getItem(KEY + '.flt') || 'all';
 const flowMem = new Map();             // id -> ['arr' | 'dep' | 'gnd', Date.now() when last seen as that]
 function brg(lat1, lon1, lat2, lon2) {
   const p1 = lat1 * D2R, p2 = lat2 * D2R, dl = (lon2 - lon1) * D2R;
@@ -847,7 +853,7 @@ function routeFlow(a) {               // 'arr' / 'dep' / 'x' (going somewhere el
   return r[3] === id ? 'arr' : r[0] === id ? 'dep' : 'x';
 }
 async function loadRoutes() {
-  if (!S) return;
+  if (!S || !has('routes')) return;
   const now = Date.now(), want = [];
   const near = home ? [...S.aircraft].sort((x, y) => gc(x.lat, x.lon, home[5], home[6]) - gc(y.lat, y.lon, home[5], home[6])) : S.aircraft;
   for (const a of near) {
@@ -901,10 +907,10 @@ function altOk(alt, ground) {
 function setAltFilter() {
   altLo = parseAlt($('altLo').value); altHi = parseAlt($('altHi').value);
   $('altf').classList.toggle('on', altLo != null || altHi != null);
-  try { localStorage.setItem('livescope-alt', JSON.stringify([$('altLo').value, $('altHi').value])); } catch (e) {}
+  try { localStorage.setItem(KEY + '-alt', JSON.stringify([$('altLo').value, $('altHi').value])); } catch (e) {}
   worldPtsT = 0; if (S) renderList();
 }
-try { const [lo, hi] = JSON.parse(localStorage.getItem('livescope-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; } catch (e) {}
+try { const [lo, hi] = JSON.parse(localStorage.getItem(KEY + '-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; } catch (e) {}
 for (const id of ['altLo', 'altHi']) { $(id).addEventListener('input', setAltFilter); $(id).addEventListener('keydown', e => { if (e.key === 'Escape') { $(id).value = ''; setAltFilter(); $(id).blur(); } }); }
 setAltFilter();
 function matches(a) {               // does it pass the altitude and ARR / DEP filters
@@ -918,7 +924,7 @@ function renderFlt() {
   box.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === flt));
 }
 document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
-  flt = b.dataset.f; localStorage.setItem('livescope.flt', flt); renderFlt(); renderList();
+  flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt(); renderList();
 });
 
 let lastHistT = 0;
@@ -931,8 +937,8 @@ function ingest() {
   }
   const air = S.aircraft.filter(a => a.air).length;
   $('status').innerHTML = `${air} airborne, ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.ok ? '' : ' <span class="bad">· feed down, retrying</span>') +
-    (worldShown() && WORLD ? ` · ${WORLD.ac.filter(r => !r[8]).length.toLocaleString()} airborne worldwide, ${Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60))} min old (<a href="https://opensky-network.org" target="_blank" rel="noopener">OpenSky</a>)` : '') +
-    (S.src ? ` · <a href="${S.src === 'adsb.fi' ? 'https://adsb.fi' : 'https://adsb.lol'}" target="_blank" rel="noopener">${esc(S.src)}</a>` : '');
+    (worldShown() && WORLD ? ` · ${WORLD.ac.filter(r => !r[8]).length.toLocaleString()} airborne worldwide, ${Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60))} min old (<a href="${esc(SITE.world_link[0])}" target="_blank" rel="noopener">${esc(SITE.world_link[1])}</a>)` : '') +
+    (S.src ? ' · ' + ((SITE.src_links || {})[S.src] ? `<a href="${esc(SITE.src_links[S.src])}" target="_blank" rel="noopener">${esc(S.src)}</a>` : esc(S.src)) : '');
   renderList(); if (sel) renderCard();
 }
 function renderList() {
@@ -955,7 +961,7 @@ setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 
 (async () => {
   makeScope({ lat:37.62, lon:-122.38, half:52 }); makeScope({ lat:37.62, lon:-122.38, half:3 }); use(scopes[0]);
   onInput();
-  setLayout((() => { try { return localStorage.getItem('livescope-tiles'); } catch (e) { return null; } })() || 'one');
+  setLayout((() => { try { return localStorage.getItem(KEY + '-tiles'); } catch (e) { return null; } })() || 'one');
   resize(); requestAnimationFrame(frame); renderFlt(); renderCard();
   const h = decodeURIComponent(location.hash.slice(1));
   let want = null;

@@ -1,31 +1,47 @@
-"""livescope's web server: the page, its map files and the /api/live endpoints (live.py does the work).
+"""The scope web server: the page, its map files and the /api/live endpoints for one site.
 
-    python3 server.py [--host 127.0.0.1] [--port 8798]
+    python3 server.py livescope [--host 127.0.0.1] [--port 8799]
 
-Optional environment: OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET (a free OpenSky API client) refresh the
-worldwide picture every 90 s instead of every 15 min.
+A site (sites/<name>.py) gives its name, links and data providers; everything else is shared (scope/,
+web/scope.html). livescope's optional environment: OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET (a free
+OpenSky API client) refresh the worldwide picture every 90 s instead of every 15 min.
 """
 import argparse
 import gzip
+import html
+import importlib
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
-import live
+from scope import core
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATIC = {}            # path -> (body, gzipped)
-OLD_HOSTS = ("liveatc.",)                  # the site's first name, redirected
-CANONICAL = os.environ.get("LIVESCOPE_URL", "https://livescope.kyleboas.com")
+SITE, P, STATIC = {}, {}, {}          # the site's settings, its providers, path -> (body, gzipped, type)
+AIRPORTS = PROCS = GROUND = None
 
 
-def load_static():
-    page = open(os.path.join(HERE, "web", "live.html"), "rb").read()
+def load(name):
+    global AIRPORTS, PROCS, GROUND
+    if not re.fullmatch(r"[a-z0-9_]+", name):
+        raise SystemExit(f"bad site name {name!r}")
+    mod = importlib.import_module("sites." + name)
+    SITE.update(mod.SITE)
+    P.update(mod.providers())
+    AIRPORTS = core.Airports()
+    PROCS = core.Procs(AIRPORTS)
+    GROUND = core.Ground(AIRPORTS)
+    feats = ["procs", "ground"] + [k for k in ("world", "routes", "atis") if P.get(k)]
+    client = {k: v for k, v in SITE.items() if k not in ("old_hosts", "port")} | {"features": feats}
+    page = open(os.path.join(HERE, "web", "scope.html"), encoding="utf-8").read()
+    page = page.replace("<title>livescope</title>", f"<title>{html.escape(SITE['title'])}</title>", 1)
+    page = page.replace("<script>\n", "<script>\nconst SITE = " + json.dumps(client).replace("</", "<\\/") + ";\n", 1).encode()
     files = {"/": (page, "text/html; charset=utf-8"), "/live": (page, "text/html; charset=utf-8")}
-    for name in ("lines.json", "ksfo.json"):
-        files["/live/" + name] = (open(os.path.join(HERE, "web", "geo", name), "rb").read(), "application/json")
-    files["/live/major.json"] = (json.dumps(live.AIRPORTS.major, separators=(",", ":")).encode(), "application/json")
+    for f in ("lines.json", "ksfo.json"):
+        files["/live/" + f] = (open(os.path.join(HERE, "web", "geo", f), "rb").read(), "application/json")
+    files["/live/major.json"] = (json.dumps(AIRPORTS.major, separators=(",", ":")).encode(), "application/json")
     for path, (body, ctype) in files.items():
         STATIC[path] = (body, gzip.compress(body, 9), ctype)
 
@@ -59,9 +75,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         path, _, qs = self.path.partition("?")
-        if (self.headers.get("Host") or "").lower().startswith(OLD_HOSTS):
+        if SITE.get("old_hosts") and (self.headers.get("Host") or "").lower().startswith(tuple(SITE["old_hosts"])):
             self.send_response(301)
-            self.send_header("Location", CANONICAL + self.path)
+            self.send_header("Location", SITE["url"] + self.path)
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -74,38 +90,40 @@ class Handler(BaseHTTPRequestHandler):
         f = lambda k, d=0.0: float((q.get(k) or [d])[0])       # noqa: E731
         s = lambda k, n=12: (q.get(k) or [""])[0][:n]          # noqa: E731
         if path == "/api/live":
-            return self.send(200, live.TRAFFIC.get(f("lat"), f("lon"), max(5.0, min(live.MAX_NM, f("nm", 60)))))
+            return self.send(200, P["traffic"].get(f("lat"), f("lon"), max(5.0, min(P["max_nm"], f("nm", 60)))))
         if path == "/api/live/area":
-            return self.send(200, live.AIRPORTS.area(f("lat"), f("lon"), f("nm", 30)))
+            return self.send(200, AIRPORTS.area(f("lat"), f("lon"), f("nm", 30)))
         if path == "/api/live/airport":
-            return self.send(200, live.AIRPORTS.one(s("id")))
-        if path == "/api/live/atis":
-            return self.send(200, live.ATIS.get(s("id")))
+            return self.send(200, AIRPORTS.one(s("id")))
+        if path == "/api/live/search":
+            return self.send(200, AIRPORTS.search(s("q", 40)))
+        if path == "/api/live/procs":
+            return self.send(200, PROCS.area(f("lat"), f("lon"), f("nm", 30), s("id")))
         if path == "/api/live/ground":
-            gz, state = live.GROUND.get(s("id"))
+            gz, state = GROUND.get(s("id"))
             if gz is None:
                 return self.send(200, {"state": state})
             return self.send(200, gzip.decompress(gz), gz=gz)
-        if path == "/api/live/world":
-            body, gz = live.WORLD.get()
+        if path == "/api/live/atis" and P.get("atis"):
+            return self.send(200, P["atis"].get(s("id")))
+        if path == "/api/live/world" and P.get("world"):
+            body, gz = P["world"].get()
             return self.send(200, body, gz=gz)
-        if path == "/api/live/routes":
-            return self.send(200, live.ROUTES.get(s("cs", 2000).split(",")[:80]))
-        if path == "/api/live/procs":
-            return self.send(200, live.PROCS.area(f("lat"), f("lon"), f("nm", 30), s("id")))
-        if path == "/api/live/search":
-            return self.send(200, live.AIRPORTS.search(s("q", 40)))
+        if path == "/api/live/routes" and P.get("routes"):
+            return self.send(200, P["routes"].get(s("cs", 2000).split(",")[:80]))
         self.send(404, {"error": "not found"})
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--port", type=int, default=8798)
+    ap.add_argument("site", nargs="?", default="livescope", help="a module in sites/ (default livescope)")
+    ap.add_argument("--port", type=int)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
-    load_static()
-    srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"livescope: http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{args.port}")
+    load(args.site)
+    port = args.port or SITE.get("port", 8799)
+    srv = ThreadingHTTPServer((args.host, port), Handler)
+    print(f"{SITE['name']}: http://{'localhost' if args.host in ('127.0.0.1', '0.0.0.0') else args.host}:{port}")
     srv.serve_forever()
 
 

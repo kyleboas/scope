@@ -1,7 +1,17 @@
 # livescope
 
-A watch-only, STARS-style scope of real air traffic anywhere in the world. It runs live at
-https://livescope.kyleboas.com.
+A watch-only, STARS-style scope of air traffic on a globe, and the shared code behind several sites
+built on it:
+
+| site | traffic | address |
+|---|---|---|
+| `livescope` | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
+| `ifscope` | Infinite Flight (planned) | ifscope.kyleboas.com |
+
+Every site shares the scope client, the server, airports, procedures and ground maps. A site is one
+small file in `sites/` that names its data sources and links ([Adding a site](#adding-a-site)).
+
+What follows describes livescope, the real-world site.
 
 ADS-B positions come from adsb.lol, with adsb.fi as a fallback. The feed covers up to 250 nm around the
 middle of the view, and positions are eased between reports. You can zoom out to an orthographic globe,
@@ -40,10 +50,33 @@ or search for any airport by ICAO, IATA or name. Close in, runways are drawn to 
 ## Run
 
 ```
-python3 server.py --port 8798        # Python 3.10+, standard library only
+python3 server.py livescope --port 8799     # Python 3.10+, standard library only; any site in sites/
 ```
 
-Then open http://localhost:8798. `/` and `/live` serve the page; the API is under `/api/live`.
+Then open http://localhost:8799. `/` and `/live` serve the page; the API is under `/api/live`. Each site
+runs as its own process (its own port and hostname), all from the same checkout.
+
+## Adding a site
+
+Write `sites/<name>.py` with two things:
+
+- `SITE`, a dict:
+  - required: `name` (also the localStorage prefix), `title` and `url`
+  - optional: `port`; `old_hosts`, host prefixes to 301-redirect to `url`; `src_links`, feed name → URL
+    for the status line; `hex_link`, `[url with {hex}, label with {HEX}]`; `world_link`, `[url, name]`
+- `providers()`, which returns a dict:
+  - `traffic` (required): an object whose `get(lat, lon, nm)` returns
+    `{ok, t, center:[lat, lon], nm, src, aircraft:[...]}`. Each aircraft is
+    `{id, cs, lat, lon, alt, gs, hdg, vs, ts, ground, air, type, reg, sq, emer}`, optionally with `hex`.
+  - `max_nm` (required): the most the traffic source covers around a point.
+  - `world` (optional): `get()` returns `(json_bytes, gzipped)` in OpenSky's compact form (see
+    `sources/adsb.py` World).
+  - `routes` (optional): `get([callsigns])` returns `{cs: [from, lat, lon, to, lat, lon]}` for the callsigns it knows.
+  - `atis` (optional): `get(ident)` returns `{atis:[{type, code, text, time}], metar:{raw, cat} | None}`.
+
+A provider left out turns its feature off in the page (no world dots, no ATIS block, no route lookups).
+Put a site's data-source code in `sources/<source>.py`; anything every site can use belongs in `scope/`
+or `web/scope.html`.
 
 ## Data
 
@@ -56,9 +89,11 @@ Then open http://localhost:8798. `/` and `/live` serve the page; the API is unde
 ## Layout
 
 ```
-server.py        HTTP server: the page, its map files, /api/live*
-live.py          traffic cache, airports, procedures, routes, OpenSky world + estimates, ground maps, ATIS
-web/live.html    the whole client (canvas, no build step)
+server.py        HTTP server for one site: the page (with the site's settings), map files, /api/live*
+sites/           one file per site: settings + which providers it uses
+sources/adsb.py  livescope's data: ADS-B traffic, OpenSky world + ocean estimates, adsbdb routes, D-ATIS/METAR
+scope/core.py    shared: geometry, airports (OurAirports), procedures (FAA CIFP), ground maps (OSM)
+web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals
 livedata/        airports (OurAirports), procedures (FAA CIFP); ground/ is a runtime cache
 tools/           builders for livedata/ and web/geo/
