@@ -177,10 +177,10 @@ const PROC_SEL = '#4fb3ff';
 const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
-                ['borders', 'Borders'], ['coast', 'Coastlines'], ['atc', 'Airports with ATC on duty'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
+                ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
                 ['tags', 'Data tags'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:true, fixes:true, fixnames:true, rings:true, airports:true, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, atc:true, plan:true, trails:true, ptl:true, tags:true, ground:true, world:true, est:true };
+            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, tags:true, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -210,7 +210,7 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('atc') || k !== 'atc') && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
+  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
@@ -350,23 +350,7 @@ function drawMap() {
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
     if (label && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
   }
-  if (has('atc') && L.atc) drawAtc(c);
 }
-// airports with controllers on duty (infinitescope): a cyan box with the facilities (C G T A D, I for ATIS)
-const ATC_LETTER = { Clearance:'C', Ground:'G', Tower:'T', Approach:'A', Departure:'D', Center:'CTR', ATIS:'I', Unicom:'U' };
-function drawAtc(c) {
-  const d = dpr(); c.font = FONT(10);
-  for (const [icao, fs] of atcBy) {
-    if (!icao) continue;
-    const ap = areaAps.get(icao) || MAJOR.find(m => m[0] === icao), la = ap ? ap[5] : fs[0].lat, lo = ap ? ap[6] : fs[0].lon;
-    if (la == null) continue;
-    const [x, y, z] = proj(la, lo); if (z < 0 || x < -40 || y < -40 || x > P0.w + 40 || y > P0.h + 40) continue;
-    c.strokeStyle = '#5ac8fa'; c.lineWidth = d; c.strokeRect(x - 4*d, y - 4*d, 8*d, 8*d);
-    if (view.half < 3) continue;
-    c.fillStyle = '#5ac8fa'; c.fillText(`${icao} ${[...new Set(fs.map(f => ATC_LETTER[f.type] || '?'))].join('')}`, x + 7*d, y + 12*d);
-  }
-}
-
 // SIDs, STARs and approaches: all of them for the airport you picked, faint for its neighbours close in,
 // and the one picked in the card bright with its fixes named
 function fixMark(c, n, la, lo, col, label) {
