@@ -1124,6 +1124,9 @@ const TL_SPEEDS = [10, 30, 60, 120, 300, 600], TL_WSPEEDS = [60, 120, 300, 600, 
 const tlSpeeds = () => RP && RP.rec.kind === 'world' ? TL_WSPEEDS : TL_SPEEDS;
 const TL_HOURS = [[0.25, '15 min'], [0.5, '30 min'], [1, '1 h'], [2, '2 h'], [3, '3 h'], [6, '6 h'], [12, '12 h'], [24, '24 h']];
 const tlTime = t => { const d = new Date(t * 1000); return d.toISOString().slice(5, 10).replace('-', '/') + ' ' + d.toISOString().slice(11, 19) + 'Z'; };
+// when a recording's next snapshot is due (the world's come every 90 s, or 15 min without an OpenSky API client)
+const tlNext = r => { const t = (r.last || r.start) + r.every_s, m = Math.round((t - Date.now() / 1000) / 60);
+  return m >= 2 ? `next at ${tlTime(t).slice(6, 11)}Z (in ${m} min)` : 'next any moment'; };
 const tlDur = s => s < 3600 ? Math.max(1, Math.round(s / 60)) + ' min' : (s / 3600).toFixed(s < 36000 ? 1 : 0) + ' h';
 function tlInit() {
   const b = $('tlBtn'); b.hidden = false;
@@ -1151,21 +1154,24 @@ function tlPanel(force) {
   const nRec = TL.recs.filter(r => r.rec).length, full = TL.max_active && nRec >= TL.max_active, can = !TL.need_key || !!tlKey;
   const what = here.world ? `worldwide traffic (OpenSky, one snapshot every ${TL.world_every >= 600 ? Math.round(TL.world_every / 60) + ' min' : TL.world_every + ' s'})`
     : `the ${here.nm} nm around the middle of this view`;
+  const slow = here.world && TL.world_every >= 600 ? `<div class="note">The worldwide picture only updates every ${Math.round(TL.world_every / 60)} min (the server has no OpenSky API client), so a world timelapse can play once it has two, after ${Math.round(TL.world_every / 60)}–${Math.round(TL.world_every / 30)} min, and an hour holds about ${Math.round(3600 / TL.world_every) + 1} pictures.</div>` : '';
   p.innerHTML = (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
       (TL.need_key ? ' <button id="tlLock" title="Forget the key in this browser">LOCK</button>' : '') + '</div>' +
     `<div class="new"><input id="tlName" maxlength="40" spellcheck="false" placeholder="name" value="${esc(keep ?? here.name)}">` +
     `<select id="tlH">${TL_HOURS.filter(([h]) => h <= (TL.max_h || 24)).map(([h, t]) => `<option value="${h}"${h === hrs ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
     `<button class="go" id="tlGo"${full ? ' disabled title="Too many recording at once"' : ''}>● REC</button></div>`
     : '<div class="hd">Anyone can watch these. Recording a new one takes the key.</div>' +
-    '<div class="new"><input id="tlKeyIn" type="password" autocomplete="current-password" spellcheck="false" placeholder="key"><button class="go" id="tlUnlock">UNLOCK</button></div>') +
+    '<div class="new"><input id="tlKeyIn" type="password" autocomplete="current-password" spellcheck="false" placeholder="key"><button class="go" id="tlUnlock">UNLOCK</button></div>') + (can ? slow : '') +
     (tlErr ? `<div class="err">${esc(tlErr)}</div>` : '') +
     (TL.recs.length ? '' : '<div class="note">No timelapses yet.</div>') +
     TL.recs.map(r => {
       const span = r.first ? tlDur((r.last || r.first) - r.first) : '';
-      const st = r.rec ? `<span class="on">● REC</span> ${span || 'starting'} of ${tlDur(r.until - r.start)}` : span ? span : 'empty';
-      return `<div class="rec"><b>${esc(r.name)}</b><div>${r.first ? `<button data-tlplay="${r.id}">${RP && RP.rec.id === r.id ? 'PLAYING' : 'PLAY'}</button>` : ''}` +
+      const ready = r.first && r.last > r.first, snaps = ready && r.n ? ` · ${r.n.toLocaleString()} snapshot${r.n === 1 ? '' : 's'}` : '';
+      const st = r.rec ? `<span class="on">● REC</span> ${ready ? span : r.first ? 'first snapshot in, ' + tlNext(r) : 'waiting for the first snapshot'} of ${tlDur(r.until - r.start)}`
+        : (ready ? span : r.first ? 'only one snapshot, nothing to play' : 'empty');
+      return `<div class="rec"><b>${esc(r.name)}</b><div>${ready ? `<button data-tlplay="${r.id}">${RP && RP.rec.id === r.id ? 'PLAYING' : 'PLAY'}</button>` : ''}` +
         `${r.rec && can ? `<button data-tlstop="${r.id}" title="Stop recording">STOP</button>` : ''}</div>` +
-        `<i>${tlTime(r.start).slice(0, 11)} · ${st} · ${r.kind === 'world' ? 'worldwide' : r.nm + ' nm'}${r.peak ? ' · up to ' + r.peak + ' aircraft' : ''}</i></div>`;
+        `<i>${tlTime(r.start).slice(0, 11)} · ${st}${snaps} · ${r.kind === 'world' ? 'worldwide' : r.nm + ' nm'}${r.peak ? ' · up to ' + r.peak + ' aircraft' : ''}</i></div>`;
     }).join('');
   if (!can) {
     const go = async () => { tlSetKey($('tlKeyIn').value); try { await tlAuth('a=check'); } catch (e) { tlSetKey(''); tlErr = 'server unreachable'; } tlPanel(true); };
@@ -1186,7 +1192,8 @@ function tlPanel(force) {
 async function tlOpen(id, fly) {
   if (!TL.recs.some(r => r.id === id)) await tlList();
   const rec = TL.recs.find(r => r.id === id);
-  if (!rec || !rec.first) { tlErr = 'That timelapse is gone or has nothing in it yet.'; $('tlp').hidden = false; tlPanel(); return; }
+  if (!rec || !(rec.last > rec.first)) { tlErr = !rec ? 'That timelapse is gone.' : 'It needs two snapshots to play; ' + (rec.rec ? tlNext(rec) + '.' : 'it only has one.');
+    $('tlp').hidden = false; tlPanel(true); return; }
   tlClose(true);
   // at most ~5000 snapshots in memory: long recordings are thinned (the easing covers the gaps)
   const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - rec.first) / rec.every_s + 1) / (world ? 150 : 5000)));
@@ -1243,7 +1250,8 @@ function tlBar() {
   const r = b.querySelector('input'); r.min = t0; r.max = Math.max(t1, t0 + 1); if (!RP.drag) r.value = RP.t;
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
   b.querySelector('.t').innerHTML = tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
-  b.querySelector('.ld').textContent = `${RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' : ''}`;
+  const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
+  b.querySelector('.ld').textContent = `${RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
 }
 function tlById(f) { if (!f[2]) f[2] = new Map(f[1].map(r => [r[0], r])); return f[2]; }
