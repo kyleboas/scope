@@ -1393,7 +1393,8 @@ function flightCard(a, la, lo) {
   const f = FL && FL.id === a.id ? FL : null, plan = f && f.plan, pts = (plan && plan.pts) || [], r = routeOf(a), lg = f && f.log;
   const num = v => typeof v === 'number' && isFinite(v), nm = v => Math.round(v).toLocaleString() + ' nm';
   const altS = v => v >= 18000 ? 'FL' + Math.round(v / 100) : Math.round(v).toLocaleString() + ' ft', deg = v => String(Math.round(v) % 360).padStart(3, '0') + '°';
-  const hm = m => (m = Math.round(m)) >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`, zt = t => new Date(t * 1000).toISOString().slice(11, 16) + 'Z';
+  const hm = m => (m = Math.round(m)) >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`, zt = t => new Date(t * 1000).toISOString().slice(11, 16) + 'Z',
+    zd = t => (Date.now() / 1000 - t > 72000 ? new Date(t * 1000).toUTCString().slice(5, 11) + ' ' : '') + zt(t);
   const ap = id => { const x = id && (areaAps.get(id) || MAJOR.find(o => o[0] === id)); return x ? `${id} · ${x[1]}` : id || ''; };
   // where it is on the plan: the leg it's flying is the one it's nearest to; the next fix is that leg's end
   let next = -1, toGo = null;
@@ -1419,7 +1420,7 @@ function flightCard(a, la, lo) {
       ['Cruise (planned)', plan && plan.cruise ? altS(plan.cruise) : ''],
       ['Next fix', next >= 0 ? `${pts[next][0]} · ${nm(gc(la, lo, pts[next][1], pts[next][2]))}${pts[next][3] > 0 ? ' · at ' + altS(pts[next][3]) : ''}` : ''],
       ['To go', toGo != null ? nm(toGo) + (next >= 0 ? ' along the plan' : ' direct') : ''], ['ETA', eta != null ? `${zt(Date.now() / 1000 + eta * 60)} · in ${hm(eta)}` : ''],
-      ['Flown', tr.length > 1 ? `${nm(flown)}${t0 ? ' since ' + zt(t0) : ''}` : ''], ['Highest so far', top ? altS(top) : '']]) +
+      ['Flown', tr.length > 1 ? `${nm(flown)}${t0 ? ' since ' + zd(t0) : ''}` : ''], ['Highest so far', top ? altS(top) : '']]) +
     (lg ? sec('Logbook', [['Flight time', num(lg.min) ? hm(lg.min) + (num(lg.night) && lg.night > 0.5 ? ` (${hm(lg.night)} at night)` : '') : ''],
       ['Landings', num(lg.landings) ? String(lg.landings) : ''], ['Fuel used', num(lg.fuel) ? Math.round(lg.fuel).toLocaleString() + ' kg' : ''], ['XP', num(lg.xp) ? lg.xp.toLocaleString() : ''],
       ['Last landing', ld && num(ld.vs) ? [Math.round(ld.vs * 196.85) + ' fpm', num(ld.g) ? ld.g.toFixed(2) + ' g' : '', num(ld.ias) ? Math.round(ld.ias) + ' kt' : '',
