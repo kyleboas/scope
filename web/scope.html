@@ -77,18 +77,23 @@
   .flt.off button { color:#2e2e2e; pointer-events:none; }
   .views [data-layers] { display:flex; align-items:center; } .views [data-layers] svg { width:14px; height:14px; }
   .layers { position:absolute; left:8px; bottom:38px; z-index:3; background:var(--bg); border:1px solid var(--line); border-radius:10px;
-            padding:6px 0; font:12px var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; max-height:calc(100% - 50px); overflow:auto; }
+            padding:6px 0; font:12px var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; max-height:calc(100% - var(--top) - 46px); overflow:auto; }
   .layers[hidden] { display:none; }
   .atis { margin-top:10px; font-size:11px; line-height:1.45; color:#bdbdbd; white-space:normal; word-break:break-word; }
   .atis i { display:block; font-style:normal; color:var(--dim); margin-bottom:2px; }
   .atis i b { color:#e8e8e8; }
   .atis .dim { color:var(--dim); }
   #gnote { position:absolute; left:50%; transform:translateX(-50%); top:calc(var(--top) + 2px); z-index:2; font:11px var(--mono); color:#666; pointer-events:none; white-space:nowrap; }
-  .layers label { display:flex; align-items:center; gap:9px; padding:6px 14px; cursor:pointer; white-space:nowrap; }
-  .layers label:hover { background:#1c1c1e; }
+  .layers h4 { margin:0; padding:9px 14px 3px; font:10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+  .layers h4:first-child { padding-top:3px; }
+  .layers .lr { display:flex; align-items:center; }
+  .layers .lr:hover { background:#1c1c1e; }
+  .layers label { flex:1; display:flex; align-items:center; gap:9px; padding:5px 14px; cursor:pointer; white-space:nowrap; }
+  .layers .sub label { padding-left:36px; color:var(--dim); }
+  .layers .sub.off { opacity:.45; }
   .layers input { accent-color:#8e8e93; margin:0; }
-  .layers .tagsz { display:flex; align-items:center; gap:2px; padding:2px 14px 6px 36px; color:var(--dim); }
-  .layers .tagsz span { margin-right:6px; } .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz b { font-weight:normal; color:var(--fg); min-width:2.2em; text-align:center; cursor:pointer; }
+  .layers .tagsz { display:flex; align-items:center; padding-right:8px; color:var(--dim); }
+  .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz b { font-weight:normal; color:var(--fg); min-width:2em; text-align:center; cursor:pointer; }
   #listBtn { display:none; }
   #srvs { display:flex; gap:0; }
   #srvs button { padding:5px 6px; } #srvs button.on { color:var(--fg); background:var(--alt); }
@@ -156,9 +161,11 @@
     .views { left:max(8px, env(safe-area-inset-left)); bottom:max(6px, env(safe-area-inset-bottom)); max-width:calc(100% - 16px); overflow-x:auto; scrollbar-width:none; }
     .views::-webkit-scrollbar { display:none; }
     .views button { padding:8px 9px; font-size:12px; }
-    .layers { left:max(8px, env(safe-area-inset-left)); bottom:calc(max(6px, env(safe-area-inset-bottom)) + 40px); }
-    .layers label { padding:9px 16px; font-size:13px; }
-    .layers .tagsz { padding:0 16px 8px 38px; font-size:13px; } .layers .tagsz button { padding:6px 11px; font-size:13px; }
+    .layers { left:max(8px, env(safe-area-inset-left)); bottom:calc(max(6px, env(safe-area-inset-bottom)) + 40px);
+              max-height:calc(100% - var(--top) - max(6px, env(safe-area-inset-bottom)) - 52px); }
+    .layers label { padding:8px 16px; font-size:13px; } .layers .sub label { padding-left:40px; }
+    .layers h4 { padding:11px 16px 3px; font-size:10px; }
+    .layers .tagsz { font-size:13px; } .layers .tagsz button { padding:6px 10px; font-size:13px; }
     .flt { right:max(8px, env(safe-area-inset-right)); bottom:max(6px, env(safe-area-inset-bottom)); }
     .flt button { padding:8px 7px; font-size:12px; }
   }
@@ -239,11 +246,15 @@ const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approac
 const PROC_HOME = { star:['#4a4a4a', [2, 5]], transition:['#4a4a4a', [2, 5]], approach:['#6a6a6a', null], sid:['#3c3c3c', [8, 6]] };
 const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
-const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
-                ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['aptnames', 'Airport names'], ['small', 'Small airports and strips'],
-                ['runways', 'Runways'], ['finals', 'Extended finals and ILS'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['taxinames', 'Taxiway names'], ['states', 'State and province lines'],
-                ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
-                ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
+// grouped under small headings; a third field names the layer an item hangs off (indented, dimmed while that's off)
+const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', 'At nearby airports'],
+                ['#', 'Navigation'], ['fixes', 'Fixes'], ['fixnames', 'Names', 'fixes'], ['rings', 'Range rings'], ['finals', 'Extended finals and ILS'],
+                ['#', 'Airports'], ['airports', 'Airports'], ['aptnames', 'Names', 'airports'], ['small', 'Small airports and strips'], ['runways', 'Runways'],
+                ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'],
+                ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
+                ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
+                ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'],
+                ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
@@ -275,10 +286,14 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
-    (k === 'tags' ? `<div class="tagsz"><span>Size</span><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Back to the default">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></div>` : '')).join('');
+  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')));
+  lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
+    `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
+    (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
+  const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
+  dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
