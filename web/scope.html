@@ -928,21 +928,29 @@ function endPointer(e) {
   const dg = drag; drag = null;
   if (dg.moved || e.type === 'pointercancel') return;
   if (dg.hadMeasure) { measure = null; return; }     // a click first clears the ruler
-  // zoomed in, aircraft come first; zoomed out, airports do (a wider target), and a tap that could mean
-  // more than one thing opens a small menu listing them, airports on top
-  const [mx, my] = canvasXY(e), touch = e.pointerType === 'touch', far = view.half >= 80;
-  const acs = hitAircraftAll(mx, my, touch ? 26 : 16), aps = hitAirports(mx, my, far ? (touch ? 30 : 22) : 14);
-  if (far && aps.length + acs.length > 1) { pickMenu(e.clientX, e.clientY, aps, acs.map(x => x.a)); return; }
-  if (far && aps.length) { pickAirport(aps[0]); return; }
-  if (acs.length) { select(acs[0].a.id); return; }
+  // a tap that could mean more than one thing opens a small menu listing them, airports on top; airports
+  // are a wider target until their runways are drawn to scale, and then only count where no aircraft is
+  const [mx, my] = canvasXY(e), touch = e.pointerType === 'touch', near = view.half < 10;
+  const acs = hitAircraftAll(mx, my, touch ? 26 : 16).map(x => x.a);
+  const aps = near && acs.length ? [] : hitAirports(mx, my, near ? 14 : touch ? 30 : 22);
+  if (aps.length + acs.length > 1) { pickMenu(e.clientX, e.clientY, aps, acs); return; }
   if (aps.length) { pickAirport(aps[0]); return; }
+  if (acs.length) { select(acs[0].id); return; }
   select(null);
 }
 function pickAirport(ap) {
   if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
   setHome(ap, false);
 }
-// the menu for a tap on several things at once (zoomed out): airports, then aircraft nearest first
+onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
+onCv('pointerleave', () => { hover = null; worldHover = null; });
+onCv('wheel', e => {
+  e.preventDefault();
+  const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+  const [mx, my] = canvasXY(e); zoomAt(mx, my, Math.exp(Math.max(-0.25, Math.min(0.25, px * (e.ctrlKey ? 0.004 : 0.0012)))));
+}, { passive:false });
+}
+// the menu for a tap on several things at once : airports, then aircraft nearest first
 function pickMenu(x, y, aps, acs) {
   const m = $('pick'), A = aps.slice(0, 6), C = acs.slice(0, 10 - A.length);
   m.innerHTML = A.map((a, i) => `<div data-pa="${i}"><b>${esc(a[0])}</b>${esc(a[2] || '')}</div>`).join('') +
@@ -960,14 +968,6 @@ function pickMenu(x, y, aps, acs) {
 function pickClose() { const m = $('pick'); if (!m.hidden) { m.hidden = true; hover = null; } }
 document.addEventListener('pointerdown', e => { if (!e.target.closest('#pick')) pickClose(); }, true);
 window.addEventListener('wheel', pickClose, { passive:true });
-onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
-onCv('pointerleave', () => { hover = null; worldHover = null; });
-onCv('wheel', e => {
-  e.preventDefault();
-  const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
-  const [mx, my] = canvasXY(e); zoomAt(mx, my, Math.exp(Math.max(-0.25, Math.min(0.25, px * (e.ctrlKey ? 0.004 : 0.0012)))));
-}, { passive:false });
-}
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Escape' && !$('pick').hidden) { pickClose(); return; }
