@@ -1214,7 +1214,7 @@ function drawWx() {
     ctx.globalAlpha = hi ? 1 : later ? .4 : .8;
     for (const g of a.rings) {
       const whole = wxRing(ctx, g.r); ctx.stroke();
-      if (whole) { ctx.globalAlpha = hi ? .16 : a.k === 'tfr' ? .1 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
+      if (whole) { ctx.globalAlpha = hi ? .16 : a.k === 'tfr' ? .07 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
     }
     ctx.setLineDash([]);
     if (labels) {                                // a short label inside, when the area is big enough on screen
