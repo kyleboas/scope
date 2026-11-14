@@ -160,8 +160,8 @@
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
   #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags], #tlbar [data-tl=follow], #tlbar [data-tl=traffic], #tlbar [data-tl=prof] { color:var(--dim); } #tlbar [data-tl=tags].on, #tlbar [data-tl=follow].on, #tlbar [data-tl=traffic].on, #tlbar [data-tl=prof].on { color:#ff9f0a; }
-  /* a replayed flight's profile: altitude and ground speed, two charts on one time axis (dark surface #141416, line #d97706) */
-  #fhprof { position:relative; flex:none; height:236px; box-sizing:border-box; background:#141416; border-bottom:1px solid var(--line); touch-action:none; cursor:crosshair; }
+  /* a replayed flight's profile: altitude and ground speed, two charts on one time axis (on the panel's own background, line #d97706) */
+  #fhprof { position:relative; flex:none; height:236px; box-sizing:border-box; background:transparent; border-bottom:1px solid var(--line); touch-action:none; cursor:crosshair; }
   #fhprof[hidden] { display:none; } #fhprof canvas { display:block; width:100%; height:100%; }
   #fhprof .tip { position:absolute; top:2px; pointer-events:none; background:#1c1c1e; border:1px solid var(--line); border-radius:5px; padding:1px 7px;
                  font:11px/1.4 var(--mono); color:var(--fg); white-space:nowrap; } #fhprof .tip i { font-style:normal; color:var(--dim); }
@@ -2699,7 +2699,7 @@ function fhProf(force) {
   charts.forEach((k, i) => {
     const y0 = top + i * (ch + gapY), max = nice(Math.max(...P.map(k.v)) * 1.05 || 1), y = v => y0 + ch - v / max * (ch - 12);
     k.y = y;
-    c.strokeStyle = '#2c2c2e'; c.lineWidth = 1; c.fillStyle = '#98989f'; c.textAlign = 'right';
+    c.strokeStyle = 'rgba(255,255,255,.1)'; c.lineWidth = 1; c.fillStyle = '#98989f'; c.textAlign = 'right';
     for (const v of [0, max / 2, max]) { const yy = Math.round(y(v)) + .5; c.beginPath(); c.moveTo(L0, yy); c.lineTo(W - R0, yy); c.stroke(); c.fillText(kfmt(v), L0 - 6, yy); }
     c.textAlign = 'left'; c.fillStyle = '#c7c7cc'; c.fillText(`${k.name} (${k.unit})`, L0 + 6, y0 + 6);
     // the line: 2px, round joins; estimated stretches (over an ocean) fainter
@@ -2718,12 +2718,14 @@ function fhProf(force) {
   c.fillStyle = '#98989f'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
   for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) { const X = x(t); if (X < L0 + 14 || X > W - R0 - 14) continue;
     c.fillText(new Date(t * 1000).toISOString().slice(11, 16) + 'Z', X, H - 4);
-    c.strokeStyle = '#2c2c2e'; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(X) + .5, top); c.lineTo(Math.round(X) + .5, H - axisH); c.stroke(); }
+    c.strokeStyle = 'rgba(255,255,255,.1)'; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(X) + .5, top); c.lineTo(Math.round(X) + .5, H - axisH); c.stroke(); }
   // the replay's moment, then the pointer's
+  let ring = '#000';
+  for (let el = box; el; el = el.parentElement) { const bg = getComputedStyle(el).backgroundColor; if (bg && !/rgba\(.*,\s*0\)$|transparent/.test(bg)) { ring = bg; break; } }
   const mark = (t, dots, col) => { const X = Math.round(x(t)) + .5, [a, b, f] = at(t);
     c.strokeStyle = col; c.lineWidth = 1; c.beginPath(); c.moveTo(X, top); c.lineTo(X, H - axisH); c.stroke();
     if (dots) for (const k of charts) { const v = k.v(a) + (k.v(b) - k.v(a)) * f, Y = k.y(v);
-      c.beginPath(); c.arc(X, Y, 6, 0, 7); c.fillStyle = '#141416'; c.fill(); c.beginPath(); c.arc(X, Y, 4, 0, 7); c.fillStyle = '#d97706'; c.fill(); } };
+      c.beginPath(); c.arc(X, Y, 6, 0, 7); c.fillStyle = ring; c.fill(); c.beginPath(); c.arc(X, Y, 4, 0, 7); c.fillStyle = '#d97706'; c.fill(); } };
   mark(Math.max(t0, Math.min(t1, RP.t)), true, 'rgba(199,199,204,.6)');
   const tip = box.querySelector('.tip');
   if (fhHover == null) { tip.hidden = true; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#c7c7cc'; c.fillText(RP.fh.f.cs || RP.fh.hex.toUpperCase(), 10, 13);
