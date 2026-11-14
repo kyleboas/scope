@@ -220,10 +220,10 @@ const PROC_SEL = '#4fb3ff';
 const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
-                ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
+                ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
                 ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:true, fixes:true, fixnames:true, rings:true, airports:true, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, tags:true, aprontags:true, ground:true, world:true, est:true };
+            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:true, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -537,19 +537,21 @@ function drawAircraft() {
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
     const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer;
     drawn.push({ a, px, py });
-    if (!matches(a) && !isSel && !isHov && !emer) {     // filtered out: a grey dot, no trail, a short tag (altitude and wake category)
-      ctx.fillStyle = '#3a3a3a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill();
-      if (L.tags && !far && !a.ground) shortTag(px, py, a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : ''), COL.dbDim);
-      continue;
-    }
-    if (L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
+    const out = !matches(a) && !isSel && !isHov && !emer;   // filtered out: a grey dot and a short tag (altitude and wake category),
+    const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
+    if (lines && L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
       const [hx, hy, hz] = proj(q[0], q[1]); if (hz < 0) continue;
       ctx.globalAlpha = 0.25 + i * 0.12; ctx.fillStyle = COL.hist; ctx.beginPath(); ctx.arc(hx, hy, (a.ground ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    if (L.ptl && !a.ground && a.gs > 30 && ppn * a.gs / 60 > 4 * d) {      // one minute ahead
+    if (lines && L.ptl && !a.ground && a.gs > 30 && ppn * a.gs / 60 > 4 * d) {      // one minute ahead
       const [ea, eo] = dest(la, lo, a.hdg, a.gs / 60), [ex, ey] = proj(ea, eo);
       ctx.strokeStyle = COL.ptl; ctx.globalAlpha = .5; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    if (out) {
+      ctx.fillStyle = '#5a5a5a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill();
+      if (L.tags && !far && !a.ground) shortTag(px, py, a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : ''), COL.dbDim);
+      continue;
     }
     const blend = far && worldShown() && !isSel && !isHov && !emer;   // zoomed out with the worldwide dots: look like them
     ctx.fillStyle = emer ? COL.alert : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
