@@ -207,6 +207,8 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;', '<':'&
 const dpr = () => devicePixelRatio || 1;
 const R_NM = 3440.065, D2R = Math.PI / 180;
 const FONT = px => `bold ${px * dpr()}px ui-monospace, Menlo, Consolas, monospace`;
+const PHONE = matchMedia('(max-width: 820px), (max-height: 500px)');
+const TAG = px => PHONE.matches ? px - 2 : px;   // aircraft data tags: two sizes smaller on phones, where they crowd
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
               alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
               final:'#2a2a2a', finalTxt:'#4a4a4a' };
@@ -581,7 +583,7 @@ function drawAircraft() {
     if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
     const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
-    const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = a.ground ? 10 : 11, lh = (fs + 2) * d;
+    const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
     ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
@@ -593,7 +595,7 @@ function drawAircraft() {
 function shortTag(x, y, txt, col) {     // a short leader to the right, then the text level with the dot
   const d = dpr(); ctx.strokeStyle = ctx.fillStyle = col; ctx.lineWidth = d;
   ctx.beginPath(); ctx.moveTo(x + 4*d, y); ctx.lineTo(x + 10*d, y); ctx.stroke();
-  ctx.font = FONT(10); ctx.fillText(txt, x + 13*d, y + 3.5*d);
+  ctx.font = FONT(TAG(10)); ctx.fillText(txt, x + 13*d, y + 3.5*d - (10 - TAG(10)) * .35 * d);
 }
 function hitAircraft(mx, my, r) {
   let best = null, bd = r * dpr();
@@ -650,7 +652,7 @@ function drawWorld() {
     ctx.stroke();
   }
   if (L.tags && view.half <= 300) {              // zoomed in (playing back the past): tag the dots like live traffic
-    ctx.font = FONT(11); ctx.lineWidth = d; let n = 0;
+    ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d;
     for (const w of worldPts) {
       if (w.k !== 0 && w.k !== 3) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
@@ -658,7 +660,7 @@ function drawWorld() {
       const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
-      ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly + 11*d);
+      ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + wl);
     }
     n = 0;                                       // outside the altitude filter: a short tag, the altitude
     for (const w of worldPts) {
@@ -673,13 +675,13 @@ function drawWorld() {
     const [hex, , , , gs, alt, , cs, gnd] = worldHover.r, lx = x + 10*d, ly = y - 12*d;
     if (worldHover.est) {
       const r = worldHover.r, ago = Math.round((Date.now() / 1000 - r[9]) / 60);
-      ctx.fillStyle = COL.dbDim; ctx.font = FONT(10);
-      ctx.fillText(`estimated${r[8] ? ' → ' + r[8] : ''} · last seen ${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago`, lx + 3*d, ly + 24*d);
+      ctx.fillStyle = COL.dbDim; ctx.font = FONT(TAG(10));
+      ctx.fillText(`estimated${r[8] ? ' → ' + r[8] : ''} · last seen ${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago`, lx + 3*d, ly - 2*d + 2 * (TAG(11) + 2) * d);
     }
     ctx.strokeStyle = COL.db; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.beginPath(); ctx.arc(x, y, 2.4 * d, 0, 7); ctx.fillStyle = COL.db; ctx.fill();
-    ctx.font = FONT(11); ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
-    ctx.fillText(gnd === 1 ? 'GND' : a3(alt * 100) + ' ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly + 11*d);
+    ctx.font = FONT(TAG(11)); ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
+    ctx.fillText(gnd === 1 ? 'GND' : a3(alt * 100) + ' ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + (TAG(11) + 2) * d);
   }
 }
 function hitWorld(mx, my) {
