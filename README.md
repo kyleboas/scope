@@ -69,7 +69,8 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     `clock: "elapsed"` with `zero` (the bar counts from it instead of showing the time of day), `speeds`, `speed`,
     `back: [url, label, title]` (a bar button in place of LIVE ✕) and `sub` (its line in the list)),
     `radio` (with `timelapse`: a radio log beside a recording, from a `radio` endpoint: `?id=` returns `{ok, head, lines:[{t,
-    who, cs, g, k, a, ao, text}], colors:{who: colour}, groups:[[g, label, on]], talk_s, alert_s, atis:{ident: atis list}}`;
+    who, cs, g, k, a, ao, text}], colors:{who: colour}, groups:[[g, label, on]], talk_s, alert_s, atis:{ident: atis list}, procs:{ident: {arr, dep, sid, star, approach}}}` (`procs`, the runways
+    and procedures the recording used, by CIFP name, is drawn instead of what its ATIS reads as in use);
     lines play along with the bar, a click jumps there, the aircraft talking get ◀, `a` is an alert label (CA) shown on
     `cs` and `ao` for `alert_s` seconds, `k` is alert / warn / note; see atc-at-home's `dashboard/replays.py`),
     `wx` (a Weather group in Layers, all off by default: SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`

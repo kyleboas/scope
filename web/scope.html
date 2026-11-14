@@ -1908,7 +1908,7 @@ function atisCard() {
   let h = '';
   for (const x of d.atis || []) h += `<div class="atis"><i>${kind[x.type] ?? ''}ATIS${x.code ? ' <b>' + esc(x.code) + '</b>' : ''}${x.time ? ' · ' + esc(x.time) + 'Z' : ''}</i>${esc(x.text)}</div>`;
   const u = procUse(id);
-  if (u) h += `<div class="atis use"><i>Runways in use, read from the ATIS</i>${[['Landing', [...u.arr.keys()].map(k => k + (u.arr.get(k).size ? ' (' + [...u.arr.get(k)].join(', ') + ')' : ''))], ['departing', [...u.dep]]]
+  if (u) h += `<div class="atis use"><i>Runways in use${u.given ? '' : ', read from the ATIS'}</i>${[['Landing', [...u.arr.keys()].map(k => k + (u.arr.get(k).size ? ' (' + [...u.arr.get(k)].join(', ') + ')' : ''))], ['departing', [...u.dep]]]
     .filter(([, v]) => v.length).map(([w, v], i) => `${i ? ' · ' + w : w} <b>${esc(v.join(' '))}</b>`).join('')}</div>`;
   if (d.metar && d.metar.raw) h += `<div class="atis"><i>${SITE.metar_label || 'METAR'}${d.metar.cat ? ' · ' + esc(d.metar.cat) : ''}</i>${esc(d.metar.raw)}</div>`;
   if (!(d.atis || []).length) h += `<div class="atis"><span class="dim">${has('servers') || SITE.network ? `No ATIS open here on ${esc(srvName())}.` : home[4] === 'US' ? 'No D-ATIS published for this airport.' : 'ATIS text is only available for US airports (FAA D-ATIS).'}</span></div>`;
@@ -1923,7 +1923,7 @@ function procCard() {
     const names = [...new Set(ap.p.filter(r => r[0] === k).map(r => r[1]))].filter(n => !only || on(n) || picked(n)).sort();
     if (!names.length) return '';
     if (u) names.sort((a, b) => on(b) - on(a));      // the ones in use first
-    return `<i>${label}${u ? ` <span class="dim">· ${names.filter(on).length} in use per the ATIS</span>` : ''}</i>` + names.map(n => `<span data-pk="${k}" data-pn="${esc(n)}" class="${procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n ? 'on' : on(n) ? 'use' : only ? 'off' : ''}">${esc(n)}</span>`).join('');
+    return `<i>${label}${u ? ` <span class="dim">· ${names.filter(on).length} in use${u.given ? '' : ' per the ATIS'}</span>` : ''}</i>` + names.map(n => `<span data-pk="${k}" data-pn="${esc(n)}" class="${procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n ? 'on' : on(n) ? 'use' : only ? 'off' : ''}">${esc(n)}</span>`).join('');
   }).join('');
   return groups ? `<div class="pr">${groups}</div>` : '';
 }
@@ -2009,7 +2009,9 @@ function readAtis(list, ends) {
   return { arr, dep, named };
 }
 const useCache = new Map();             // ident -> {key, u}
+const useGiven = new Map();             // ident -> u: the procedures in use given outright (a recording's radio data), not read from its ATIS
 function procUse(id) {
+  if (useGiven.has(id)) return useGiven.get(id);
   const d = atis.get(srv + id), ap = procs.get(id), info = homeInfo && homeInfo[0] === id ? homeInfo : null;
   if (!d || !(d.atis || []).length || !ap || !info) return null;
   const key = JSON.stringify(d.atis.map(x => x.text)), c = useCache.get(id);
@@ -2729,6 +2731,9 @@ async function radioOpen(rec) {
   for (const l of RADIO.lines) if (l.a) for (const cs of [l.cs, l.ao]) if (cs) { const v = radioAlerts.get(cs); if (v) v.push([l.t, l.a]); else radioAlerts.set(cs, [[l.t, l.a]]); }   // ao: the other aircraft in it
   // the session's own ATIS ({ident: [{type, code, text, time}]}): the procedures in use are read from it, as from a live one
   for (const [id, list] of Object.entries(RADIO.atis || {})) { atis.set(srv + id, { atis: list, metar: null, t: Date.now() }); useCache.delete(id); }
+  useGiven.clear();                        // procs: {ident: {arr, dep, sid, star, approach}}, exactly what the session flew
+  for (const [id, p] of Object.entries(RADIO.procs || {})) if (p) useGiven.set(id, { given: true, arr: new Map((p.arr || []).map(r => [r, new Set()])),
+    arrSet: new Set(p.arr || []), dep: new Set(p.dep || []), use: new Set(['sid', 'star', 'approach'].flatMap(k => (p[k] || []).map(n => k + '|' + n))) });
   mapKey = ''; radioRender();
 }
 function radioAlert(cs, t) {
@@ -2736,7 +2741,7 @@ function radioAlert(cs, t) {
   if (v) for (const [bt, lb] of v) if (Math.abs(bt - t) <= w) return lb;
   return '';
 }
-function radioClose() { RADIO = null; radioTalk.clear(); radioAlerts = new Map(); $('rlog').hidden = true; document.body.classList.remove('radioOn'); resize(); }
+function radioClose() { useGiven.clear(); RADIO = null; radioTalk.clear(); radioAlerts = new Map(); $('rlog').hidden = true; document.body.classList.remove('radioOn'); resize(); }
 function radioRender() {                 // the whole panel (rows built once per recording)
   const box = $('rlog'); if (!RADIO) return radioClose();
   const was = document.body.classList.contains('radioOn');
