@@ -493,6 +493,19 @@ function pos(a) {
   return [q[0] + o[0] * (1 - f), q[1] + o[1] * (1 - f)];
 }
 const a3 = v => String(Math.max(0, Math.round(v / 100))).padStart(3, '0');
+// wake category (FAA consolidated wake turbulence, A heaviest … I lightest) from the ICAO type, for the short tags
+const CWT = {};
+for (const [k, l] of Object.entries({
+  A: 'A388 A124 A225',
+  B: 'A332 A333 A337 A338 A339 A342 A343 A345 A346 A359 A35K B744 B748 B74F B772 B773 B77L B77W B778 B779 B788 B789 B78X AN22 C5M',
+  C: 'A306 A30B A310 B762 B763 B764 MD11 DC10 KC10 C17 IL76 K35R C135 E3TF E3CF',
+  D: 'A400 B703 B712 C130 C30J',
+  E: 'B752 B753',
+  F: 'A318 A319 A320 A321 A19N A20N A21N B731 B732 B733 B734 B735 B736 B737 B738 B739 B37M B38M B39M B3XM BCS1 BCS3 MD81 MD82 MD83 MD87 MD88 MD90 B721 B722 C2 P8',
+  G: 'CRJ1 CRJ2 CRJ7 CRJ9 CRJX E135 E145 E35L E170 E75L E75S E190 E195 E290 E295 DH8A DH8B DH8C DH8D AT43 AT45 AT72 AT75 AT76 SF34 SB20 F70 F100 RJ85 RJ1H GLF4 GLF5 GLF6 G280 GLEX GL5T GL7T GA6C GA7C GA8C F2TH F900 FA7X FA8X CL60 C750 C68A',
+  H: 'CL30 CL35 C560 C56X C650 C680 C700 LJ45 LJ60 LJ75 H25B E55P E545 E550 GALX ASTR B350 PC12 C208 PC24 BE40',
+  I: 'C150 C152 C162 C170 C172 C175 C177 C180 C182 C185 C206 C210 C310 C340 C414 C421 C510 C525 C25A C25B C25C C25M E50P SF50 PA18 PA22 PA24 PA28 P28A P28B P28R PA32 PA34 PA44 PA46 P46T SR20 SR22 S22T BE20 BE33 BE35 BE36 BE55 BE58 BE9L DA40 DA42 DA62 DV20 M20P M20T TBM7 TBM8 TBM9 AA5 RV7 RV8 RV10 EC35 EC45 R22 R44 R66 AS50 B06 B407 H60 S76',
+})) for (const t of l.split(' ')) CWT[t] = k;
 function drawAircraft() {
   const d = dpr(), ppn = pxPerNm(), far = view.half > 300 || worldShown(), now = performance.now();
   drawn = [];
@@ -519,8 +532,14 @@ function drawAircraft() {
     ctx.fillStyle = emer ? COL.alert : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
     if (isSel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = d; ctx.strokeRect(px - 8*d, py - 8*d, 16*d, 16*d); }
-    if ((far || !L.tags) && !isSel && !isHov && !emer) continue;
-    if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer) continue;
+    if (far && !isSel && !isHov && !emer) continue;
+    if (a.ground && (view.half > 1.5 || !L.tags) && !isSel && !isHov && !emer) continue;
+    if (!L.tags && !isSel && !isHov && !emer) {        // tags hidden: a short one, altitude and wake category, beside the dot
+      ctx.strokeStyle = ctx.fillStyle = COL.db; ctx.lineWidth = d;
+      ctx.beginPath(); ctx.moveTo(px + 4*d, py); ctx.lineTo(px + 10*d, py); ctx.stroke();
+      ctx.font = FONT(10); ctx.fillText(a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : ''), px + 13*d, py + 3.5*d);
+      continue;
+    }
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
     const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = a.ground ? 10 : 11, lh = (fs + 2) * d;
@@ -597,6 +616,16 @@ function drawWorld() {
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
       ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly + 11*d);
     }
+  } else if (view.half <= 300) {                 // tags hidden: just the altitude beside each dot
+    ctx.font = FONT(10); ctx.strokeStyle = ctx.fillStyle = COL.db; let n = 0;
+    for (const w of worldPts) {
+      if (w.k !== 0 && w.k !== 3) continue;
+      const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      if (++n > 400) break;
+      ctx.globalAlpha = w.est ? .6 : 1;
+      ctx.beginPath(); ctx.moveTo(x + 4*d, y); ctx.lineTo(x + 10*d, y); ctx.stroke(); ctx.fillText(a3(w.r[5] * 100), x + 13*d, y + 3.5*d);
+    }
+    ctx.globalAlpha = 1;
   }
   if (worldHover) {                              // its tag: callsign, altitude and ground speed, as of the snapshot
     const [x, y, z] = proj(worldHover.p[0], worldHover.p[1]); if (z < 0) return;
@@ -1332,7 +1361,7 @@ function tlBar() {
     b.hidden = false; b.dataset.id = RP.rec.id + RP.gen;
     b.innerHTML = `<button data-tl="play" title="Play / pause (space)"></button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
       `<span class="t"></span><span class="ld"></span><span class="sp">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
-      `<button data-tl="tags" title="Show or hide the data tags">TAGS</button><button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
+      `<button data-tl="tags" title="Full data tags, or short ones (altitude and wake category)">TAGS</button><button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
