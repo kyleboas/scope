@@ -1980,7 +1980,12 @@ async function poll() {
   if (SITE.idle_min && (document.hidden || idle())) return schedule(1000);
   polling = true;
   const nm = Math.max(10, Math.min(250, viewNm() * 1.05));
+  // zoomed out on the worldwide picture (every scope, nothing picked): the dots are all there is to see, so the
+  // 250 nm feed isn't asked; it's back the moment a scope zooms in under 250 nm
+  const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && eachScope(worldShown).every(Boolean);
   if (RP) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
+  else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
+    ingest(); loadWorld(); loadBoats(); loadWx(); loadAtc(); }
   else try {
     const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
     if (RP) throw 0;                               // a timelapse started while this was on its way
