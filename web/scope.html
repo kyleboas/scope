@@ -1156,7 +1156,7 @@ function tlPanel(force) {
   const what = here.world ? `worldwide traffic (OpenSky, one snapshot every ${TL.world_every >= 600 ? Math.round(TL.world_every / 60) + ' min' : TL.world_every + ' s'})`
     : `the ${here.nm} nm around the middle of this view`;
   const slow = here.world && TL.world_every >= 600 ? `<div class="note">The worldwide picture only updates every ${Math.round(TL.world_every / 60)} min (the server has no working OpenSky API client), so a world timelapse can play once it has two, after ${Math.round(TL.world_every / 60)}–${Math.round(TL.world_every / 30)} min, and an hour holds about ${Math.round(3600 / TL.world_every) + 1} pictures.</div>` : '';
-  p.innerHTML = tlPastRow(roll) + (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
+  p.innerHTML = tlPastRow(roll) + (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed${TL.keep_h ? ', and is deleted ' + TL.keep_h + ' h after it ends' : ''}. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
       (TL.need_key ? ' <button id="tlLock" title="Forget the key in this browser">LOCK</button>' : '') + '</div>' +
     `<div class="new"><input id="tlName" maxlength="40" spellcheck="false" placeholder="name" value="${esc(keep ?? here.name)}">` +
     `<select id="tlH">${TL_HOURS.filter(([h]) => h <= (TL.max_h || 24)).map(([h, t]) => `<option value="${h}"${h === hrs ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
@@ -1195,7 +1195,7 @@ function tlPanel(force) {
   p.querySelectorAll('[data-tlstop]').forEach(b => b.onclick = async () => { try { await tlAuth('a=stop&id=' + b.dataset.tlstop); } catch (e) {} tlList(); });
 }
 // the server's always-on world recording: play the last few hours of it, of the globe or of the area in view
-const TL_PAST = [1, 3, 6, 12, 24];
+const TL_PAST = [1, 3, 6, 12, 24, 48];
 function tlPastRow(r) {
   if (!r) return '';
   const now = Date.now() / 1000, have = r.first ? now - r.first : 0, ready = r.first && r.last > r.first;
