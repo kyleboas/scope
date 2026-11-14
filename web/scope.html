@@ -182,7 +182,7 @@
 <body>
 <header>
   <span id="clock">--:--:--Z</span>
-  <div class="srch"><input id="q" placeholder="Airport" title="Airport: code or name (KSFO, LHR, Narita)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
+  <div class="srch"><input id="q" placeholder="Search..." title="Search: airport code or name (KSFO, LHR, Narita), or an aircraft by callsign, tail number or hex code (UAL123, N12345, a1b2c3)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
   <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category).">ALT
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <span id="srvs" title="Server"></span>
@@ -1108,19 +1108,55 @@ $('q').addEventListener('keydown', e => {
   if (e.key === 'Escape') { $('q').blur(); $('res').style.display = 'none'; }
 });
 $('q').addEventListener('blur', () => setTimeout(() => $('res').style.display = 'none', 200));
+// aircraft match on callsign, tail number, hex code or flight id: the live feed's, then the worldwide snapshot's (callsign and hex only)
+const norm = v => String(v || '').toUpperCase().replace(/[\s-]/g, '');
+function acMatches(q) {
+  const n = norm(q), out = [], seen = new Set(); if (n.length < 2) return out;
+  const rank = vs => { let r = 9; for (const v of vs) { const x = norm(v); if (!x) continue; if (x === n) return 0; if (x.startsWith(n)) r = Math.min(r, 1); else if (x.includes(n)) r = Math.min(r, 2); } return r; };
+  for (const a of S ? S.aircraft : []) {
+    const r = rank([a.cs, a.reg, a.hex, a.id]); if (r > 2) continue;
+    const [lat, lon] = pos(a); seen.add(a.id); out.push({ ac: true, r, id: a.id, cs: a.cs, reg: a.reg, type: a.type, alt: a.alt, ground: a.ground, lat, lon });
+  }
+  if (WORLD && WORLD.ok) for (const w of WORLD.ac) {
+    if (seen.has(w[0])) continue;
+    const r = rank([w[7], w[0]]); if (r > 2) continue;
+    const dt = Math.min(1200, Math.max(0, Date.now() / 1000 - w[6])), [lat, lon] = !w[8] && w[4] > 30 ? dest(w[1], w[2], w[3], w[4] / 3600 * dt) : [w[1], w[2]];
+    seen.add(w[0]); out.push({ ac: true, r, id: w[0], cs: w[7], alt: w[5] * 100, ground: !!w[8], lat, lon });
+  }
+  return out.sort((x, y) => x.r - y.r || String(x.cs).localeCompare(String(y.cs))).slice(0, 12);
+}
+let searchWorldT = 0;
 async function search() {
   const q = $('q').value.trim(); if (!q) { $('res').style.display = 'none'; return; }
-  try { sRes = await (await fetch('/api/live/search?q=' + encodeURIComponent(q))).json(); } catch (e) { sRes = []; }
+  // the worldwide snapshot only loads zoomed out: fetch it for a search too (at most once a minute)
+  const wantWorld = has('world') && !RP && (!WORLD || Date.now() / 1000 - WORLD.t > 120) && Date.now() - searchWorldT > 60000;
+  if (wantWorld) searchWorldT = Date.now();
+  const [aps] = await Promise.all([
+    fetch('/api/live/search?q=' + encodeURIComponent(q)).then(r => r.json()).catch(() => []),
+    wantWorld ? fetch(`/api/live/world?${srvQ()}`).then(r => r.json()).then(j => { if (j.ok) { WORLD = j; worldPtsT = 0; } }).catch(() => {}) : null]);
+  if ($('q').value.trim() !== q) return;          // typed on meanwhile: that search shows instead
+  const acs = acMatches(q), exact = aps.filter(a => norm(a[0]) === norm(q) || norm(a[1]) === norm(q));
+  // an exact airport code first, then aircraft (the closest matches first), then the other airports
+  sRes = [...exact, ...acs.filter(a => a.r === 0), ...acs.filter(a => a.r > 0).slice(0, exact.length || aps.length ? 6 : 12), ...aps.filter(a => !exact.includes(a))];
   sIdx = 0; showRes();
 }
 function showRes() {
   const box = $('res');
-  if (!sRes.length) { box.innerHTML = '<div style="cursor:default">No airport found</div>'; box.style.display = 'block'; return; }
-  box.innerHTML = sRes.map((a, i) => `<div data-i="${i}" class="${i === sIdx ? 'on' : ''}"><b>${esc(a[0])}</b>${a[1] ? esc(a[1]) + ' · ' : ''}${esc(a[2])}${a[3] ? ', ' + esc(a[3]) : ''} ${esc(a[4])}</div>`).join('');
+  if (!sRes.length) { box.innerHTML = '<div style="cursor:default">Nothing found</div>'; box.style.display = 'block'; return; }
+  box.innerHTML = sRes.map((a, i) => `<div data-i="${i}" class="${i === sIdx ? 'on' : ''}">` + (a.ac
+    ? `<b>${esc(a.cs || a.reg || String(a.id).toUpperCase())}</b>${[a.reg && a.reg !== a.cs ? a.reg : '', a.type, a.ground ? 'ground' : 'FL' + a3(a.alt)].filter(Boolean).map(esc).join(' · ')}`
+    : `<b>${esc(a[0])}</b>${a[1] ? esc(a[1]) + ' · ' : ''}${esc(a[2])}${a[3] ? ', ' + esc(a[3]) : ''} ${esc(a[4])}`) + '</div>').join('');
   box.style.display = 'block';
   box.querySelectorAll('[data-i]').forEach(el => el.onmousedown = e => { e.preventDefault(); pick(sRes[+el.dataset.i]); });
 }
-function pick(a) { $('q').value = ''; $('q').blur(); $('res').style.display = 'none'; setHome(a, true, a[8] === 'S' || a[8] === 'W' ? 10 : 40); }
+function pick(a) {
+  $('q').value = ''; $('q').blur(); $('res').style.display = 'none';
+  if (!a.ac) return setHome(a, true, a[8] === 'S' || a[8] === 'W' ? 10 : 40);
+  // an aircraft: centre on it and select it (once the live feed there has it, if it isn't in this one)
+  view.lat = a.lat; view.lon = a.lon; if (view.half > 60) view.half = 40;
+  if (S && S.aircraft.some(o => o.id === a.id)) { wantSel = null; select(a.id); } else wantSel = a.id;
+  viewChanged(true);
+}
 
 // ------------------------------------------------------------------ data
 let pollT = 0, polling = false, lastAreaKey = '';
