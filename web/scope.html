@@ -66,7 +66,10 @@
   #card .pr { margin:5px 0; max-height:200px; overflow:auto; }
   #card .pr i { font-style:normal; color:var(--dim); display:block; margin-top:3px; }
   #card .pr span { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; cursor:pointer; color:var(--fg2); }
-  #card .pr span.on { border-color:#4fb3ff; color:#4fb3ff; }
+  #card .pr span.use { border-color:#6a6a6a; color:#e8e8e8; }
+  #card .pr span.off { opacity:.45; }
+  #card .pr span.on { border-color:#4fb3ff; color:#4fb3ff; opacity:1; }
+  .atis.use b { color:#e8e8e8; font-weight:normal; }
   body.noApt.noCard, body.sideShut:not(.listOpen) { grid-template-columns:1fr; } body.noApt.noCard #side, body.sideShut:not(.listOpen) #side { display:none; }
   .views { position:absolute; left:8px; bottom:8px; z-index:2; display:flex; }
   .views button { color:#555; font-size:11px; padding:4px 6px; }
@@ -239,12 +242,12 @@ const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approac
 const PROC_HOME = { star:['#4a4a4a', [2, 5]], transition:['#4a4a4a', [2, 5]], approach:['#6a6a6a', null], sid:['#3c3c3c', [8, 6]] };
 const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
-const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
+const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['atisproc', 'Only procedures in use per ATIS'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['aptnames', 'Airport names'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals and ILS'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['taxinames', 'Taxiway names'], ['states', 'State and province lines'],
                 ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
                 ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
-const L_DEFAULT = { star:true, approach:true, sid:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
+const L_DEFAULT = { star:true, approach:true, sid:true, atisproc:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
@@ -450,7 +453,7 @@ function fixMark(c, n, la, lo, col, label) {
   if (label) { c.fillStyle = col; c.fillText(n, x + 5*d, y + 3*d); }
 }
 function drawProcs(c) {
-  const d = dpr(), hid = home && home[0];
+  const d = dpr(), hid = home && home[0], u = L.atisproc && hid && procUse(hid);
   for (const [id, ap] of procs) {
     const mine = id === hid;
     if (!mine && (view.half > 15 || !L.nearby)) continue;
@@ -458,6 +461,7 @@ function drawProcs(c) {
     for (const r of ap.p) {
       if (procSel && procSel[0] === id && r[1] === procSel[2] && (r[0] === procSel[1] || (procSel[1] === 'approach' && r[0] === 'transition'))) continue;
       if (!L[r[0] === 'transition' ? 'approach' : r[0]]) continue;
+      if (mine && u && !rowInUse(u, r)) continue;
       const [col, dash] = (mine ? PROC_HOME : PROC)[r[0]] || PROC.approach;
       geoLine(c, r[3], col, dash); if (mine && r[4].length) geoLine(c, r[4], '#2c2c2c', [6, 4]);
     }
@@ -995,7 +999,7 @@ function setHome(a, fly, half) {
   home = a; homeCardShut = false; select(null); procSel = null; flowMem.clear();
   flowNeighbours = MAJOR.filter(o => o[0] !== a[0] && gc(a[5], a[6], o[5], o[6]) < 120); if (S) updateFlow(); renderFlt();
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
-  fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; renderCard(); }).catch(() => {});
+  fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
   if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = half || 40; }
   if (scopes[1]) Object.assign(scopes[1].view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 });
   renderCard(); viewChanged(true);
@@ -1068,6 +1072,7 @@ function atisCard() {
     atisAsked.set(id, Date.now());
     fetch(`/api/live/atis?${srvQ()}id=` + encodeURIComponent(id)).then(r => r.json()).then(j => {
       const old = atis.get(ak); j.t = Date.now(); atis.set(ak, j);
+      if (!old || JSON.stringify(old.atis) !== JSON.stringify(j.atis)) mapKey = '';
       if (!old || JSON.stringify([old.atis, old.metar]) !== JSON.stringify([j.atis, j.metar])) if (home && home[0] === id && !sel) renderCard();
     }).catch(() => {});
   }
@@ -1075,6 +1080,9 @@ function atisCard() {
   const kind = { arr:'ARRIVAL ', dep:'DEPARTURE ', combined:'', if:'INFINITE FLIGHT ' };
   let h = '';
   for (const x of d.atis || []) h += `<div class="atis"><i>${kind[x.type] ?? ''}ATIS${x.code ? ' <b>' + esc(x.code) + '</b>' : ''}${x.time ? ' · ' + esc(x.time) + 'Z' : ''}</i>${esc(x.text)}</div>`;
+  const u = procUse(id);
+  if (u) h += `<div class="atis use"><i>Runways in use, read from the ATIS</i>${[['Landing', [...u.arr.keys()].map(k => k + (u.arr.get(k).size ? ' (' + [...u.arr.get(k)].join(', ') + ')' : ''))], ['departing', [...u.dep]]]
+    .filter(([, v]) => v.length).map(([w, v], i) => `${i ? ' · ' + w : w} <b>${esc(v.join(' '))}</b>`).join('')}</div>`;
   if (d.metar && d.metar.raw) h += `<div class="atis"><i>${SITE.metar_label || 'METAR'}${d.metar.cat ? ' · ' + esc(d.metar.cat) : ''}</i>${esc(d.metar.raw)}</div>`;
   if (!(d.atis || []).length) h += `<div class="atis"><span class="dim">${has('servers') ? `No ATIS open here on ${esc(srvName())}.` : home[4] === 'US' ? 'No D-ATIS published for this airport.' : 'ATIS text is only available for US airports (FAA D-ATIS).'}</span></div>`;
   return h;
@@ -1082,12 +1090,105 @@ function atisCard() {
 function procCard() {
   const ap = home && procs.get(home[0]);
   if (!ap) return home && home[4] !== 'US' ? '<div class="pr"><i>Procedures are shown for US airports only (FAA CIFP).</i></div>' : '';
+  const u = procUse(home[0]), only = u && scopes[0].L.atisproc;
   const groups = [['sid', 'SIDs'], ['star', 'STARs'], ['approach', 'Approaches']].map(([k, label]) => {
-    const names = [...new Set(ap.p.filter(r => r[0] === k).map(r => r[1]))].sort();
+    const names = [...new Set(ap.p.filter(r => r[0] === k).map(r => r[1]))].sort(), on = n => u && u.use.has(k + '|' + n);
     if (!names.length) return '';
-    return `<i>${label}</i>` + names.map(n => `<span data-pk="${k}" data-pn="${esc(n)}" class="${procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n ? 'on' : ''}">${esc(n)}</span>`).join('');
+    if (u) names.sort((a, b) => on(b) - on(a));      // the ones in use first
+    return `<i>${label}${u ? ` <span class="dim">· ${names.filter(on).length} in use per the ATIS</span>` : ''}</i>` + names.map(n => `<span data-pk="${k}" data-pn="${esc(n)}" class="${procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n ? 'on' : on(n) ? 'use' : only ? 'off' : ''}">${esc(n)}</span>`).join('');
   }).join('');
   return groups ? `<div class="pr">${groups}</div>` : '';
+}
+// runways and procedures in use, read from the airport's ATIS: the landing and departing runways (checked against the
+// airport's runways), the approach types named for each landing runway, and SIDs or STARs named outright. A SID or STAR
+// is in use if it has a transition from or to one of those runways, or no runway transitions at all; an approach if it's
+// to a landing runway and of a type named for it (else its ILS, else all of them). A side the ATIS says nothing about
+// (no departing runway found, say) isn't filtered.
+const rwKey = s => { const m = /^0*(\d{1,2})([LRCB]?)$/.exec(s); return m ? m[1] + m[2] : null; };
+const ATIS_SKIP = /\b(CLSD|CLOSED|OTS|FREQ|CAUTION|CTN|CRANES?|INCURSIONS?|READ ?BACK|READBACKS|EXITING|BIRDS?|PAPI|LGTS|RVR|WIND ?SHEAR|BRAKING)\b/;
+const ATIS_ARR = /^(ARR|ARRS|ARRIVALS?|LDG|LNDG|LANDING|LAND|APCH|APCHS|APPROACH|APPROACHES|ILS|LOC|VIS|VISUAL|RNAV|RNP|GPS|VOR|INST|LDA|NDB)$/;
+const ATIS_DEP = /^(DEP|DEPS|DEPG|DEPTG|DPTG|DEPARTING|DEPARTURES?|DEPART|TKOF|TAKEOFF|TAKEOFFS)$/;
+const ATIS_TYPE = { ILS:'ILS', LOC:'LOC', LDA:'LOC', VIS:'visual', VISUAL:'visual', RNAV:'RNAV', RNP:'RNP', GPS:'GPS', VOR:'VOR', NDB:'NDB', INST:'instrument' };
+const ATIS_RWKW = /^(RWY|RWYS|RY|RYS|RUNWAY|RUNWAYS)$/;
+const APP_TYPE = { ILS:n => /^(ILS|IGS)/.test(n), LOC:n => /^(LOC|LDA)/.test(n), RNAV:n => /^RNAV/.test(n), RNP:n => /RNP/.test(n),
+                   GPS:n => /^(RNAV \(GPS\)|GPS)/.test(n), VOR:n => /^VOR/.test(n), NDB:n => /^NDB/.test(n), instrument:() => true };
+function readAtis(list, ends) {
+  const arr = new Map(), dep = new Set(), named = new Set();
+  const expand = k => /[LRC]$/.test(k) ? (ends.has(k) ? [k] : []) : [...ends].filter(e => e.replace(/[LRC]$/, '') === k);
+  for (const x of list) {
+    let t = ' ' + String(x.text || '').toUpperCase() + ' ';
+    for (const w of t.match(/\b[A-Z]{3,5}\d?\b/g) || []) named.add(w);
+    t = t.split(/\bNOTAMS?\b|\bNOTICES? TO AIR ?MEN\b|\.\.\.ADVS\b/)[0];
+    const alt = /\bA\d{4}\b/.exec(t);                                      // the weather ends at the altimeter's sentence
+    t = alt ? t.slice(t.indexOf('. ', alt.index) + 1 || t.length) : t.slice(t.indexOf('. ') + 1);
+    t = t.replace(/\b(RWYS?|RYS?|RUNWAYS?)(\d)/g, '$1 $2').replace(/\b(\d) (\d)(?= ?(LEFT|RIGHT|CENTER)\b)/g, '$1$2')
+         .replace(/\b(\d{1,2}) ?(LEFT|RIGHT|CENTER)\b/g, (m, n, w) => n + w[0]);
+    for (const sen of t.split(/\.(?:\s|$)/)) {
+      if (ATIS_SKIP.test(sen)) continue;
+      let mode = x.type === 'arr' ? 'arr' : x.type === 'dep' ? 'dep' : null, types = new Set(), prev = '', lastRw = false;
+      for (const w of sen.match(/[A-Z0-9\/]+|,/g) || []) {
+        if (w === ',' || w === 'AND' || w === 'OR' || w === '&' || w === 'TO') continue;
+        const m = /^(\d{1,2})([LRC])?$/.exec(w);
+        if (m) {
+          if ((m[2] || prev) && mode) for (const k of expand(rwKey(w) || '')) {
+            if (mode === 'dep') dep.add(k);
+            else { if (!arr.has(k)) arr.set(k, new Set()); for (const y of types) arr.get(k).add(y); }
+          }
+          prev = 'rw'; lastRw = true; continue;
+        }
+        prev = '';
+        if (ATIS_DEP.test(w)) { mode = 'dep'; prev = 'kw'; }
+        else if (ATIS_ARR.test(w)) { mode = 'arr'; prev = 'kw'; }
+        if (ATIS_TYPE[w]) { if (lastRw) types = new Set(); types.add(ATIS_TYPE[w]); lastRw = false; }
+        if (ATIS_RWKW.test(w)) prev = 'kw';
+      }
+    }
+  }
+  return { arr, dep, named };
+}
+const useCache = new Map();             // ident -> {key, u}
+function procUse(id) {
+  const d = atis.get(srv + id), ap = procs.get(id), info = homeInfo && homeInfo[0] === id ? homeInfo : null;
+  if (!d || !(d.atis || []).length || !ap || !info) return null;
+  const key = JSON.stringify(d.atis.map(x => x.text)), c = useCache.get(id);
+  if (c && c.key === key) return c.u;
+  const ends = new Set(info[9].flatMap(r => [rwKey(r[0]), rwKey(r[1])]).filter(Boolean));
+  const { arr, dep, named } = readAtis(d.atis, ends);
+  let u = null;
+  if (arr.size || dep.size) {
+    const use = new Set(), byName = new Map(), arrSet = new Set(arr.keys());
+    for (const r of ap.p) { const k = (r[0] === 'transition' ? 'approach' : r[0]) + '|' + r[1]; if (!byName.has(k)) byName.set(k, []); byName.get(k).push(r); }
+    const appRw = n => { const m = / RWY (\d\d[LRC]?)$/.exec(n); return m && rwKey(m[1]); };
+    for (const [k, rows] of byName) {
+      const [kind, name] = k.split('|'), side = kind === 'sid' ? dep : arrSet;
+      if (kind === 'approach') { if (!arr.size) use.add(k); continue; }
+      const base = name.replace(/\d+$/, '');
+      if (!side.size || (base.length >= 4 && named.has(base)) || named.has(name)) { use.add(k); continue; }
+      const rws = rows.filter(r => /^RW\d/.test(r[2]));
+      if (!rws.length || rws.some(r => rwOk(r[2], side))) use.add(k);
+    }
+    for (const [rw, types] of arr) {
+      const cand = [...byName.keys()].filter(k => k.startsWith('approach|') && appRw(k.slice(9)) === rw).map(k => k.slice(9));
+      let pick = cand.filter(n => [...types].some(t => APP_TYPE[t] && APP_TYPE[t](n)));
+      if (!pick.length) pick = cand.filter(APP_TYPE.ILS);
+      if (!pick.length) pick = cand;
+      for (const n of pick) use.add('approach|' + n);
+    }
+    u = { arr, dep, arrSet, use };
+  }
+  useCache.set(id, { key, u });
+  return u;
+}
+// a SID's or STAR's runway transition (RW28L, RW28B for all the 28s, RW28) serves one of these runways?
+function rwOk(tr, set) {
+  const m = /^RW0*(\d{1,2})([LRCB]?)$/.exec(tr); if (!m) return true;
+  for (const k of set) { const [, n, l] = /^(\d+)([LRC]?)$/.exec(k); if (n === m[1] && (!m[2] || m[2] === 'B' || !l || m[2] === l)) return true; }
+  return false;
+}
+function rowInUse(u, r) {
+  if (!u.use.has((r[0] === 'transition' ? 'approach' : r[0]) + '|' + r[1])) return false;
+  const side = r[0] === 'sid' ? u.dep : r[0] === 'star' ? u.arrSet : null;
+  return !side || !side.size || rwOk(r[2], side);
 }
 let hashT = 0;
 function viewChanged(now) {
