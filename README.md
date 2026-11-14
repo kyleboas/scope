@@ -60,9 +60,9 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     the country and type), `servers` (a server picker; then `traffic`, `world` and
     `atis` get a `server=` keyword, from the page's `srv`), `atc`, `flight` and `timelapse` (a header
     button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`),
-    `wx` (an Airspace and weather group in Layers, all off by default: TFRs, SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`
+    `wx` (a Weather group in Layers, all off by default: SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`
     endpoint that returns the whole world, `{ok, t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...]]}],
-    pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}`, k one of tfr, sigmet,
+    pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}`, k one of sigmet,
     csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; see livescope's `hazards.py`),
     `history` (a Flights list in the aircraft card, each replayed on the scope with the timelapse bar, `?fh=<hex>&t=<start>`,
     from a `history` endpoint: `?hex=` returns `{ok, every_s, keep_h, flights:[{t0, t1, cs, from, to, top, gnd, live,

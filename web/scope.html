@@ -288,12 +288,12 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans'],
-                ['#', 'Airspace and weather'], ['tfr', 'TFRs (US)'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
+                ['#', 'Weather'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
-const WX_KEYS = ['tfr', 'sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
+const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, diagram:false, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
-            tfr:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
+            sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -1171,16 +1171,16 @@ function hitBoat(mx, my, r) {
 
 // ------------------------------------------------------------------ airspace and weather (a site with the 'wx' feature, livescope)
 // /api/live/wx gives the whole world's {t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...], ...]}],
-// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]], err:{tfr}}, fetched every 5 min while
-// one of its layers is on (all off by default; not shown when playing back a timelapse). k: tfr, sigmet, csigmet
+// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}, fetched every 5 min while
+// one of its layers is on (all off by default; not shown when playing back a timelapse). k: sigmet, csigmet
 // (convective), isigmet (international), airmet (G-AIRMET), cwa. Click inside an area or on a report for its text.
 let WX = null, wxT = 0, wxSel = null;            // wxSel: the items in the open popup, drawn brighter
 const WX_MS = 5 * 60000;
-const WX_LAYER = { tfr:'tfr', sigmet:'sigmet', csigmet:'sigmet', isigmet:'sigmet', airmet:'airmet', cwa:'cwa' };
-const WX_COL = { tfr:'#e04848', sigmet:'#e0892b', csigmet:'#e04fb0', isigmet:'#e0892b', cwa:'#d8c447',
+const WX_LAYER = { sigmet:'sigmet', csigmet:'sigmet', isigmet:'sigmet', airmet:'airmet', cwa:'cwa' };
+const WX_COL = { sigmet:'#e0892b', csigmet:'#e04fb0', isigmet:'#e0892b', cwa:'#d8c447',
   IFR:'#9a7cff', MT_OBSC:'#c48ad8', 'TURB-HI':'#c2a35a', 'TURB-LO':'#c2a35a', ICE:'#4aa8e0', SFC_WND:'#86b852', LLWS:'#b8b852', M_FZLVL:'#4ad0c0' };
-const WX_DASH = { tfr:null, sigmet:[8, 4], csigmet:[8, 4], isigmet:[8, 4], airmet:[3, 4], cwa:[2, 3] };
-const WX_KIND = { tfr:'TFR', sigmet:'SIGMET', csigmet:'Convective SIGMET', isigmet:'SIGMET', airmet:'G-AIRMET', cwa:'CWA' };
+const WX_DASH = { sigmet:[8, 4], csigmet:[8, 4], isigmet:[8, 4], airmet:[3, 4], cwa:[2, 3] };
+const WX_KIND = { sigmet:'SIGMET', csigmet:'Convective SIGMET', isigmet:'SIGMET', airmet:'G-AIRMET', cwa:'CWA' };
 const PIREP_COL = ['#5f7f99', '#8fc8f0', '#ff5a5a'];
 const wxOn = () => has('wx') && !RP && eachScope(s => WX_KEYS.some(k => s.L[k])).some(Boolean);
 const wxCol = a => WX_COL[a.k === 'airmet' ? a.hz : a.k] || '#999';
@@ -1215,7 +1215,7 @@ function drawWx() {
     ctx.globalAlpha = hi ? 1 : later ? .4 : .8;
     for (const g of a.rings) {
       const whole = wxRing(ctx, g.r); ctx.stroke();
-      if (whole) { ctx.globalAlpha = hi ? .16 : a.k === 'tfr' ? .07 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
+      if (whole) { ctx.globalAlpha = hi ? .16 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
     }
     ctx.setLineDash([]);
     if (labels) {                                // a short label inside, when the area is big enough on screen
@@ -1223,14 +1223,12 @@ function drawWx() {
       const [x, y, z] = proj(g.mid[0], g.mid[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) { ctx.globalAlpha = 1; continue; }
       const [x2, y2] = proj(g.r[0][0], g.r[0][1]);
       if (Math.hypot(x2 - x, y2 - y) < 30 * d && !hi) { ctx.globalAlpha = 1; continue; }
-      const t = a.k === 'tfr' ? 'TFR' + (a.alt ? ' ' + a.alt.replace(' AGL', '') : '') : a.k === 'airmet' ? a.hz.replace('_', ' ') + (a.alt ? ' ' + a.alt : '') :
+      const t = a.k === 'airmet' ? a.hz.replace('_', ' ') + (a.alt ? ' ' + a.alt : '') :
         (a.k === 'csigmet' ? 'CONV' : a.hz.split(' ').pop()) + (a.alt ? ' ' + a.alt : '');
       ctx.globalAlpha = hi ? 1 : .9; ctx.textAlign = 'center'; ctx.fillText(t + (later ? ' ' + wxTime(a.from) : ''), x, y); ctx.textAlign = 'left';
     }
     ctx.globalAlpha = 1;
   }
-  if (L.tfr && WX.err && WX.err.tfr) {           // its source is down for this server: say so rather than show nothing
-    ctx.font = FONT(10); ctx.fillStyle = WX_COL.tfr; ctx.textAlign = 'center'; ctx.fillText('TFRs unavailable: ' + WX.err.tfr, P0.w / 2, P0.h - 40 * d); ctx.textAlign = 'left'; }
   if (!L.pirep) return;
   const tags = L.tags && view.half <= 80, r = 3.2 * d;
   for (const p of WX.pireps) {
@@ -1265,8 +1263,8 @@ function wxOpen(x, y, items) {
       return `<div><div class="wh"><b style="color:${PIREP_COL[it[3]]}">${['AIREP', 'PIREP', 'Urgent PIREP'][it[3]]}</b>${it[2] >= 0 ? 'FL' + String(it[2]).padStart(3, '0') : ''}<span>${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago</span></div>` +
         ([it[6] && 'Turbulence ' + it[6], it[7] && 'Icing ' + it[7]].filter(Boolean).map(t => `<div class="wm">${esc(t)}</div>`).join('')) + `<pre>${esc(it[5])}</pre></div>`;
     }
-    const when = it.from && it.from > now ? `${wxTime(it.from)}–${wxTime(it.to) || 'UFN'}` : it.to ? 'until ' + wxTime(it.to) : it.k === 'tfr' ? 'until further notice' : '';
-    return `<div><div class="wh"><b style="color:${wxCol(it)}">${esc(WX_KIND[it.k])}</b>${esc(it.name.replace(/^(TFR|SIGMET|G-AIRMET|CWA) /, ''))}<span>${esc(when)}</span></div>` +
+    const when = it.from && it.from > now ? `${wxTime(it.from)}–${wxTime(it.to) || 'UFN'}` : it.to ? 'until ' + wxTime(it.to) : '';
+    return `<div><div class="wh"><b style="color:${wxCol(it)}">${esc(WX_KIND[it.k])}</b>${esc(it.name.replace(/^(SIGMET|G-AIRMET|CWA) /, ''))}<span>${esc(when)}</span></div>` +
       `<div class="wm">${esc([it.hz, it.alt].filter(Boolean).join(' · '))}</div>` + (it.text ? `<pre>${esc(it.text)}</pre>` : '') + '</div>';
   }).join('');
   wxSel = items; m.hidden = false; m.scrollTop = 0;
