@@ -44,6 +44,10 @@
   #pick div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #pick div b { color:var(--fg); margin-right:8px; font-weight:normal; } #pick div.ac b { color:#6ee36e; }
   #pick div:hover { background:var(--soft); } #pick [data-pa] + .ac { border-top:1px solid var(--line); } #pick .more { color:var(--dim); cursor:default; }
+  #wxpop { position:fixed; z-index:20; width:min(460px, calc(100vw - 8px)); max-height:60vh; overflow:auto; padding:2px 0; background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px #0008; font:12px var(--mono); color:var(--fg2); }
+  #wxpop > div { padding:7px 10px; } #wxpop > div + div { border-top:1px solid var(--line); }
+  #wxpop b { font-weight:normal; } #wxpop .wh { display:flex; gap:8px; align-items:baseline; } #wxpop .wh span { color:var(--dim); margin-left:auto; white-space:nowrap; }
+  #wxpop .wm { color:var(--fg); margin-top:2px; } #wxpop pre { margin:4px 0 0; white-space:pre-wrap; word-break:break-word; color:var(--dim); font:11px var(--mono); }
   button { background:none; border:0; color:var(--dim); font:12px var(--mono); padding:5px 7px; border-radius:4px; cursor:pointer; }
   button:hover { color:var(--fg); background:var(--alt); }
   button.on { color:var(--fg); }
@@ -223,6 +227,7 @@
 <div id="wrap">
   <div id="tiles" class="one"></div>
   <div id="pick" hidden></div>
+  <div id="wxpop" hidden></div>
   <div id="gnote"></div>
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
@@ -277,9 +282,13 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
-                ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans']];
+                ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans'],
+                ['#', 'Airspace and weather'], ['tfr', 'TFRs (US)'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
+                ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
+const WX_KEYS = ['tfr', 'sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, diagram:false, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'' };
+            finals:true, diagram:false, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
+            tfr:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -310,14 +319,14 @@ function makeScope(v) {
   s.save = () => { try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram')));
+  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram') && (has('wx') || !WX_KEYS.includes(k))));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
     `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
     s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
@@ -1159,6 +1168,111 @@ function hitBoat(mx, my, r) {
   return best;
 }
 
+// ------------------------------------------------------------------ airspace and weather (a site with the 'wx' feature, livescope)
+// /api/live/wx gives the whole world's {t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...], ...]}],
+// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}, fetched every 5 min while
+// one of its layers is on (all off by default; not shown when playing back a timelapse). k: tfr, sigmet, csigmet
+// (convective), isigmet (international), airmet (G-AIRMET), cwa. Click inside an area or on a report for its text.
+let WX = null, wxT = 0, wxSel = null;            // wxSel: the items in the open popup, drawn brighter
+const WX_MS = 5 * 60000;
+const WX_LAYER = { tfr:'tfr', sigmet:'sigmet', csigmet:'sigmet', isigmet:'sigmet', airmet:'airmet', cwa:'cwa' };
+const WX_COL = { tfr:'#e04848', sigmet:'#e0892b', csigmet:'#e04fb0', isigmet:'#e0892b', cwa:'#d8c447',
+  IFR:'#9a7cff', MT_OBSC:'#c48ad8', 'TURB-HI':'#c2a35a', 'TURB-LO':'#c2a35a', ICE:'#4aa8e0', SFC_WND:'#86b852', LLWS:'#b8b852', M_FZLVL:'#4ad0c0' };
+const WX_DASH = { tfr:null, sigmet:[8, 4], csigmet:[8, 4], isigmet:[8, 4], airmet:[3, 4], cwa:[2, 3] };
+const WX_KIND = { tfr:'TFR', sigmet:'SIGMET', csigmet:'Convective SIGMET', isigmet:'SIGMET', airmet:'G-AIRMET', cwa:'CWA' };
+const PIREP_COL = ['#5f7f99', '#8fc8f0', '#ff5a5a'];
+const wxOn = () => has('wx') && !RP && eachScope(s => WX_KEYS.some(k => s.L[k])).some(Boolean);
+const wxCol = a => WX_COL[a.k === 'airmet' ? a.hz : a.k] || '#999';
+async function loadWx() {
+  if (!wxOn() || Date.now() - wxT < WX_MS) return;
+  wxT = Date.now();
+  try { const j = await (await fetch('/api/live/wx')).json(); if (j.ok) { for (const a of j.areas) wxPrep(a); WX = j; } else wxT = Date.now() - WX_MS + 20000; }
+  catch (e) { wxT = Date.now() - WX_MS + 20000; }
+}
+function wxPrep(a) {                             // each ring's box (lons shifted past 180 when it crosses the antimeridian) and a label spot
+  a.rings = a.poly.map(r => { let lo1 = 180, lo2 = -180; for (const p of r) { lo1 = Math.min(lo1, p[1]); lo2 = Math.max(lo2, p[1]); }
+    const wrap = lo2 - lo1 > 180, q = wrap ? r.map(([la, lo]) => [la, lo < 0 ? lo + 360 : lo]) : r;
+    let la = 0, lo = 0; for (const p of q) { la += p[0]; lo += p[1]; }
+    return { r, q, wrap, mid:[la / q.length, ((lo / q.length) + 540) % 360 - 180] }; });
+}
+const wxShown = a => L[WX_LAYER[a.k]] && !(a.to && a.to < Date.now() / 1000);
+const pirepShown = p => L.pirep && (p[3] || L.airep);
+function wxRing(c, r) {                          // a ring's path, broken behind the globe; false when none of it shows
+  c.beginPath(); let pen = false, all = true, any = false;
+  for (const [la, lo] of r) { const [x, y, z] = proj(la, lo); if (z < 0) { pen = false; all = false; continue; } pen ? c.lineTo(x, y) : c.moveTo(x, y); pen = any = true; }
+  if (all) c.closePath();
+  return any && all;
+}
+function drawWx() {
+  if (!WX || RP || !WX_KEYS.some(k => L[k])) return;
+  const d = dpr(), now = Date.now() / 1000, labels = view.half < 900;
+  ctx.font = FONT(TAG(9));
+  for (const a of WX.areas) {
+    if (!wxShown(a)) continue;
+    const col = wxCol(a), hi = wxSel && wxSel.includes(a), later = a.from && a.from > now;
+    ctx.strokeStyle = ctx.fillStyle = col; ctx.lineWidth = (hi ? 2.2 : 1.2) * d; ctx.setLineDash(WX_DASH[a.k] ? WX_DASH[a.k].map(v => v * d) : []);
+    ctx.globalAlpha = hi ? 1 : later ? .4 : .8;
+    for (const g of a.rings) {
+      const whole = wxRing(ctx, g.r); ctx.stroke();
+      if (whole) { ctx.globalAlpha = hi ? .16 : a.k === 'tfr' ? .1 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
+    }
+    ctx.setLineDash([]);
+    if (labels) {                                // a short label inside, when the area is big enough on screen
+      const g = a.rings[0]; if (!g) { ctx.globalAlpha = 1; continue; }
+      const [x, y, z] = proj(g.mid[0], g.mid[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) { ctx.globalAlpha = 1; continue; }
+      const [x2, y2] = proj(g.r[0][0], g.r[0][1]);
+      if (Math.hypot(x2 - x, y2 - y) < 30 * d && !hi) { ctx.globalAlpha = 1; continue; }
+      const t = a.k === 'tfr' ? 'TFR' + (a.alt ? ' ' + a.alt.replace(' AGL', '') : '') : a.k === 'airmet' ? a.hz.replace('_', ' ') + (a.alt ? ' ' + a.alt : '') :
+        (a.k === 'csigmet' ? 'CONV' : a.hz.split(' ').pop()) + (a.alt ? ' ' + a.alt : '');
+      ctx.globalAlpha = hi ? 1 : .9; ctx.textAlign = 'center'; ctx.fillText(t + (later ? ' ' + wxTime(a.from) : ''), x, y); ctx.textAlign = 'left';
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (!L.pirep) return;
+  const tags = L.tags && view.half <= 80, r = 3.2 * d;
+  for (const p of WX.pireps) {
+    if (!pirepShown(p)) continue;
+    const [x, y, z] = proj(p[0], p[1]); if (z < 0 || x < -10 || y < -10 || x > P0.w + 10 || y > P0.h + 10) continue;
+    const hi = wxSel && wxSel.includes(p), dim = p[2] >= 0 && !altOk(p[2] * 100, false);
+    ctx.globalAlpha = dim && !hi ? .35 : 1; ctx.fillStyle = ctx.strokeStyle = hi ? COL.sel : PIREP_COL[p[3]]; ctx.lineWidth = d;
+    if (!p[3]) { ctx.fillRect(x - d, y - d, 2 * d, 2 * d); ctx.globalAlpha = 1; continue; }   // AIREPs: a dot
+    ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y + r * .8); ctx.lineTo(x - r, y + r * .8); ctx.closePath();
+    p[6] || p[7] || p[3] === 2 ? ctx.fill() : ctx.stroke();       // filled: it reports turbulence or icing
+    if (tags || hi) { ctx.font = FONT(TAG(9)); ctx.fillText([p[2] >= 0 ? a3(p[2] * 100) : '', p[6] && 'TB ' + p[6], p[7] && 'IC ' + p[7]].filter(Boolean).join(' '), x + 6 * d, y + 3 * d); }
+    ctx.globalAlpha = 1;
+  }
+}
+function hitWx(mx, my, r) {                      // the reports within r px, then every area the spot is inside
+  if (!WX || RP) return [];
+  setFrame(); const out = [], d = dpr(), ll = unproj(mx, my);
+  if (L.pirep) for (const p of WX.pireps) { if (!pirepShown(p)) continue; const [x, y, z] = proj(p[0], p[1]); if (z >= 0 && Math.hypot(x - mx, y - my) < r * d) out.push(p); }
+  if (ll) for (const a of WX.areas) if (wxShown(a) && a.rings.some(g => inPoly(g.q, ll[0], g.wrap && ll[1] < 0 ? ll[1] + 360 : ll[1]))) out.push(a);
+  return out.slice(0, 30);
+}
+function wxTime(t) {                             // '1618Z', or '17 1618Z' on another UTC day
+  if (!t) return '';
+  const D = new Date(t * 1000), z = String(D.getUTCHours()).padStart(2, '0') + String(D.getUTCMinutes()).padStart(2, '0') + 'Z';
+  return D.getUTCDate() === new Date().getUTCDate() ? z : D.getUTCDate() + ' ' + z;
+}
+function wxOpen(x, y, items) {
+  const m = $('wxpop'), now = Date.now() / 1000;
+  m.innerHTML = items.map(it => {
+    if (Array.isArray(it)) {                     // a PIREP / AIREP
+      const ago = Math.round((now - it[4]) / 60);
+      return `<div><div class="wh"><b style="color:${PIREP_COL[it[3]]}">${['AIREP', 'PIREP', 'Urgent PIREP'][it[3]]}</b>${it[2] >= 0 ? 'FL' + String(it[2]).padStart(3, '0') : ''}<span>${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago</span></div>` +
+        ([it[6] && 'Turbulence ' + it[6], it[7] && 'Icing ' + it[7]].filter(Boolean).map(t => `<div class="wm">${esc(t)}</div>`).join('')) + `<pre>${esc(it[5])}</pre></div>`;
+    }
+    const when = it.from && it.from > now ? `${wxTime(it.from)}–${wxTime(it.to) || 'UFN'}` : it.to ? 'until ' + wxTime(it.to) : it.k === 'tfr' ? 'until further notice' : '';
+    return `<div><div class="wh"><b style="color:${wxCol(it)}">${esc(WX_KIND[it.k])}</b>${esc(it.name.replace(/^(TFR|SIGMET|G-AIRMET|CWA) /, ''))}<span>${esc(when)}</span></div>` +
+      `<div class="wm">${esc([it.hz, it.alt].filter(Boolean).join(' · '))}</div>` + (it.text ? `<pre>${esc(it.text)}</pre>` : '') + '</div>';
+  }).join('');
+  wxSel = items; m.hidden = false; m.scrollTop = 0;
+  const b = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x + 8, innerWidth - b.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(y + 8, innerHeight - b.height - 4)) + 'px';
+}
+function wxClose() { const m = $('wxpop'); if (!m.hidden) { m.hidden = true; wxSel = null; } }
+
 // ------------------------------------------------------------------ the selected flight's filed plan and flown route
 // (infinitescope: /api/live/flight; a site with the 'fplan' feature, livescope: /api/live/fplan by callsign, real
 // flight plans, {dep, arr, route, plan:{pts, line}} or {} when it has none)
@@ -1274,7 +1388,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    drawWorld(); drawBoats(); drawFlight(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    drawWx(); drawWorld(); drawBoats(); drawFlight(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
@@ -1382,6 +1496,7 @@ function endPointer(e) {
   if (acs.length) { select(acs[0].id); return; }
   const bt = hitBoat(mx, my, touch ? 22 : 12); if (bt) { boatSel = bt.b[0]; return; }
   select(null);
+  const wx = hitWx(mx, my, touch ? 20 : 10); if (wx.length) wxOpen(e.clientX, e.clientY, wx);
 }
 function pickAirport(ap) {
   if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
@@ -1411,11 +1526,12 @@ function pickMenu(x, y, aps, acs) {
     if (t.dataset.pa) pickAirport(A[+t.dataset.pa]); else select(C[+t.dataset.pc].id); };
 }
 function pickClose() { const m = $('pick'); if (!m.hidden) { m.hidden = true; hover = null; } }
-document.addEventListener('pointerdown', e => { if (!e.target.closest('#pick')) pickClose(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#pick')) pickClose(); if (!e.target.closest('#wxpop')) wxClose(); }, true);
 window.addEventListener('wheel', pickClose, { passive:true });
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Escape' && !$('pick').hidden) { pickClose(); return; }
+  if (e.key === 'Escape' && !$('wxpop').hidden) { wxClose(); return; }
   if (e.key === 'Escape') { if (measure) measure = null; else if (boatSel) boatSel = null; else select(null); }
   const zs = active && active.el.offsetWidth ? active : scopes[0];
   if (e.key === '+' || e.key === '=') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1 / 1.4); use(scopes[0]); }
@@ -1880,7 +1996,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars();
+    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;

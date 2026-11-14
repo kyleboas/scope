@@ -59,7 +59,11 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     year}, country:[name, ISO], typeinfo:{desc, engines, kind, wake}, photo:{src, link, by}}`; `scope.aircraft.Lookup` gives
     the country and type), `servers` (a server picker; then `traffic`, `world` and
     `atis` get a `server=` keyword, from the page's `srv`), `atc`, `flight` and `timelapse` (a header
-    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`) and
+    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`),
+    `wx` (an Airspace and weather group in Layers, all off by default: TFRs, SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`
+    endpoint that returns the whole world, `{ok, t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...]]}],
+    pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}`, k one of tfr, sigmet,
+    csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; see livescope's `hazards.py`) and
     `boats` (a Boats layer, off by default, from a `boats` endpoint: `?lat=&lon=&nm=` returns `{ok, t, src, v:[[mmsi, lat,
     lon, sog kt, cog, heading or -1, ts, name, AIS ship type, destination, nav status]]}`; see livescope's `boats.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the
