@@ -114,6 +114,10 @@
   #card .dt i { grid-column:1 / span 2; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
   #card .ph { display:block; margin:8px 0 2px; } #card .ph img { display:block; width:100%; max-width:360px; border-radius:6px; }
   #card .ph i { display:block; font-style:normal; font-size:10px; color:var(--dim); margin-top:2px; }
+  #card .acs { margin:6px 0 2px; color:var(--dim); } #card .acs > i { display:block; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
+  #card .acx { max-height:280px; overflow:auto; } #card .acm { margin:5px 0; } #card .acm span { display:block; font-size:10px; }
+  #card .acm pre { margin:1px 0 0; font:inherit; color:var(--fg); white-space:pre-wrap; overflow-wrap:anywhere; }
+  #card .acs em { display:block; font-style:normal; font-size:10px; margin-top:4px; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   /* timelapses: the panel (header button) and the playback bar */
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
@@ -788,6 +792,28 @@ async function loadDetail() {
   try { const j = await (await fetch('/api/live/aircraft?hex=' + encodeURIComponent(a.hex))).json();
     if (sel === id) { AD = { ...j, id, got: Date.now() }; renderCard(); } } catch (e) {}
 }
+// /api/live/acars (livescope): the aircraft's datalink messages over the last 12 h (VHF ACARS, VDL2, HFDL, SATCOM) heard by
+// airframes.io's feeders, newest first: {ok, hex, t, since_h, msgs:[{t, label, what, up, link, freq, flight, near, text}]}
+let AC = null, acAsked = 0;
+async function loadAcars() {
+  const a = has('acars') && !RP && sel && S && S.aircraft.find(o => o.id === sel);
+  if (!a || !a.hex || a.hex[0] === '~' || (AC && AC.id === sel && Date.now() - AC.got < 60000) || Date.now() - acAsked < 3000) return;
+  acAsked = Date.now(); const id = sel;
+  try { const j = await (await fetch('/api/live/acars?hex=' + encodeURIComponent(a.hex))).json();
+    if (sel === id) { AC = { ...j, id, got: Date.now() }; renderCard(); } } catch (e) {}
+}
+function acarsCard(a) {
+  if (!has('acars') || !a.hex || a.hex[0] === '~') return '';
+  const d = AC && AC.id === a.id ? AC : null, hm = t => new Date(t * 1000).toISOString().slice(11, 16) + 'Z';
+  const head = `<i>ACARS${d && d.ok ? ` · last ${d.since_h} h` : ''}</i>`;
+  if (!d) return `<div class="acs">${head}<span>loading…</span></div>`;
+  if (!d.ok) return `<div class="acs">${head}<span>${esc(d.error || 'unavailable')}</span></div>`;
+  const ms = d.msgs || [];
+  return `<div class="acs">${head}` + (ms.length ? `<div class="acx">${ms.map(m => `<div class="acm"><span>${hm(m.t)} ${m.up ? '↓ to aircraft' : '↑ from aircraft'} · ` +
+      `${esc([m.label, m.what].filter(Boolean).join(' '))} · ${esc(m.link)}${m.near ? ' near ' + esc(m.near) : ''}</span><pre>${esc(m.text)}</pre></div>`).join('')}</div>`
+      : `<span>Nothing heard from it in the last ${d.since_h} h.</span>`) +
+    `<em>Data provided by <a href="https://app.airframes.io/" target="_blank" rel="noopener">Airframes.io</a> and its community of feeders${d.stale ? ' · not updated just now' : ''}</em></div>`;
+}
 const photos = new Map();              // hex -> the photo's element (kept, so the card's redraws don't reload it)
 function photoEl(hex, p) {
   if (!p || !p.src || !/^https:\/\//.test(p.src)) return null;
@@ -830,7 +856,7 @@ function detailCard(a) {
       ['NACv', num(x.nac_v) ? `${x.nac_v} (${NACV[x.nac_v] || '?'})` : ''], ['NIC', num(x.nic) ? String(x.nic) : ''], ['NIC baro', num(x.nic_baro) ? String(x.nic_baro) : ''],
       ['Rc', num(x.rc) ? x.rc.toLocaleString() + ' m' : ''], ['SIL', num(x.sil) ? x.sil + (x.sil_type ? ' ' + x.sil_type.replace('per', 'per ') : '') : ''],
       ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
-  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`);
+  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`) + acarsCard(a);
 }
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
@@ -1011,7 +1037,7 @@ function select(id) {
   const b = document.body;
   if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
   if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
-  sel = id; renderCard(); loadFlight(); loadDetail();
+  sel = id; renderCard(); loadFlight(); loadDetail(); loadAcars();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
@@ -1034,6 +1060,7 @@ function updateSide() {
 function renderCard() { renderCard1(); updateSide(); }
 function renderCard1() {
   const card = $('card'), a = S && sel && S.aircraft.find(o => o.id === sel);
+  const acx = card.querySelector('.acx'), acTop = acx ? acx.scrollTop : 0;   // the ACARS list keeps its scroll through redraws
   if (a && has('flight')) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     const r = routeOf(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
@@ -1075,6 +1102,7 @@ function renderCard1() {
     if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  if (acTop && card.querySelector('.acx')) card.querySelector('.acx').scrollTop = acTop;
   const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
@@ -1402,7 +1430,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail();
+    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail(); loadAcars();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
