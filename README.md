@@ -59,7 +59,9 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     year}, country:[name, ISO], typeinfo:{desc, engines, kind, wake}, photo:{src, link, by}}`; `scope.aircraft.Lookup` gives
     the country and type), `servers` (a server picker; then `traffic`, `world` and
     `atis` get a `server=` keyword, from the page's `srv`), `atc`, `flight` and `timelapse` (a header
-    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`).
+    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`) and
+    `boats` (a Boats layer, off by default, from a `boats` endpoint: `?lat=&lon=&nm=` returns `{ok, t, src, v:[[mmsi, lat,
+    lon, sog kt, cog, heading or -1, ts, name, AIS ship type, destination, nav status]]}`; see livescope's `boats.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the
     query string. infinitescope's: `servers`, `atc` (`{ok, atc:[{icao, type, user, lat, lon, since}]}`) and
     `flight` (`{plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}`).
