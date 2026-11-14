@@ -288,7 +288,7 @@ function onCv(type, fn, opts) {
 let home = null;                       // the airport picked (range rings): [ident, iata, name, city, country, lat, lon, elev, kind]
 let homeCardShut = false;              // its card closed with ✕: the airport stays picked (rings, filters)
 let S = null, sel = null, hover = null;
-const liveOff = new Map(), hist = new Map();
+const motion = new Map(), hist = new Map();
 let LINES = null, MAJOR = [], KSFO = null;
 const areaAps = new Map();             // ident -> airport with runways, near where you've looked
 const procs = new Map();               // ident -> {p: [[kind, name, transition, pts, missed]], f: {fix: [lat, lon]}} (US, FAA CIFP)
@@ -539,15 +539,38 @@ function drawGround(c) {
 }
 
 // ------------------------------------------------------------------ aircraft
-function deadReckon(a) {               // the last report, carried along its track at its ground speed (STALE_S, 20 s by default)
-  const dt = Math.max(0, Math.min(STALE_S, Date.now() / 1000 - a.ts));
-  return a.gs > 2 && dt > 0 ? dest(a.lat, a.lon, a.hdg, a.gs / 3600 * dt) : [a.lat, a.lon];
+// Where each aircraft is drawn between reports (Infinite Flight's come up to 15 s apart): carried on from its last
+// report at its ground speed, still turning at the rate it turned between its last two reports (easing off over
+// TURN_TAU s, so a turn that has ended doesn't spin on). A new report doesn't jump or kink the path: over about the gap
+// between reports, the drawn aircraft blends from the path it was on onto the new one, its speed and direction unbroken.
+const TURN_TAU = 8, MAX_TURN = 4;      // s, °/s
+function track(r, rate, t) {           // [lat, lon, track] of report r, t (epoch s) carried on for at most STALE_S
+  const dt = Math.max(0, Math.min(STALE_S, t - r.ts));
+  if (!(r.gs > 2) || !dt) return [r.lat, r.lon, r.hdg];
+  if (!rate) return [...dest(r.lat, r.lon, r.hdg, r.gs / 3600 * dt), r.hdg];
+  const turned = s => rate * TURN_TAU * (1 - Math.exp(-s / TURN_TAU)), n = Math.min(16, Math.ceil(dt)), step = dt / n, v = r.gs / 3600 * step;
+  let no = 0, ea = 0;                  // nm north and east (flat over these few miles), stepped along the curve
+  for (let i = 0; i < n; i++) { const h = (r.hdg + turned((i + .5) * step)) * D2R; no += Math.cos(h) * v; ea += Math.sin(h) * v; }
+  const lat = r.lat + no / 60;
+  return [lat, ((r.lon + ea / (60 * Math.cos((r.lat + lat) / 2 * D2R))) + 540) % 360 - 180, (r.hdg + turned(dt) + 360) % 360];
 }
-const GLIDE_MS = 1500;                 // a new report: ease from where it was drawn onto the new track
-function pos(a) {
-  const q = deadReckon(a), o = liveOff.get(a.id); if (!o) return q;
-  let f = Math.min(1, (performance.now() - o[2]) / GLIDE_MS); f = f * f * (3 - 2 * f);
-  return [q[0] + o[0] * (1 - f), q[1] + o[1] * (1 - f)];
+function deadReckon(a, t = Date.now() / 1000) { const m = motion.get(a.id); return track(a, m ? m.rate : 0, t); }
+function pos(a, t = Date.now() / 1000) {   // [lat, lon, track] as drawn now
+  const q = deadReckon(a, t), m = motion.get(a.id); if (!m || !m.from) return q;
+  let f = (t - m.t0) / m.T; if (f >= 1) { m.from = null; return q; }
+  f = Math.max(0, f); f = f * f * (3 - 2 * f);
+  const p = track(m.from, m.fromRate, t), dlo = ((q[1] - p[1] + 540) % 360) - 180, dh = ((q[2] - p[2] + 540) % 360) - 180;
+  return [p[0] + (q[0] - p[0]) * f, ((p[1] + dlo * f) + 540) % 360 - 180, (p[2] + dh * f + 360) % 360];
+}
+function newReport(o, a) {             // a replaces o (same aircraft, a later report): its turn rate and the blend onto it
+  const t = Date.now() / 1000, gap = a.ts - o.ts, m = motion.get(a.id), was = pos(o, t);
+  const rate = !a.ground && !o.ground && a.gs > 30 && gap > 0 && gap <= 30
+    ? Math.max(-MAX_TURN, Math.min(MAX_TURN, (((a.hdg - o.hdg + 540) % 360) - 180) / gap)) : 0;
+  const nm = { rate, from: null, fromRate: 0, t0: t, T: Math.max(2, Math.min(10, gap * .8)) };
+  motion.set(a.id, nm);
+  const q = deadReckon(a, t); if (gc(was[0], was[1], q[0], q[1]) > 3) return;   // too far off: jump
+  nm.from = { lat: was[0], lon: was[1], hdg: was[2], gs: o.gs, ts: t };
+  nm.fromRate = m ? m.rate * Math.exp(-Math.max(0, t - o.ts) / TURN_TAU) : 0;
 }
 const a3 = v => String(Math.max(0, Math.round(v / 100))).padStart(3, '0');
 // wake category (FAA consolidated wake turbulence, A heaviest … I lightest) from the ICAO type, for the short tags
@@ -569,7 +592,7 @@ function drawAircraft() {
   if (!S) return;
   for (const a of S.aircraft) {
     if (a.ground && !L.ground && a.id !== sel) continue;
-    const [la, lo] = pos(a), [px, py, z] = proj(la, lo);
+    const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
     const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer;
     drawn.push({ a, px, py });
@@ -581,7 +604,7 @@ function drawAircraft() {
     }
     ctx.globalAlpha = 1;
     if (lines && L.ptl && !a.ground && a.gs > 30 && ppn * a.gs / 60 > 4 * d) {      // one minute ahead
-      const [ea, eo] = dest(la, lo, a.hdg, a.gs / 60), [ex, ey] = proj(ea, eo);
+      const [ea, eo] = dest(la, lo, trk, a.gs / 60), [ex, ey] = proj(ea, eo);
       ctx.strokeStyle = COL.ptl; ctx.globalAlpha = .5; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1;
     }
     if (out) {
@@ -1018,15 +1041,11 @@ async function poll() {
   else try {
     const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
     if (RP) throw 0;                               // a timelapse started while this was on its way
-    if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; liveOff.clear(); }
-    const now = performance.now();
+    if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; motion.clear(); }
     if (S && s.t !== S.t) {
       const old = new Map(S.aircraft.map(a => [a.id, a]));
-      for (const a of s.aircraft) {
-        const o = old.get(a.id); if (!o || o.ts === a.ts) continue;
-        const was = pos(o), q = deadReckon(a), dla = was[0] - q[0], dlo = ((was[1] - q[1] + 540) % 360) - 180;
-        if (gc(was[0], was[1], q[0], q[1]) < 3) liveOff.set(a.id, [dla, dlo, now]); else liveOff.delete(a.id);
-      }
+      for (const a of s.aircraft) { const o = old.get(a.id); if (o && o.ts !== a.ts) newReport(o, a); }
+      if (motion.size > s.aircraft.length + 500) { const ids = new Set(s.aircraft.map(a => a.id)); for (const id of motion.keys()) if (!ids.has(id)) motion.delete(id); }
     }
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
@@ -1175,7 +1194,7 @@ function sampleHist() {
   const t = RP ? S.t : Date.now() / 1000;
   if (t - lastHistT < 4 && t >= lastHistT) return;
   lastHistT = t; const ids = new Set();
-  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + 4 && q[2] <= t); h.push([...pos(a), t]); hist.set(a.id, h); }
+  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + 4 && q[2] <= t); h.push([...pos(a).slice(0, 2), t]); hist.set(a.id, h); }
   for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
 }
 function ingest() {
@@ -1203,7 +1222,7 @@ function renderServers() {
 }
 $('srvs').onclick = e => { const b = e.target.closest('[data-srv]'); if (!b || b.dataset.srv === srv) return;
   srv = b.dataset.srv; try { localStorage.setItem(KEY + '.srv', srv); } catch (err) {}
-  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); liveOff.clear();
+  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); motion.clear();
   renderServers(); renderCard(); mapKey = ''; schedule(0); };
 // controllers on duty, every minute: by airport ICAO ('' for Center)
 let atcBy = new Map(), atcT = 0, atcGen = 0;
@@ -1378,7 +1397,7 @@ async function tlOpen(id, fly, pastH) {
   const from = pastH ? Math.max(rec.first, Date.now() / 1000 - pastH * 3600) : rec.first;
   const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - from) / rec.every_s + 1) / (world ? 150 : 5000)));
   RP = { rec, every, from: pastH ? from : 0, pastH, frames: [], t: from, speed: +(localStorage.getItem(KEY + (world ? '-tlwsp' : '-tlsp')) || (world ? 600 : 60)), playing: false, last: performance.now(), ing: 0, loading: true, gen: Math.random() };
-  S = null; liveOff.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
+  S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
   history.replaceState(null, '', '?tl=' + id + (pastH ? '&h=' + pastH : '') + location.hash);
   if (!tlSpeeds().includes(RP.speed)) RP.speed = world ? 600 : 60;
   if (fly) { view.lat = rec.lat; view.lon = rec.lon; view.half = world ? R_NM * 1.05 : Math.max(5, rec.nm / 1.25); viewChanged(true); }
@@ -1402,7 +1421,7 @@ async function tlLoad(rp) {             // all of it, page by page, then (while 
 }
 function tlClose(quiet) {
   if (!RP) return;
-  RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; liveOff.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
+  RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; motion.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
   $('tlbar').hidden = true; history.replaceState(null, '', location.pathname + location.hash);
   if (!quiet) { worldFetchT = 0; schedule(0); }
 }
@@ -1422,7 +1441,7 @@ function tlBar() {
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
-    r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); liveOff.clear(); RP.ing = 0; });
+    r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); motion.clear(); RP.ing = 0; });
     b.querySelector('[data-tl=play]').onclick = () => tlPlay(!RP.playing);
     b.querySelector('[data-tl=x]').onclick = () => tlClose();
     b.querySelector('[data-tl=tags]').onclick = () => {     // the layers' "Data tags", in every scope
@@ -1491,7 +1510,7 @@ function tlWorldAt(t) {
 function tlLoop() {
   const F = RP.frames;
   if (RP.pastH) { const cut = Date.now() / 1000 - RP.pastH * 3600, i = F.findIndex(f => f[0] >= cut); if (i > 0 && F.length - i >= 2) F.splice(0, i); }   // the past stays the last n hours
-  RP.t = F[0][0]; hist.clear(); liveOff.clear(); RP.ing = 0;
+  RP.t = F[0][0]; hist.clear(); motion.clear(); RP.ing = 0;
 }
 function tlStep() {
   const now = performance.now(), F = RP.frames, el = Math.min(250, now - RP.last); RP.last = now;
