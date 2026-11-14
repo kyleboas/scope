@@ -6,6 +6,7 @@ import gzip
 import json
 import math
 import os
+import shutil
 import threading
 import time
 import urllib.parse
@@ -198,6 +199,104 @@ class Ground:
                 self.wake.set()
             return None, "pending"
 
+
+class Diagrams:
+    """FAA airport diagrams (d-TPP, U.S. Government work): the current cycle's PDF for an airport, from aeronav.faa.gov (which
+    sends no CORS headers, so the page gets them through here). The cycle's index (its d-TPP metafile, 16 MB) is read once a
+    cycle in the background; the PDFs are kept on disk until the cycle ends. The page places the diagram on the map itself."""
+    BASE = "https://aeronav.faa.gov/d-tpp/"
+    EPOCH = (2026, 10, 29)            # cycle 2611 took effect on this day at 0901Z; they run 28 days
+
+    def __init__(self, airports):
+        self.airports = airports
+        g = os.environ.get("SCOPE_GROUND_DIR")
+        self.dir = os.environ.get("SCOPE_DIAGRAM_DIR") or (os.path.join(g, "diagrams") if g else os.path.join(HERE, "livedata", "diagrams"))
+        self.lock = threading.Lock()
+        self.cyc, self.index, self.loading, self.failed = None, {}, False, 0
+
+    @classmethod
+    def cycle(cls, now=None):
+        """the d-TPP cycle in effect: 'YYNN', the NNth to take effect in 20YY"""
+        import datetime as dt
+        now = now or dt.datetime.now(dt.timezone.utc)
+        t0 = dt.datetime(*cls.EPOCH, 9, 1, tzinfo=dt.timezone.utc)
+        eff = t0 + dt.timedelta(days=28 * ((now - t0) // dt.timedelta(days=28)))
+        n = 1 + (eff.timetuple().tm_yday - 1) // 28
+        return f"{eff.year % 100:02d}{n:02d}"
+
+    def load_index(self, cyc):
+        path = os.path.join(self.dir, cyc + ".charts.json")
+        try:
+            if not os.path.exists(path):
+                import xml.etree.ElementTree as ET
+                req = urllib.request.Request(f"{self.BASE}{cyc}/xml_data/d-TPP_Metafile.xml", headers={"User-Agent": "scope/1 (+https://github.com/kyleboas/scope)"})
+                index = {}
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    ident = None
+                    for ev, el in ET.iterparse(r, events=("start", "end")):
+                        if ev == "start" and el.tag == "airport_name":
+                            ident = (el.get("icao_ident") or el.get("apt_ident") or "").upper()
+                        elif ev == "end" and el.tag == "record":
+                            pdf = el.findtext("pdf_name") or ""
+                            if ident and el.findtext("useraction") != "D" and pdf.upper().endswith(".PDF") and "/" not in pdf:
+                                index.setdefault(ident, []).append([el.findtext("chart_code") or "", (el.findtext("chart_name") or "").strip(), pdf])
+                            el.clear()
+                        elif ev == "end" and el.tag == "airport_name":
+                            el.clear()
+                os.makedirs(self.dir, exist_ok=True)
+                with open(path + ".tmp", "w") as f:
+                    json.dump(index, f)
+                os.replace(path + ".tmp", path)
+                for n in os.listdir(self.dir):                  # earlier cycles' index and PDFs
+                    if n not in (cyc, cyc + ".charts.json"):
+                        p = os.path.join(self.dir, n)
+                        shutil.rmtree(p, ignore_errors=True) if os.path.isdir(p) else os.remove(p)
+            with open(path) as f:
+                index = json.load(f)
+            with self.lock:
+                self.cyc, self.index = cyc, index
+        except Exception:  # noqa: BLE001 - FAA down or the cycle not posted yet: try again in 10 minutes
+            self.failed = time.time()
+        finally:
+            self.loading = False
+
+    def charts(self, ident):
+        """(cycle, [[chart code, name, pdf name], ...]) in the FAA's order, or (None, state): pending, failed"""
+        ident = ident.strip().upper()
+        cyc = self.cycle()
+        with self.lock:
+            if self.cyc != cyc:
+                if not self.loading and time.time() - self.failed > 600:
+                    self.loading = True
+                    threading.Thread(target=self.load_index, args=(cyc,), daemon=True).start()
+                if self.cyc is None or self.loading:
+                    return None, "pending" if self.loading else "failed"
+            return self.cyc, self.index.get(ident, [])
+
+    def get(self, ident):
+        """(pdf bytes, None), or (None, state): pending (reading the cycle's index), none (no diagram), failed"""
+        cyc, charts = self.charts(ident)
+        if cyc is None:
+            return None, charts
+        name = next((c[2] for c in charts if c[0] == "APD"), None)
+        if not name or not name.upper().endswith(".PDF") or "/" in name:
+            return None, "none"
+        path = os.path.join(self.dir, cyc, name)
+        if not os.path.exists(path):
+            try:
+                req = urllib.request.Request(f"{self.BASE}{cyc}/{name}", headers={"User-Agent": "scope/1 (+https://github.com/kyleboas/scope)"})
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    body = r.read()
+                if not body.startswith(b"%PDF"):
+                    return None, "failed"
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path + ".tmp", "wb") as f:
+                    f.write(body)
+                os.replace(path + ".tmp", path)
+            except Exception:  # noqa: BLE001
+                return None, "failed"
+        with open(path, "rb") as f:
+            return f.read(), None
 
 
 class Procs:

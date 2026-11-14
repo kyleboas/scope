@@ -22,6 +22,8 @@
   :root { --top:calc(var(--hh, 40px) - 4px); }   /* where things pinned to the map's top go: just under the header */
   #clock { font:600 14px var(--mono); color:var(--fg); margin-right:4px; }
   #status { overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1; }
+  #hmetar { font:11px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+  #hmetar.c-MVFR { color:#7aa2ff; } #hmetar.c-IFR { color:#ff6b6b; } #hmetar.c-LIFR { color:#e07ae0; }
   #status a { color:var(--dim); }
   #status .bad { color:var(--bad); }
   .srch { position:relative; }
@@ -69,6 +71,15 @@
   #card .pr span.use { border-color:#6a6a6a; color:#e8e8e8; }
   #card .pr span.off { opacity:.45; }
   #card .pr span.on { border-color:#4fb3ff; color:#4fb3ff; opacity:1; }
+  #card .pr i span { border:0; padding:0; margin:0; cursor:auto; }
+  #card .pr a { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; color:var(--fg2); }
+  #card .pr a:hover { border-color:#6a6a6a; color:#e8e8e8; }
+  #card div.ch { margin:5px 0; }
+  #card div.ch .chh { color:var(--fg2); margin-top:5px; }
+  #card div.ch .pr { max-height:none; }
+  #card #dgOn { padding:0 6px; }
+  #card #dgOn.on { border-color:#4fb3ff; color:#4fb3ff; }
+  #card .dim { color:var(--dim); }
   .atis.use b { color:#e8e8e8; font-weight:normal; }
   body.noApt.noCard, body.sideShut:not(.listOpen) { grid-template-columns:1fr; } body.noApt.noCard #side, body.sideShut:not(.listOpen) #side { display:none; }
   .views { position:absolute; left:8px; bottom:8px; z-index:2; display:flex; }
@@ -97,7 +108,7 @@
   .layers input { accent-color:#8e8e93; margin:0; }
   .layers .tagsz { display:flex; align-items:center; padding-right:8px; color:var(--dim); }
   .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz b { font-weight:normal; color:var(--fg); min-width:2em; text-align:center; cursor:pointer; }
-  #listBtn { display:none; }
+  #listBtn { padding:5px 7px; } body.noApt #listBtn { display:none; } #listBtn.on { color:var(--fg); background:var(--alt); }
   #srvs { display:flex; gap:0; }
   #srvs button { padding:5px 6px; } #srvs button.on { color:var(--fg); background:var(--alt); }
   #srvs button i { font-style:normal; color:var(--dim); margin-left:4px; }
@@ -114,6 +125,10 @@
   #card .dt i { grid-column:1 / span 2; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
   #card .ph { display:block; margin:8px 0 2px; } #card .ph img { display:block; width:100%; max-width:360px; border-radius:6px; }
   #card .ph i { display:block; font-style:normal; font-size:10px; color:var(--dim); margin-top:2px; }
+  #card .acs { margin:6px 0 2px; color:var(--dim); } #card .acs > i { display:block; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
+  #card .acx { max-height:280px; overflow:auto; } #card .acm { margin:5px 0; } #card .acm span { display:block; font-size:10px; }
+  #card .acm pre { margin:1px 0 0; font:inherit; color:var(--fg); white-space:pre-wrap; overflow-wrap:anywhere; }
+  #card .acs em { display:block; font-style:normal; font-size:10px; margin-top:4px; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   /* timelapses: the panel (header button) and the playback bar */
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
@@ -158,8 +173,7 @@
     body { grid-template-columns:1fr; }
     header { padding:3px max(8px, env(safe-area-inset-right)) 10px max(8px, env(safe-area-inset-left)); }
     #q { width:120px; } #srvs button i { display:none; } #res { width:min(340px, 90vw); }
-    #status { display:none; } #tlBtn span { display:none; } #tlbar .sp button:not(:nth-child(3n)) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
-    #listBtn { display:inline-block; margin-left:auto; } body.noApt #listBtn { display:none; }
+    #status, #hmetar { display:none; } #tlBtn span { display:none; } #tlbar .sp button:not(:nth-child(3n)) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
     #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 50vw); z-index:3; background:rgba(28,28,30,.97); display:none;
             padding-right:env(safe-area-inset-right); }
     body.listOpen #side { display:flex; }
@@ -184,7 +198,7 @@
   @media (max-width: 480px) {
     header { flex-wrap:wrap; row-gap:0; gap:4px; }
     #clock { font-size:12px; margin-right:0; } .srch { flex:1 1 0; min-width:0; } #q { width:100%; }
-    #listBtn { margin-left:0; } header button { padding:5px 5px; } #srvs { order:9; }
+    header button { padding:5px 5px; } #srvs { order:9; }
     #tiles.one ~ .flt { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 36px); }
     #gnote { max-width:calc(100% - 16px); overflow:hidden; text-overflow:ellipsis; }
     #tiles:not(.one) ~ #gnote { top:calc(var(--top) + 34px); }
@@ -197,13 +211,14 @@
   <div class="srch"><input id="q" placeholder="Search..." title="Search: airport code or name (KSFO, LHR, Narita), or an aircraft by callsign, tail number or hex code (UAL123, N12345, a1b2c3)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
   <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category).">ALT
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
+  <button id="listBtn" title="Airport information (the picked airport's card)">Info</button>
+  <span id="hmetar"></span>
   <span id="srvs" title="Server"></span>
   <span id="status"></span>
   <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
-  <button id="listBtn" title="The airport or aircraft card">Info</button>
 </header>
 <div id="wrap">
   <div id="tiles" class="one"></div>
@@ -258,13 +273,13 @@ const PROC_SEL = '#4fb3ff';
 const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['allproc', 'Not in use per the ATIS'], ['nearby', 'At nearby airports'],
                 ['#', 'Navigation'], ['fixes', 'Fixes'], ['fixnames', 'Names', 'fixes'], ['rings', 'Range rings'], ['finals', 'Extended finals and ILS'],
                 ['#', 'Airports'], ['airports', 'Airports'], ['aptnames', 'Names', 'airports'], ['small', 'Small airports and strips'], ['runways', 'Runways'],
-                ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'],
+                ['diagram', 'FAA airport diagrams (US)'], ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'],
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'' };
+            finals:true, diagram:false, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'' };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -292,17 +307,18 @@ function makeScope(v) {
   const c = el.querySelector('canvas'), m = document.createElement('canvas');
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
+  s.save = () => { try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats')));
+  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram')));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
     `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
-    try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
+    s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
   if (!n) el.querySelector('[data-layout]').onclick = () => setLayout(LAYOUTS[(LAYOUTS.indexOf($('tiles').className) + 1) % LAYOUTS.length]);
@@ -503,6 +519,7 @@ function drawMap() {
     const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${WORLD.every < 60 ? WORLD.every + ' s' : Math.round(WORLD.every / 60) + ' min'} (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
   if (L.finals && view.half < 80) drawFinals(c);
   if (view.half < 150) drawProcs(c);
+  if (L.diagram && view.half < 4) drawDiagrams(c);
   if (L.taxi && view.half < 4) drawGround(c);
   // range rings around the airport you picked
   if (L.rings && home && view.half < 150) { for (let r = 10; r <= 50; r += 10) geoCircle(c, home[5], home[6], r, r === 50 ? '#555' : COL.ring); }
@@ -609,7 +626,7 @@ async function loadGround() {
 }
 let groundGen = 0;
 function setGroundNote() {
-  const waiting = [...ground.entries()].filter(([, g]) => g === 'pending').map(([id]) => id);
+  const waiting = [...ground.entries()].filter(([id, g]) => g === 'pending' && !(diagShown(id) && scopes.every(s => s.L.diagram))).map(([id]) => id);
   $('gnote').textContent = waiting.length && eachScope(() => view.half < 4).some(Boolean) ? `loading ${waiting.join(', ')} ground map from OpenStreetMap…` : '';
 }
 // is a spot on an apron (or at a terminal) of a loaded ground map? Each polygon's bounding box is kept for speed
@@ -643,6 +660,7 @@ function drawGround(c) {
   for (const [id, g] of ground) {
     if (typeof g !== 'object') continue;
     const a = areaAps.get(id) || (home && home[0] === id ? home : null); if (a && gc(view.lat, view.lon, a[5], a[6]) > vn) continue;
+    if (L.diagram && diagShown(id)) continue;             // its FAA diagram is drawn instead
     for (const p of g.ap) polyFill(c, p, '#121212');
     for (const [, p] of g.tm) polyFill(c, p, '#242424');
     const tw = Math.max(1.5 * d, 23 / 1852 * ppn), tl = Math.max(1 * d, 12 / 1852 * ppn);
@@ -662,6 +680,214 @@ function drawGround(c) {
     if (view.half < 0.7) { c.font = FONT(8); c.fillStyle = '#4a4a4a';
       for (const [ref, la, lo] of g.pp) { const [x, y, z] = proj(la, lo); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; c.fillRect(x - d, y - d, 2 * d, 2 * d); if (ref) c.fillText(ref, x + 3 * d, y + 3 * d); } }
   }
+}
+
+// FAA airport diagrams (US, d-TPP, public domain) under the scope: the server hands over the current cycle's PDF, pdf.js (loaded
+// the first time one is wanted) draws it, and it's placed from what's on the page: its runway bars matched to the runways on file,
+// then its latitude and longitude lines snapped to their half minutes. Most US diagrams place to within a few metres; one that
+// can't be placed (about one in ten) isn't drawn. Drawn light on the black scope, white paper left out, inside the chart's frame
+const FAA_CC = ['US', 'PR', 'VI', 'GU', 'AS', 'MP'];
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/';
+let pdfjsP = null;
+const pdfjs = () => pdfjsP || (pdfjsP = import(PDFJS + 'build/pdf.min.mjs').then(m => { m.GlobalWorkerOptions.workerSrc = PDFJS + 'build/pdf.worker.min.mjs'; return m; }).catch(e => { pdfjsP = null; throw e; }));
+const diags = new Map();               // ident -> {img, w, h, corner(x, y) -> [lat, lon]} | 'pending' | 'none' | 'nofit'
+const diagAsked = new Map();
+let diagBusy = false;
+const diagShown = id => { const g = diags.get(id); return typeof g === 'object' && g; };
+function diagWanted() {
+  const ids = [];
+  eachScope(() => { if (!L.diagram || view.half >= 4) return; const vn = viewNm() + 3;
+    const aps = [...areaAps.values()]; if (homeInfo && home && homeInfo[0] === home[0]) aps.unshift(homeInfo);
+    for (const a of aps) if (FAA_CC.includes(a[4]) && (a[9] || []).length && !ids.some(b => b[0] === a[0]) && gc(view.lat, view.lon, a[5], a[6]) < vn) ids.push(a); });
+  return ids;
+}
+async function loadDiagrams() {
+  if (diagBusy) return;
+  const a = diagWanted().find(a => { const g = diags.get(a[0]); return (!g || g === 'pending') && Date.now() - (diagAsked.get(a[0]) || 0) > 8000; });
+  if (!a) return;
+  diagBusy = true; diagAsked.set(a[0], Date.now());
+  try {
+    const r = await fetch('/api/live/diagram?id=' + encodeURIComponent(a[0]));
+    if (!(r.headers.get('content-type') || '').includes('pdf')) { const j = await r.json(); diags.set(a[0], j.state === 'pending' ? 'pending' : 'none'); return; }
+    const [lib, buf] = await Promise.all([pdfjs(), r.arrayBuffer()]);
+    const doc = await lib.getDocument({ data:new Uint8Array(buf), isEvalSupported:false, standardFontDataUrl:PDFJS + 'standard_fonts/' }).promise, page = await doc.getPage(1);
+    const fit = apdFit(await page.getOperatorList(), lib.OPS, a[9], a[5], a[6]);
+    if (!fit) { diags.set(a[0], 'nofit'); doc.destroy(); return; }
+    // render the page about 2400 px tall (1600 on phones), keep the inside of its frame
+    const vp0 = page.getViewport({ scale:1 }), vp = page.getViewport({ scale:(PHONE.matches ? 1600 : 2400) / Math.max(vp0.width, vp0.height) });
+    const full = document.createElement('canvas'); full.width = Math.ceil(vp.width); full.height = Math.ceil(vp.height);
+    const fc = full.getContext('2d', { willReadFrequently:true }); fc.fillStyle = '#fff'; fc.fillRect(0, 0, full.width, full.height);
+    await page.render({ canvasContext:fc, viewport:vp }).promise;
+    const fr = fit.frame || [0, 0, vp0.width, vp0.height], k = vp.scale;
+    const [p, q] = [vp.convertToViewportPoint(fr[0], fr[1]), vp.convertToViewportPoint(fr[2], fr[3])];
+    const x0 = Math.ceil(Math.min(p[0], q[0]) + 1.5 * k), y0 = Math.ceil(Math.min(p[1], q[1]) + 1.5 * k);
+    const w = Math.floor(Math.max(p[0], q[0]) - 1.5 * k) - x0, h = Math.floor(Math.max(p[1], q[1]) - 1.5 * k) - y0;
+    const im = fc.getImageData(x0, y0, w, h), px = im.data;
+    for (let i = 0; i < px.length; i += 4) {              // ink becomes light grey, as opaque as it was dark; paper goes
+      const ink = 1 - (0.3 * px[i] + 0.59 * px[i + 1] + 0.11 * px[i + 2]) / 255;
+      px[i] = px[i + 1] = px[i + 2] = 205; px[i + 3] = ink > 0.02 ? 115 * Math.pow(ink, 0.6) : 0;
+    }
+    const img = document.createElement('canvas'); img.width = w; img.height = h; img.getContext('2d').putImageData(im, 0, 0);
+    doc.destroy();
+    diags.set(a[0], { img, w, h, corner:(x, y) => fit.toLL(...vp.convertToPdfPoint(x0 + x, y0 + y)) });
+    groundGen++; mapKey = ''; for (const s of scopes) s.key = ''; setGroundNote();
+  } catch (e) { diags.set(a[0], 'none'); console.warn('airport diagram', a[0], e); }
+  finally { diagBusy = false; setTimeout(loadDiagrams, 50); if (home && home[0] === a[0]) renderCard(); }
+}
+function drawDiagrams(c) {
+  const vn = viewNm() + 3;
+  for (const [id, g] of diags) {
+    if (typeof g !== 'object') continue;
+    const [la, lo] = g.corner(g.w / 2, g.h / 2); if (gc(view.lat, view.lon, la, lo) > vn) continue;
+    const [a, b, e] = [g.corner(0, 0), g.corner(g.w, 0), g.corner(0, g.h)].map(ll => proj(ll[0], ll[1]));
+    if (a[2] < 0) continue;
+    c.save(); c.setTransform((b[0] - a[0]) / g.w, (b[1] - a[1]) / g.w, (e[0] - a[0]) / g.h, (e[1] - a[1]) / g.h, a[0], a[1]);
+    c.imageSmoothingQuality = 'high'; c.drawImage(g.img, 0, 0); c.restore();
+  }
+}
+// where on an FAA airport diagram is a runway's bar, and where the grid; then where is the page on the map (see above)
+function apdFit(ol, OPS, rwys, lat0, lon0) {
+  // dark, long, thin filled shapes in PDF page units: the runways (and the page's frame: the biggest stroked axis-aligned rectangle)
+  const mul = (a, b) => [a[0]*b[0] + a[2]*b[1], a[1]*b[0] + a[3]*b[1], a[0]*b[2] + a[2]*b[3], a[1]*b[2] + a[3]*b[3], a[0]*b[4] + a[2]*b[5] + a[4], a[1]*b[4] + a[3]*b[5] + a[5]];
+  let m = [1, 0, 0, 1, 0, 0], fill = 0, path = null; const st = [], bars = [], grid = { h:[], v:[] }; let frame = null;
+  for (let i = 0; i < ol.fnArray.length; i++) {
+    const f = ol.fnArray[i], a = ol.argsArray[i];
+    if (f === OPS.save) st.push([m, fill]); else if (f === OPS.restore) { if (st.length) [m, fill] = st.pop(); }
+    else if (f === OPS.transform) m = mul(m, a);
+    else if (f === OPS.setFillRGBColor) fill = (a[0] + a[1] + a[2]) / 3;
+    else if (f === OPS.setFillGray) fill = a[0] * 255;
+    else if (f === OPS.setFillCMYKColor) fill = 255 * (1 - a[3]) * (1 - (a[0] + a[1] + a[2]) / 3);
+    else if (f === OPS.constructPath) {
+      const [ops, c] = a, pts = []; let k = 0;
+      for (const op of ops) {
+        if (op === OPS.rectangle) { const [x, y, w, h] = c.slice(k, k + 4); pts.push([x, y], [x + w, y], [x + w, y + h], [x, y + h]); k += 4; continue; }
+        const n = op === OPS.moveTo || op === OPS.lineTo ? 2 : op === OPS.curveTo ? 6 : op === OPS.curveTo2 || op === OPS.curveTo3 ? 4 : 0;
+        if (n) pts.push([c[k + n - 2], c[k + n - 1]]); k += n;
+      }
+      path = pts.map(([x, y]) => [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]);
+    } else if (path && (f === OPS.stroke || f === OPS.closeStroke)) {
+      for (let k = 1; k < path.length; k++) { const [x0, y0] = path[k - 1], [x1, y1] = path[k];
+        const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+        if (dx > 15 && dy < 0.004 * dx) grid.h.push([(y0 + y1) / 2, dx]); else if (dy > 15 && dx < 0.004 * dy) grid.v.push([(x0 + x1) / 2, dy]); }
+      if (path.length >= 4 && path.length <= 5) { const xs = path.map(p => p[0]), ys = path.map(p => p[1]);
+        const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+        if (path.every(([x, y]) => (Math.abs(x - x0) < 0.5 || Math.abs(x - x1) < 0.5) && (Math.abs(y - y0) < 0.5 || Math.abs(y - y1) < 0.5)) && (!frame || (x1 - x0) * (y1 - y0) > (frame[2] - frame[0]) * (frame[3] - frame[1]))) frame = [x0, y0, x1, y1]; }
+      path = null;
+    } else if (path && f >= OPS.fill && f <= OPS.closeEOFillStroke) {
+      if (fill < 90 && path.length >= 4) {
+        const n = path.length; let mx = 0, my = 0; for (const [x, y] of path) { mx += x / n; my += y / n; }
+        let sxx = 0, syy = 0, sxy = 0; for (const [x, y] of path) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); }
+        const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(th), uy = Math.sin(th);
+        let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+        for (const [x, y] of path) { const u = (x - mx) * ux + (y - my) * uy, v = -(x - mx) * uy + (y - my) * ux; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+        const len = u1 - u0, wid = v1 - v0, vc = (v0 + v1) / 2;
+        if (len > 12 && len > 8 * wid) bars.push({ len, wid, e: [[mx + ux*u0 - uy*vc, my + uy*u0 + ux*vc], [mx + ux*u1 - uy*vc, my + uy*u1 + ux*vc]] });
+      }
+      path = null;
+    } else if (f === OPS.endPath) path = null;
+  }
+  // a runway crossed by another is often drawn in pieces: join pieces along one line with only short gaps (the crossing runway) between them
+  for (const b of bars.slice()) {
+    const d = [(b.e[1][0] - b.e[0][0]) / b.len, (b.e[1][1] - b.e[0][1]) / b.len], o = b.e[0];
+    const on = bars.filter(c => c.e.every(q => Math.abs(-(q[0] - o[0]) * d[1] + (q[1] - o[1]) * d[0]) < 1))
+      .map(c => c.e.map(q => (q[0] - o[0]) * d[0] + (q[1] - o[1]) * d[1]).sort((x, y) => x - y)).sort((x, y) => x[0] - y[0]);
+    if (on.length < 2) continue;
+    let t0 = on[0][0], t1 = on[0][1];
+    for (const [a, z] of on.slice(1)) { if (a - t1 > 12) break; t1 = Math.max(t1, z); }
+    if (t1 - t0 > b.len + 1 && !bars.some(c => Math.abs(c.len - (t1 - t0)) < 0.5 && c.joined)) bars.push({ len:t1 - t0, wid:b.wid, joined:true, e:[[o[0] + d[0] * t0, o[1] + d[1] * t0], [o[0] + d[0] * t1, o[1] + d[1] * t1]] });
+  }
+  // the runways in metres east and north of the airport
+  const kx = Math.cos(lat0 * Math.PI / 180) * 111320, ky = 110574;
+  const loc = (la, lo) => [(lo - lon0) * kx, (la - lat0) * ky];
+  const R = rwys.map(r => ({ w:(r[6] || 0) * 0.3048, e:[loc(r[2], r[3]), loc(r[4], r[5])] })).map(r => ({ ...r, len:Math.hypot(r.e[1][0] - r.e[0][0], r.e[1][1] - r.e[0][1]) })).filter(r => r.len > 150);
+  if (!R.length || !bars.length) return null;
+  // similarity transform as complex numbers: page = A * metres + B
+  const cm = (a, b) => [a[0]*b[0] - a[1]*b[1], a[0]*b[1] + a[1]*b[0]], cd = (a, b) => { const q = b[0]*b[0] + b[1]*b[1]; return [(a[0]*b[0] + a[1]*b[1]) / q, (a[1]*b[0] - a[0]*b[1]) / q]; };
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1]], add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const ap = (T, p) => add(cm(T.A, p), T.B), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  // how much of each runway the bars cover once moved onto the page (a runway crossed by another is often drawn in pieces)
+  const score = T => {
+    const m = 1 / Math.hypot(...T.A), pairs = []; let sc = 0;
+    for (const r of R) {
+      const p0 = ap(T, r.e[0]), p1 = ap(T, r.e[1]), len = dist(p0, p1), d = [(p1[0] - p0[0]) / len, (p1[1] - p0[1]) / len], tol = Math.max(1.5, 0.03 * len);
+      const iv = [];
+      for (const b of bars) {
+        const t = b.e.map(q => (q[0] - p0[0]) * d[0] + (q[1] - p0[1]) * d[1]), o = b.e.map(q => Math.abs(-(q[0] - p0[0]) * d[1] + (q[1] - p0[1]) * d[0]));
+        if (r.w > 5 && (b.wid * m < 0.5 * r.w || b.wid * m > 3 * r.w)) continue;   // as wide as the runway, give or take
+        if (o[0] > tol || o[1] > tol || Math.min(...t) < -tol || Math.max(...t) > len + tol) continue;
+        iv.push(t[0] < t[1] ? [t[0], t[1], b.e[0], b.e[1]] : [t[1], t[0], b.e[1], b.e[0]]);
+      }
+      if (!iv.length) continue;
+      iv.sort((x, y) => x[0] - y[0]); let cov = 0, end = -1e9;
+      for (const [t0, t1] of iv) { if (t1 > end) { cov += t1 - Math.max(t0, end); end = t1; } }
+      if (cov < 0.6 * len) continue;
+      sc += r.len * cov / len;
+      const lo = iv[0], hi = iv.reduce((x, y) => y[1] > x[1] ? y : x);
+      if (Math.abs(lo[0]) < tol) pairs.push([r.e[0], lo[2]]);
+      if (Math.abs(hi[1] - len) < tol) pairs.push([r.e[1], hi[3]]);
+    }
+    return { sc, pairs };
+  };
+  // the latitude and longitude lines, every half or whole minute: lines on the page that land on one confirm the fit
+  // (lines across most of the frame, often broken where they're labelled; not the frame itself)
+  const fr = frame || [0, 0, 612, 792], long = (segs, span, lo, hi) => { const t = new Map();
+    for (const [v, l] of segs) { const k = Math.round(v * 2) / 2; t.set(k, (t.get(k) || 0) + l); }
+    return [...t].filter(([v, l]) => l > 0.4 * span && v > lo + 2 && v < hi - 2).map(([v]) => v); };
+  const H = long(grid.h, fr[2] - fr[0], fr[1], fr[3]), V = long(grid.v, fr[3] - fr[1], fr[0], fr[2]), kl = 926;    // metres in half a minute of latitude
+  const gridScore = T => {
+    const Ai = cd([1, 0], T.A), m = 1 / Math.hypot(...T.A), q90 = Math.abs(Math.atan2(T.A[1], T.A[0])) > 0.78; let n = 0;
+    for (const [vals, horiz] of [[H, true], [V, false]]) for (const v of vals) {
+      const p = cm(Ai, sub(horiz ? [0, v] : [v, 0], T.B));                    // a point on the line, in metres
+      const isLat = horiz !== q90, w = isLat ? (p[1] / ky + lat0) * 120 : (p[0] / kx + lon0) * 120;
+      const err = Math.abs(w - Math.round(w)) * (isLat ? kl : kl * kx / ky);
+      if (err < Math.min(60, Math.max(12, 1.2 * m))) n++;
+    }
+    return [n, H.length + V.length];
+  };
+  const tot = R.reduce((t, r) => t + r.len, 0);
+  let best = null;
+  for (const r of R) for (const b of bars) for (const sw of [0, 1]) {
+    const A = cd(sub(b.e[1 - sw], b.e[sw]), sub(r.e[1], r.e[0])), rot = Math.atan2(A[1], A[0]) * 180 / Math.PI;
+    if (Math.abs(rot) > 4 && Math.abs(rot - 90) > 4) continue;        // diagrams are drawn north up, or (landscape) with north to the page's left
+    if (Math.hypot(...A) < 1 / 35) continue;                          // no diagram is drawn smaller than about 35 m to the point (Denver: 28)
+    const T = { A, B:sub(b.e[sw], cm(A, r.e[0])) }, s = score(T);
+    const [g, gn] = gridScore(T); s.g = g;
+    s.v = s.sc / tot + (s.sc && gn ? 2 * g / gn : 0);
+    if (!best || s.v > best.s.v) best = { T, s };
+  }
+  if (!best || best.s.sc < 0.5 * Math.max(...R.map(r => r.len))) return null;
+  // refine, north up or turned exactly a quarter: page = s * (east, north) (or (-north, east)) + (bx, by), by least squares over the
+  // runway ends and the grid lines (each taken to be on the nearest half minute): the grid is exact, runway ends on file can be a
+  // displaced threshold or a few years old, so ends far off are dropped
+  const q = Math.abs(Math.atan2(best.T.A[1], best.T.A[0])) > 0.78;
+  let S = Math.hypot(...best.T.A), bx = best.T.B[0], by = best.T.B[1], used;
+  const toM = (x, y) => q ? [(y - by) / S, -(x - bx) / S] : [(x - bx) / S, (y - by) / S];     // page -> metres east, north
+  const pairs = best.s.pairs;
+  for (let it = 0; it < 4; it++) {
+    const rows = [], gt = it ? 25 : 200, rt = it ? 40 : 300; used = { h:0, v:0, r:0 };
+    for (const [vals, horiz] of [[H, true], [V, false]]) for (const v of vals) {
+      const p = toM(horiz ? 0 : v, horiz ? v : 0), isLat = horiz !== q;
+      const w = isLat ? (p[1] / ky + lat0) * 120 : (p[0] / kx + lon0) * 120, c = Math.round(w) / 120;
+      const cm_ = isLat ? (c - lat0) * ky : (c - lon0) * kx;                  // the line's coordinate in metres
+      if (Math.abs(w / 120 - c) * (isLat ? ky : kx) > gt) continue;
+      // horizontal line: y = by + S * (q ? east : north);  vertical: x = bx + S * (q ? -north : east)
+      rows.push(horiz ? [cm_, 0, 1, v, 4] : [q ? -cm_ : cm_, 1, 0, v, 4]); used[horiz ? 'h' : 'v']++;
+    }
+    for (const [[e, n], [x, y]] of pairs) {
+      const p = toM(x, y); if (Math.hypot(p[0] - e, p[1] - n) > rt) continue;
+      rows.push([q ? -n : e, 1, 0, x, 1], [q ? e : n, 0, 1, y, 1]); used.r++;
+    }
+    const N = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], r = [0, 0, 0];
+    for (const [a0, a1, a2, v, wt] of rows) { const c = [a0, a1, a2]; for (let i = 0; i < 3; i++) { r[i] += wt * c[i] * v; for (let j = 0; j < 3; j++) N[i][j] += wt * c[i] * c[j]; } }
+    const det = M => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+    const D = det(N); if (Math.abs(D) < 1e-12) return null;
+    const sol = [0, 1, 2].map(k => det(N.map((row, i) => row.map((x, j) => j === k ? r[i] : x))) / D);
+    if (!(sol[0] > 0)) return null;
+    [S, bx, by] = sol;
+  }
+  if (!((used.h && used.v && used.h + used.v >= 3) || used.r >= 4)) return null;   // pinned by the grid both ways, or by two runways
+  const toLL = (x, y) => { const [e, n] = toM(x, y); return [lat0 + n / ky, lon0 + e / kx]; };
+  return { toLL, frame, used, rot:q ? 90 : 0, mPerPt:1 / S };
 }
 
 // ------------------------------------------------------------------ aircraft
@@ -958,6 +1184,28 @@ async function loadDetail() {
   try { const j = await (await fetch('/api/live/aircraft?hex=' + encodeURIComponent(a.hex))).json();
     if (sel === id) { AD = { ...j, id, got: Date.now() }; renderCard(); } } catch (e) {}
 }
+// /api/live/acars (livescope): the aircraft's datalink messages over the last 12 h (VHF ACARS, VDL2, HFDL, SATCOM) heard by
+// airframes.io's feeders, newest first: {ok, hex, t, since_h, msgs:[{t, label, what, up, link, freq, flight, near, text}]}
+let AC = null, acAsked = 0;
+async function loadAcars() {
+  const a = has('acars') && !RP && sel && S && S.aircraft.find(o => o.id === sel);
+  if (!a || !a.hex || a.hex[0] === '~' || (AC && AC.id === sel && Date.now() - AC.got < 60000) || Date.now() - acAsked < 3000) return;
+  acAsked = Date.now(); const id = sel;
+  try { const j = await (await fetch('/api/live/acars?hex=' + encodeURIComponent(a.hex))).json();
+    if (sel === id) { AC = { ...j, id, got: Date.now() }; renderCard(); } } catch (e) {}
+}
+function acarsCard(a) {
+  if (!has('acars') || !a.hex || a.hex[0] === '~') return '';
+  const d = AC && AC.id === a.id ? AC : null, hm = t => new Date(t * 1000).toISOString().slice(11, 16) + 'Z';
+  const head = `<i>ACARS${d && d.ok ? ` · last ${d.since_h} h` : ''}</i>`;
+  if (!d) return `<div class="acs">${head}<span>loading…</span></div>`;
+  if (!d.ok) return `<div class="acs">${head}<span>${esc(d.error || 'unavailable')}</span></div>`;
+  const ms = d.msgs || [];
+  return `<div class="acs">${head}` + (ms.length ? `<div class="acx">${ms.map(m => `<div class="acm"><span>${hm(m.t)} ${m.up ? '↓ to aircraft' : '↑ from aircraft'} · ` +
+      `${esc([m.label, m.what].filter(Boolean).join(' '))} · ${esc(m.link)}${m.near ? ' near ' + esc(m.near) : ''}</span><pre>${esc(m.text)}</pre></div>`).join('')}</div>`
+      : `<span>Nothing heard from it in the last ${d.since_h} h.</span>`) +
+    `<em>Data provided by <a href="https://app.airframes.io/" target="_blank" rel="noopener">Airframes.io</a> and its community of feeders${d.stale ? ' · not updated just now' : ''}</em></div>`;
+}
 const photos = new Map();              // hex -> the photo's element (kept, so the card's redraws don't reload it)
 function photoEl(hex, p) {
   if (!p || !p.src || !/^https:\/\//.test(p.src)) return null;
@@ -1000,7 +1248,7 @@ function detailCard(a) {
       ['NACv', num(x.nac_v) ? `${x.nac_v} (${NACV[x.nac_v] || '?'})` : ''], ['NIC', num(x.nic) ? String(x.nic) : ''], ['NIC baro', num(x.nic_baro) ? String(x.nic_baro) : ''],
       ['Rc', num(x.rc) ? x.rc.toLocaleString() + ' m' : ''], ['SIL', num(x.sil) ? x.sil + (x.sil_type ? ' ' + x.sil_type.replace('per', 'per ') : '') : ''],
       ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
-  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`);
+  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`) + acarsCard(a);
 }
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
@@ -1175,7 +1423,11 @@ window.addEventListener('keydown', e => {
   if (e.key === '/') { e.preventDefault(); $('q').focus(); }
   if (RP && e.key === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); tlPlay(!RP.playing); }
 });
-$('listBtn').onclick = () => { if (document.body.classList.toggle('listOpen') && homeCardShut) { homeCardShut = false; renderCard(); } autoOpen = false; };
+// Info: phones open or close the panel; wider screens show the airport's card (in place of an aircraft's) or close it
+$('listBtn').onclick = () => {
+  if (small.matches) { if (document.body.classList.toggle('listOpen') && homeCardShut) { homeCardShut = false; renderCard(); } autoOpen = false; updateSide(); return; }
+  if (sel) { homeCardShut = false; select(null); } else { homeCardShut = !homeCardShut; renderCard(); }
+};
 
 // ------------------------------------------------------------------ selection, airports, URL
 const small = matchMedia('(max-width: 820px), (max-height: 500px)');
@@ -1185,11 +1437,11 @@ function select(id) {
   const b = document.body;
   if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
   if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
-  sel = id; renderCard(); loadFlight(); loadDetail();
+  sel = id; renderCard(); loadFlight(); loadDetail(); loadAcars();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
-  home = a; homeCardShut = false; select(null); procSel = null; flowMem.clear();
+  home = a; homeCardShut = false; select(null); try { localStorage.setItem(KEY + '-home', a[0]); } catch (e) {} procSel = null; flowMem.clear();
   flowNeighbours = MAJOR.filter(o => o[0] !== a[0] && gc(a[5], a[6], o[5], o[6]) < 120); if (S) updateFlow(); renderFlt();
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
@@ -1203,11 +1455,14 @@ function updateSide() {
   b.classList.toggle('noApt', !home); b.classList.toggle('noCard', $('card').style.display === 'none');
   b.classList.toggle('sideShut', !!home && homeCardShut && !sel);   // the airport card closed with ✕: no side panel (the Info button reopens it on phones)
   if (!home && !sel) b.classList.remove('listOpen');
+  metarHead(); $('listBtn').textContent = home ? home[0] : 'Info'; $('listBtn').title = home ? `${home[0]} information (the airport's card)` : '';
+  $('listBtn').classList.toggle('on', small.matches ? b.classList.contains('listOpen') : !!home && !homeCardShut && !sel);
   if (b.className !== was) resize();
 }
 function renderCard() { renderCard1(); updateSide(); }
 function renderCard1() {
   const card = $('card'), a = S && sel && S.aircraft.find(o => o.id === sel);
+  const acx = card.querySelector('.acx'), acTop = acx ? acx.scrollTop : 0;   // the ACARS list keeps its scroll through redraws
   if (a && has('flight')) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     const r = routeOf(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
@@ -1238,7 +1493,7 @@ function renderCard1() {
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
       (fs.length || ctr.length ? `<div class="atc">${fs.concat(ctr).map(f => `<span>${esc(f.type)}</span><span>${esc(f.user || 'controller')}</span><span>since ${since(f.since)}</span>`).join('')}</div>`
-        : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard();
+        : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard() + chartCard();
   } else if (home && !homeCardShut) {
     // its radio frequencies (OurAirports), its live audio feeds (SITE.audio) and a link to listen on LiveATC.net
     const info = homeInfo && homeInfo[0] === home[0] ? homeInfo : null, fq = (info && info[10]) || [];
@@ -1247,10 +1502,11 @@ function renderCard1() {
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
       (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
         `${ils.map(([e, l]) => `<span>${esc(l[0] + ' ' + e)}</span><span>${l[2].toFixed(2)}</span><span>${esc(l[1])} · ${Math.round(l[3])}° true${l[6] ? ` · glideslope ${l[6]}°` : ''}</span>`).join('')}</div>` : '') +
-      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard();
+      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard() + chartCard();
     if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  if (acTop && card.querySelector('.acx')) card.querySelector('.acx').scrollTop = acTop;
   const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
@@ -1258,6 +1514,7 @@ function renderCard1() {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
     procSel = procSel && procSel.join('|') === k.join('|') ? null : k; mapKey = ''; renderCard();
   });
+  if ($('dgOn')) $('dgOn').onclick = () => setDiagram(!scopes[0].L.diagram);
   $('cardX').onclick = () => { if (sel) select(null); else { homeCardShut = true; document.body.classList.remove('listOpen'); renderCard(); } };
 }
 // live audio: SITE.audio maps an airport to its feeds, [[label, stream URL], ...]; any MP3/AAC/Ogg stream the
@@ -1352,17 +1609,28 @@ setInterval(lwShow, 1000);                  // closed from its own title bar
 // the airport's ATIS (FAA D-ATIS, US airports that have one) and latest METAR, refreshed every 2 min
 const atis = new Map();                // ident -> {atis:[{type, code, text, time}], metar:{raw, cat}, t}
 const atisAsked = new Map();
-function atisCard() {
-  if (!has('atis')) return '';
+function loadAtis() {
+  if (!has('atis') || !home) return;
   const id = home[0], ak = srv + id, d = atis.get(ak);
   if ((!d || Date.now() - d.t > 120000) && Date.now() - (atisAsked.get(id) || 0) > 30000) {
     atisAsked.set(id, Date.now());
     fetch(`/api/live/atis?${srvQ()}id=` + encodeURIComponent(id)).then(r => r.json()).then(j => {
       const old = atis.get(ak); j.t = Date.now(); atis.set(ak, j);
       if (!old || JSON.stringify(old.atis) !== JSON.stringify(j.atis)) mapKey = '';
-      if (!old || JSON.stringify([old.atis, old.metar]) !== JSON.stringify([j.atis, j.metar])) if (home && home[0] === id && !sel) renderCard();
+      if (!old || JSON.stringify([old.atis, old.metar]) !== JSON.stringify([j.atis, j.metar])) if (home && home[0] === id) { if (!sel) renderCard(); else updateSide(); }
     }).catch(() => {});
   }
+}
+// the picked airport's latest METAR in the header, after its button
+function metarHead() {
+  const d = home && has('atis') && atis.get(srv + home[0]), m = d && d.metar && d.metar.raw ? d.metar.raw.replace(/^(METAR|SPECI)\s+/, '').replace(new RegExp('^' + home[0] + '\\s+'), '') : '';
+  const el = $('hmetar'); if (el.textContent !== m) { el.textContent = m; el.title = m ? `${SITE.metar_label || 'METAR'} ${home[0]}${d.metar.cat ? ' · ' + d.metar.cat : ''}: ${d.metar.raw}` : ''; }
+  el.className = d && d.metar && d.metar.cat ? 'c-' + d.metar.cat : '';
+}
+function atisCard() {
+  if (!has('atis')) return '';
+  loadAtis();
+  const id = home[0], d = atis.get(srv + id);
   if (!d) return '<div class="atis"><i>ATIS</i><span class="dim">loading…</span></div>';
   const kind = { arr:'ARRIVAL ', dep:'DEPARTURE ', combined:'', if:'INFINITE FLIGHT ' };
   let h = '';
@@ -1386,6 +1654,40 @@ function procCard() {
     return `<i>${label}${u ? ` <span class="dim">· ${names.filter(on).length} in use per the ATIS</span>` : ''}</i>` + names.map(n => `<span data-pk="${k}" data-pn="${esc(n)}" class="${procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n ? 'on' : on(n) ? 'use' : only ? 'off' : ''}">${esc(n)}</span>`).join('');
   }).join('');
   return groups ? `<div class="pr">${groups}</div>` : '';
+}
+// the airport's FAA charts (d-TPP, this cycle): the diagram, which can also be laid on the map (the 'diagram' layer, here
+// for every scope at once), and the rest (SIDs, STARs, approaches, minimums, hot spots) as PDFs to open from aeronav.faa.gov
+const charts = new Map();              // ident -> {cycle, base, charts: [[code, name, pdf], ...]} | 'pending' | 'failed'
+const CH_GROUPS = [['Airport', ['APD', 'HOT', 'LAH', 'DAU']], ['Departures', ['DP']], ['Arrivals', ['STR']], ['Approaches', ['IAP']], ['Minimums and obstacle departures', ['MIN', 'ODP']]];
+async function loadCharts(id) {
+  const c = charts.get(id); if (c && c !== 'pending' && c !== 'failed') return;
+  if (c === 'pending' || c === 'failed') { if (Date.now() - (charts.t || 0) < 8000) return; }
+  charts.set(id, 'pending'); charts.t = Date.now();
+  try {
+    const r = await (await fetch('/api/live/charts?id=' + encodeURIComponent(id))).json();
+    charts.set(id, r.cycle ? r : r.state === 'failed' ? 'failed' : 'pending');
+  } catch (e) { charts.set(id, 'failed'); }
+  if (home && home[0] === id) { renderCard(); if (charts.get(id) === 'pending') setTimeout(() => home && home[0] === id && loadCharts(id), 8000); }
+}
+function setDiagram(on) {
+  for (const s of scopes) { s.L.diagram = on; s.key = ''; s.save(); const b = s.el.querySelector('[data-l="diagram"]'); if (b) b.checked = on; }
+  mapKey = ''; groundGen++; loadGround(); loadDiagrams(); setGroundNote(); renderCard();
+}
+function chartCard() {
+  if (!home || !has('diagram') || !FAA_CC.includes(home[4])) return '';
+  const c = charts.get(home[0]);
+  if (!c) { loadCharts(home[0]); return ''; }
+  if (typeof c === 'string') return `<div class="pr"><i>FAA charts: ${c === 'pending' ? 'loading…' : 'couldn’t reach the FAA'}</i></div>`;
+  if (!c.charts.length) return '<div class="pr"><i>No FAA charts for this airport.</i></div>';
+  const url = x => esc(c.base + c.cycle + '/' + x[2]), apd = c.charts.find(x => x[0] === 'APD'), on = scopes[0].L.diagram, g = diags.get(home[0]);
+  const st = !on ? '' : g === 'none' ? 'couldn’t load it' : g === 'nofit' ? 'couldn’t place it on the map' : scopes[0].view.half >= 4 ? 'zoom in to see it' : g && typeof g === 'object' ? '' : 'loading…';
+  const tog = apd ? `<button id="dgOn" class="${on ? 'on' : ''}" title="Lay the FAA airport diagram over the map at airports in view (zoomed in)">${on ? '■' : '□'} Diagram on map</button>` +
+    (st ? ` <span class="dim">${st}</span>` : '') : '';
+  const grp = CH_GROUPS.map(([label, codes]) => {
+    const xs = c.charts.filter(x => codes.includes(x[0])); if (!xs.length) return '';
+    return `<i>${label}</i>` + xs.map(x => `<a href="${url(x)}" target="_blank" rel="noopener">${esc(x[1])}</a>`).join('');
+  }).join('');
+  return `<div class="ch">${tog}<div class="chh">FAA charts <span class="dim">· cycle ${esc(c.cycle)}</span></div><div class="pr">${grp}</div></div>`;
 }
 // runways and procedures in use, read from the airport's ATIS: the landing and departing runways (checked against the
 // airport's runways), the approach types named for each landing runway, and SIDs or STARs named outright. A SID or STAR
@@ -1564,7 +1866,7 @@ async function poll() {
   if (SITE.idle_min && (document.hidden || idle())) return schedule(1000);
   polling = true;
   const nm = Math.max(10, Math.min(250, viewNm() * 1.05));
-  if (RP) { loadRoutes(); loadGround(); setGroundNote(); }
+  if (RP) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
   else try {
     const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
     if (RP) throw 0;                               // a timelapse started while this was on its way
@@ -1578,7 +1880,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail();
+    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
@@ -2069,7 +2371,9 @@ function tlStep() {
   let want = null;
   const m = h.match(/^(-?[\d.]+),(-?[\d.]+),([\d.]+)$/);
   if (m) { Object.assign(view, { lat:+m[1], lon:+m[2], half:Math.max(HALF_MIN, Math.min(HALF_GLOBE, +m[3])) }); Object.assign(scopes[1].view, { lat:+m[1], lon:+m[2] }); }
-  else if (h || (SITE.start !== null && !new URLSearchParams(location.search).get('tl'))) want = (h || SITE.start || 'KSFO/52').split('/');
+  const last = (() => { try { return localStorage.getItem(KEY + '-home'); } catch (e) { return null; } })();   // the airport picked last time
+  if (m) {}
+  else if (h || ((SITE.start !== null || last) && !new URLSearchParams(location.search).get('tl'))) want = (h || last || SITE.start || 'KSFO/52').split('/');
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
   if (has('atc')) atcInit();

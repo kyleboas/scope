@@ -19,11 +19,11 @@ from scope import core
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE, P, STATIC = {}, {}, {}          # the site's settings, its providers, path -> (body, gzipped, type)
-AIRPORTS = PROCS = GROUND = None
+AIRPORTS = PROCS = GROUND = DIAGRAMS = None
 
 
 def load(site_dir):
-    global AIRPORTS, PROCS, GROUND
+    global AIRPORTS, PROCS, GROUND, DIAGRAMS
     site_dir = os.path.abspath(site_dir)
     path = os.path.join(site_dir, "site.py")
     if not os.path.isfile(path):
@@ -37,7 +37,8 @@ def load(site_dir):
     P.update(mod.providers(airports=AIRPORTS) if "airports" in mod.providers.__code__.co_varnames else mod.providers())
     PROCS = core.Procs(AIRPORTS)
     GROUND = core.Ground(AIRPORTS)
-    feats = ["procs", "ground"] + [k for k in ("world", "routes", "atis") if P.get(k)] + list(P.get("features", []))
+    DIAGRAMS = core.Diagrams(AIRPORTS)
+    feats = ["procs", "ground", "diagram"] + [k for k in ("world", "routes", "atis") if P.get(k)] + list(P.get("features", []))
     client = {k: v for k, v in SITE.items() if k not in ("old_hosts", "port")} | {"features": feats}
     page = open(os.path.join(HERE, "web", "scope.html"), encoding="utf-8").read()
     page = page.replace("<title>livescope</title>", f"<title>{html.escape(SITE['title'])}</title>", 1)
@@ -109,6 +110,12 @@ class Handler(BaseHTTPRequestHandler):
             if gz is None:
                 return self.send(200, {"state": state})
             return self.send(200, gzip.decompress(gz), gz=gz)
+        if path == "/api/live/diagram":
+            pdf, state = DIAGRAMS.get(s("id"))
+            return self.send(200, pdf, "application/pdf") if pdf else self.send(200, {"state": state})
+        if path == "/api/live/charts":
+            cyc, charts = DIAGRAMS.charts(s("id"))
+            return self.send(200, {"cycle": cyc, "base": DIAGRAMS.BASE, "charts": charts} if cyc else {"state": charts})
         if path == "/api/live/atis" and P.get("atis"):
             return self.send(200, P["atis"].get(s("id"), **kw))
         if path == "/api/live/world" and P.get("world"):

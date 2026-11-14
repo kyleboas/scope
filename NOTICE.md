@@ -16,6 +16,9 @@ feeds are in that site's NOTICE):
 - **Aircraft types and address countries** (`livedata/aircraft.json`, from `tools/build_aircraft.py`): ICAO type designators
   (ICAO Doc 8643) as compiled by tar1090-db (<https://github.com/wiedehopf/tar1090-db>), and the ICAO 24-bit address blocks by
   country (ICAO Annex 10 Vol III) as listed by tar1090 (<https://github.com/wiedehopf/tar1090>).
+- **Airport diagrams** are the FAA's (d-TPP, U.S. Government work, public domain), fetched at run time from aeronav.faa.gov
+  and cached for the cycle. Not for navigation. They're drawn in the page with **pdf.js** (Mozilla, Apache License 2.0,
+  <https://github.com/mozilla/pdf.js>), loaded from jsDelivr.
 - **ATIS** is from atis.info (FAA D-ATIS); **METARs** from aviationweather.gov.
 - **Map backgrounds** (the MAP button: street map and satellite) are Esri's tile services, loaded by the browser at run time:
   the Dark Gray Canvas (Esri, HERE, Garmin, © OpenStreetMap contributors) and World Imagery (Esri, Maxar, Earthstar Geographics).
