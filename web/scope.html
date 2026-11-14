@@ -397,8 +397,9 @@ function drawMap() {
     if (!close && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
     if (!L.airports && !(home && a[0] === home[0])) continue;
-    const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -40 || y < -40 || x > P0.w + 40 || y > P0.h + 40) continue;
-    const rw = a[9] || [];
+    // runways reach a few nm from the airport's reference point: keep it while they can still be on screen
+    const rw = a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
+    const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -m || y < -m || x > P0.w + m || y > P0.h + m) continue;
     const drawRwy = L.runways && close && rw.length && ppn > 6 * d;
     if (drawRwy) for (const r of rw) {
       const p = proj(r[2], r[3]), q = proj(r[4], r[5]);
@@ -1118,7 +1119,7 @@ async function poll() {
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
-    const r = Math.min(150, viewNm() * 1.2), step = r < 30 ? 0.1 : 0.5, key = [Math.round(view.lat / step), Math.round(view.lon / step), Math.round(r / 10)].join();
+    const r = Math.min(150, Math.max(5, viewNm() * 1.2)), step = r < 30 ? 0.1 : 0.5, key = [Math.round(view.lat / step), Math.round(view.lon / step), Math.round(r / 10)].join();
     if (key === s.areaKey) return null; s.areaKey = key; return [view.lat, view.lon, r, view.half < 30 ? Math.min(60, viewNm() * 1.2) : 0]; });
   for (const q of areas) { if (!q) continue; const [la, lo, r, pr] = q;
     try { const aps = await (await fetch(`/api/live/area?lat=${la.toFixed(3)}&lon=${lo.toFixed(3)}&nm=${r.toFixed(0)}`)).json();
