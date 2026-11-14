@@ -224,11 +224,11 @@ const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
 const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['aptnames', 'Airport names'], ['small', 'Small airports and strips'],
-                ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
+                ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['taxinames', 'Taxiway names'], ['states', 'State and province lines'],
                 ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
                 ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
+            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -492,7 +492,7 @@ function drawGround(c) {
     for (const [, p] of g.tl) geoLine(c, p, '#262626', null, tl / d);
     for (const [, p] of g.tw) geoLine(c, p, '#363636', null, tw / d);
     for (const p of g.hp) geoLine(c, p, '#7a6528', null, Math.max(1.5, 4 / 1852 * ppn / d));
-    if (view.half < 1.6) {                // taxiway letters, once per letter per ~400 m
+    if (L.taxinames && view.half < 1.6) { // taxiway letters, once per letter per ~400 m
       c.font = FONT(view.half < 0.8 ? 10 : 9); c.fillStyle = '#7a7a7a'; c.textAlign = 'center'; const placed = [];
       for (const [ref, p] of g.tw) { if (!ref || ref.length > 6) continue;
         const m = p[Math.floor(p.length / 2)], [x, y, z] = proj(m[0], m[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
