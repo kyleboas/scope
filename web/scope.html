@@ -2032,6 +2032,9 @@ function ingest() {
   if (wantSel && S.aircraft.some(a => a.id === wantSel)) { const id = wantSel; wantSel = null; select(id); }
   // the header says nothing while the feed is fine; only its errors show there
   $('status').innerHTML = S.ok ? '' : `<span class="bad">${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
+  // zoomed out on an old worldwide picture (the server kept its last one while OpenSky refuses): say how old
+  const wAge = WORLD && WORLD.ok && worldShown() ? Date.now() / 1000 - WORLD.t : 0;
+  if (wAge && wAge > 2 * WORLD.every + 60) $('status').innerHTML += `${S.ok ? '' : ' · '}<span class="bad">worldwide picture ${wAge < 5400 ? Math.round(wAge / 60) + ' min' : Math.round(wAge / 3600) + ' h'} old${WORLD_ERR ? ' (' + esc(WORLD_ERR) + ')' : ''}</span>`;
   if (sel) renderCard();
 }
 setInterval(() => { if (!RP) { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; sampleHist(); } if (sel) renderCard(); }, 1000);
