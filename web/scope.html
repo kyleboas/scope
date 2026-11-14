@@ -35,6 +35,8 @@
   .altf { display:flex; align-items:center; gap:1px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
   .altf input { width:4.5ch; padding:5px 2px; text-align:center; }
   .altf.on, .altf.on input { color:#4fb3ff; }
+  #altT { cursor:pointer; padding:5px 2px; } #altT:hover { color:var(--fg); } .altf.on #altT:hover { color:#8fd0ff; }
+  .altf.off input { text-decoration:line-through; }
   #res { position:absolute; left:0; top:calc(100% + 4px); z-index:5; width:340px; max-height:60vh; overflow:auto; background:rgba(28,28,30,.98);
          border-radius:6px; box-shadow:0 8px 24px #0008; display:none; }
   #res div { padding:7px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -216,7 +218,7 @@
 <header>
   <span id="clock">--:--:--Z</span>
   <div class="srch"><input id="q" placeholder="Search..." title="Search: airport code or name (KSFO, LHR, Narita), or an aircraft by callsign, tail number or hex code (UAL123, N12345, a1b2c3)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
-  <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category).">ALT
+  <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category). Click ALT to turn it off and on (the boxes are kept)."><span id="altT">ALT</span>
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <button id="listBtn" title="Airport information (the picked airport's card)">Info</button>
   <span id="hmetar"></span>
@@ -1145,10 +1147,6 @@ function drawBoats() {
       const a = h * D2R, s = Math.sin(a), c = Math.cos(a), P = (f, w) => [x + s * f * r + c * w * r, y - c * f * r + s * w * r];
       ctx.beginPath(); for (const [i, q] of [[1, 0], [.3, .45], [-.8, .45], [-.8, -.45], [.3, -.45]].entries()) { const [px, py] = P(...q); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
       ctx.closePath(); moving ? ctx.fill() : ctx.stroke();
-      if (moving && view.half <= 20) {            // where it'll be in five minutes
-        const [ea, eo] = dest(la, lo, b[4] >= 0 ? b[4] : h, b[3] / 12), [ex, ey] = proj(ea, eo);
-        if (Math.hypot(ex - x, ey - y) > r * 1.5) { ctx.globalAlpha = .5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1; }
-      }
     }
     if (tags && !hi && b[7]) { ctx.font = FONT(TAG(9)); ctx.fillText(b[7], x + 8 * d, y + 3 * d); }
   }
@@ -1173,7 +1171,7 @@ function hitBoat(mx, my, r) {
 
 // ------------------------------------------------------------------ airspace and weather (a site with the 'wx' feature, livescope)
 // /api/live/wx gives the whole world's {t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...], ...]}],
-// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}, fetched every 5 min while
+// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]], err:{tfr}}, fetched every 5 min while
 // one of its layers is on (all off by default; not shown when playing back a timelapse). k: tfr, sigmet, csigmet
 // (convective), isigmet (international), airmet (G-AIRMET), cwa. Click inside an area or on a report for its text.
 let WX = null, wxT = 0, wxSel = null;            // wxSel: the items in the open popup, drawn brighter
@@ -1231,6 +1229,8 @@ function drawWx() {
     }
     ctx.globalAlpha = 1;
   }
+  if (L.tfr && WX.err && WX.err.tfr) {           // its source is down for this server: say so rather than show nothing
+    ctx.font = FONT(10); ctx.fillStyle = WX_COL.tfr; ctx.textAlign = 'center'; ctx.fillText('TFRs unavailable: ' + WX.err.tfr, P0.w / 2, P0.h - 40 * d); ctx.textAlign = 'left'; }
   if (!L.pirep) return;
   const tags = L.tags && view.half <= 80, r = 3.2 * d;
   for (const p of WX.pireps) {
@@ -1502,10 +1502,6 @@ function endPointer(e) {
   select(null);
   const wx = hitWx(mx, my, touch ? 20 : 10); if (wx.length) wxOpen(e.clientX, e.clientY, wx);
 }
-function pickAirport(ap) {
-  if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
-  setHome(ap, false);
-}
 onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
 onCv('pointerleave', () => { hover = null; worldHover = null; boatHover = null; });
 onCv('wheel', e => {
@@ -1513,6 +1509,10 @@ onCv('wheel', e => {
   const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
   const [mx, my] = canvasXY(e); zoomAt(mx, my, Math.exp(Math.max(-0.25, Math.min(0.25, px * (e.ctrlKey ? 0.004 : 0.0012)))));
 }, { passive:false });
+}
+function pickAirport(ap) {
+  if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
+  setHome(ap, false);
 }
 // the menu for a tap on several things at once : airports, then aircraft nearest first
 function pickMenu(x, y, aps, acs) {
@@ -1986,7 +1986,12 @@ async function poll() {
   if (SITE.idle_min && (document.hidden || idle())) return schedule(1000);
   polling = true;
   const nm = Math.max(10, Math.min(250, viewNm() * 1.05));
+  // zoomed out on the worldwide picture (every scope, nothing picked): the dots are all there is to see, so the
+  // 250 nm feed isn't asked; it's back the moment a scope zooms in under 250 nm
+  const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && eachScope(worldShown).every(Boolean);
   if (RP) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
+  else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
+    ingest(); loadWorld(); loadBoats(); loadWx(); loadAtc(); }
   else try {
     const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
     if (RP) throw 0;                               // a timelapse started while this was on its way
@@ -2037,7 +2042,10 @@ function fitDep(a, ap) {
 let flowNeighbours = [];               // the other big airports near the picked one: traffic that fits them better isn't ours
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
-const routes = new Map(), routeAsked = new Map();
+// a callsign the server found no route for is asked again after 2 min and one with only a scheduled route after 10 (the FAA's filed
+// plan may turn up later and replace it); a filed one is kept
+const routes = new Map(), routeAsked = new Map(), routeGot = new Map();
+const routeStale = (cs, now) => { const r = routes.get(cs); return !(r && r[6] === 'filed') && now - (routeGot.get(cs) || 0) > (r ? 600000 : 120000); };
 function groundTag(a) {               // taxiing: type, and where it's going (departures) or ARR (just landed), as on ASDE-X
   const r = routeOf(a), fits = r && routeFits(a, r);
   const atDest = fits && r[1] != null && r[4] != null && gc(a.lat, a.lon, r[4], r[5]) < gc(a.lat, a.lon, r[1], r[2]);
@@ -2065,7 +2073,7 @@ async function loadRoutes() {
   const near = home ? [...S.aircraft].sort((x, y) => gc(x.lat, x.lon, home[5], home[6]) - gc(y.lat, y.lon, home[5], home[6])) : S.aircraft;
   for (const a of near) {
     const cs = a.cs.toUpperCase();
-    if ((a.ground && a.gs <= 2) || routes.has(cs) || !/^[A-Z0-9]{2,8}$/.test(cs) || cs === a.hex.toUpperCase()) continue;
+    if ((a.ground && a.gs <= 2) || (routes.has(cs) && !routeStale(cs, now)) || !/^[A-Z0-9]{2,8}$/.test(cs) || cs === a.hex.toUpperCase()) continue;
     if (now - (routeAsked.get(cs) || 0) < 8000) continue;
     if (a.id !== sel && !(home && gc(a.lat, a.lon, home[5], home[6]) < 220)) continue;
     want.push(cs); if (want.length >= 80) break;
@@ -2073,8 +2081,8 @@ async function loadRoutes() {
   if (!want.length) return;
   for (const cs of want) routeAsked.set(cs, now);
   try { const j = await (await fetch('/api/live/routes?cs=' + want.join(','))).json();
-    for (const [cs, r] of Object.entries(j)) { routes.set(cs, r); routeAsked.delete(cs); }
-    if (routes.size > 20000) routes.clear(); if (routeAsked.size > 20000) routeAsked.clear();
+    for (const [cs, r] of Object.entries(j)) { routes.set(cs, r); routeGot.set(cs, now); routeAsked.delete(cs); }
+    if (routes.size > 20000) { routes.clear(); routeGot.clear(); } if (routeAsked.size > 20000) routeAsked.clear();
     updateFlow(); if (sel) renderCard();
   } catch (e) {}
 }
@@ -2100,7 +2108,7 @@ function updateFlow() {
 }
 function flowOf(a) { const m = home && flowMem.get(a.id); return m ? m[0] : ''; }
 // altitude filter (header): feet, or null for no limit
-let altLo = null, altHi = null;
+let altLo = null, altHi = null, altOff = false;   // altOff: switched off by clicking ALT, the boxes kept
 function parseAlt(t) {
   t = String(t || '').trim().toUpperCase().replace(/[, ]/g, ''); if (!t) return null;
   const fl = t.startsWith('FL'), n = parseFloat(fl ? t.slice(2) : t);
@@ -2112,13 +2120,20 @@ function altOk(alt, ground) {
   return (altLo == null || v >= altLo) && (altHi == null || v <= altHi);
 }
 function setAltFilter() {
-  altLo = parseAlt($('altLo').value); altHi = parseAlt($('altHi').value);
-  $('altf').classList.toggle('on', altLo != null || altHi != null);
-  try { localStorage.setItem(KEY + '-alt', JSON.stringify([$('altLo').value, $('altHi').value])); } catch (e) {}
+  const lo = parseAlt($('altLo').value), hi = parseAlt($('altHi').value), set = lo != null || hi != null;
+  if (!set) altOff = false;
+  altLo = altOff ? null : lo; altHi = altOff ? null : hi;
+  $('altf').classList.toggle('on', set && !altOff); $('altf').classList.toggle('off', set && altOff);
+  try { localStorage.setItem(KEY + '-alt', JSON.stringify([$('altLo').value, $('altHi').value, altOff])); } catch (e) {}
   worldPtsT = 0;
 }
-try { const [lo, hi] = JSON.parse(localStorage.getItem(KEY + '-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; } catch (e) {}
-for (const id of ['altLo', 'altHi']) { $(id).addEventListener('input', setAltFilter); $(id).addEventListener('keydown', e => { if (e.key === 'Escape') { $(id).value = ''; setAltFilter(); $(id).blur(); } }); }
+try { const [lo, hi, off] = JSON.parse(localStorage.getItem(KEY + '-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; altOff = !!off; } catch (e) {}
+$('altT').addEventListener('click', e => {      // ALT turns the filter off and on, keeping the boxes (the label would only focus the min box)
+  e.preventDefault();
+  if (parseAlt($('altLo').value) == null && parseAlt($('altHi').value) == null) { $('altLo').focus(); return; }
+  altOff = !altOff; setAltFilter();
+});
+for (const id of ['altLo', 'altHi']) { $(id).addEventListener('input', () => { altOff = false; setAltFilter(); }); $(id).addEventListener('keydown', e => { if (e.key === 'Escape') { $(id).value = ''; setAltFilter(); $(id).blur(); } }); }
 setAltFilter();
 function matches(a) {               // does it pass the altitude and ARR / DEP filters
   if (!altOk(a.alt, a.ground)) return false;
