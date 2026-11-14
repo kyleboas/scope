@@ -1170,7 +1170,7 @@ function hitBoat(mx, my, r) {
 
 // ------------------------------------------------------------------ airspace and weather (a site with the 'wx' feature, livescope)
 // /api/live/wx gives the whole world's {t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...], ...]}],
-// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}, fetched every 5 min while
+// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]], err:{tfr}}, fetched every 5 min while
 // one of its layers is on (all off by default; not shown when playing back a timelapse). k: tfr, sigmet, csigmet
 // (convective), isigmet (international), airmet (G-AIRMET), cwa. Click inside an area or on a report for its text.
 let WX = null, wxT = 0, wxSel = null;            // wxSel: the items in the open popup, drawn brighter
@@ -1228,6 +1228,8 @@ function drawWx() {
     }
     ctx.globalAlpha = 1;
   }
+  if (L.tfr && WX.err && WX.err.tfr) {           // its source is down for this server: say so rather than show nothing
+    ctx.font = FONT(10); ctx.fillStyle = WX_COL.tfr; ctx.textAlign = 'center'; ctx.fillText('TFRs unavailable: ' + WX.err.tfr, P0.w / 2, P0.h - 40 * d); ctx.textAlign = 'left'; }
   if (!L.pirep) return;
   const tags = L.tags && view.half <= 80, r = 3.2 * d;
   for (const p of WX.pireps) {
