@@ -954,11 +954,26 @@ for (const [k, l] of Object.entries({
   H: 'CL30 CL35 C560 C56X C650 C680 C700 LJ45 LJ60 LJ75 H25B E55P E545 E550 GALX ASTR B350 PC12 C208 PC24 BE40',
   I: 'C150 C152 C162 C170 C172 C175 C177 C180 C182 C185 C206 C210 C310 C340 C414 C421 C510 C525 C25A C25B C25C C25M E50P SF50 PA18 PA22 PA24 PA28 P28A P28B P28R PA32 PA34 PA44 PA46 P46T SR20 SR22 S22T BE20 BE33 BE35 BE36 BE55 BE58 BE9L DA40 DA42 DA62 DV20 M20P M20T TBM7 TBM8 TBM9 AA5 RV7 RV8 RV10 EC35 EC45 R22 R44 R66 AS50 B06 B407 H60 S76',
 })) for (const t of l.split(' ')) CWT[t] = k;
+// tag declutter: a data block is drawn only where it doesn't cover one already placed this frame (the rest are dots
+// until you zoom in or hover them); tags placed last frame go first, so the same ones keep their tags as traffic moves
+let tagGrid = new Map(), tagWas = new Set(), tagNow = new Set();
+const TAG_CELL = 48;
+function tagReset(s) { tagGrid = new Map(); tagWas = s.tagNow || new Set(); tagNow = s.tagNow = new Set(); }   // per scope (split views)
+function tagFits(x0, y0, x1, y1, force) {   // the box is free (or force): reserve it and say yes
+  const c0 = Math.floor(x0 / TAG_CELL), c1 = Math.floor(x1 / TAG_CELL), r0 = Math.floor(y0 / TAG_CELL), r1 = Math.floor(y1 / TAG_CELL);
+  if (!force) for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++)
+    for (const b of tagGrid.get(c + ',' + r) || []) if (x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1]) return false;
+  const b = [x0, y0, x1, y1];
+  for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) { const k = c + ',' + r, l = tagGrid.get(k); if (l) l.push(b); else tagGrid.set(k, [b]); }
+  return true;
+}
+const tagFirst = key => (a, b) => tagWas.has(key(b)) - tagWas.has(key(a));
 function drawAircraft() {
   const d = dpr(), ppn = pxPerNm(), far = view.half > 300 || worldShown(), now = performance.now();
   drawn = [];
   if (!S) return;
-  for (const a of S.aircraft) {
+  const pri = a => a.id === sel || a.id === hover || a.emer ? 2 : tagWas.has(a.id) ? 1 : 0;
+  for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel) continue;
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
@@ -977,7 +992,8 @@ function drawAircraft() {
     }
     if (out) {
       ctx.fillStyle = '#5a5a5a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill();
-      if (L.tags && !far && !a.ground) shortTag(px, py, a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : ''), COL.dbDim);
+      const st = a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : '');
+      if (L.tags && !far && !a.ground && tagFits(px - 3*d, py - 6*d, px + (14 + st.length * .62 * TAG(10)) * d, py + 6*d)) { tagNow.add(a.id); shortTag(px, py, st, COL.dbDim); }
       continue;
     }
     const blend = far && worldShown() && !isSel && !isHov && !emer;   // zoomed out with the worldwide dots: look like them
@@ -989,6 +1005,8 @@ function drawAircraft() {
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
     const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
+    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + lh + 3*d), isSel || isHov || emer)) continue;
+    tagNow.add(a.id);
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
     ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
@@ -1064,21 +1082,25 @@ function drawWorld() {
     ctx.stroke();
   }
   if (L.tags && view.half <= 300) {              // zoomed in (playing back the past): tag the dots like live traffic
-    ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d;
-    for (const w of worldPts) {
+    ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d, fs = TAG(11), wk = w => 'w' + w.r[0];
+    for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if (w.k !== 0 && w.k !== 3) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
-      if (++n > 400) break;
       const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
+      if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d))) continue;
+      if (++n > 400) break;
+      tagNow.add(wk(w));
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
       ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + wl);
     }
     n = 0;                                       // outside the altitude filter: a short tag, the altitude
-    for (const w of worldPts) {
+    for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if (w.k !== 1 && w.k !== 4) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      if (!tagFits(x - 3*d, y - 6*d, x + (14 + 3 * .62 * TAG(10)) * d, y + 6*d)) continue;
       if (++n > 400) break;
+      tagNow.add(wk(w));
       shortTag(x, y, a3(w.r[5] * 100), w.est ? '#2c5a2c' : COL.dbDim);
     }
   }
@@ -1405,7 +1427,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
