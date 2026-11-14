@@ -58,7 +58,7 @@
   #card .pr span { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; cursor:pointer; color:var(--fg2); }
   #card .pr span.on { border-color:#4fb3ff; color:#4fb3ff; }
   body.noApt #list { display:none; }
-  body.noApt.noCard { grid-template-columns:1fr; } body.noApt.noCard #side { display:none; }
+  body.noApt.noCard, body.sideShut:not(.listOpen) { grid-template-columns:1fr; } body.noApt.noCard #side, body.sideShut:not(.listOpen) #side { display:none; }
   #list { overflow:auto; flex:1; padding:4px 0; font:11px/1.5 var(--mono); color:var(--fg2); }
   .tr { display:grid; grid-template-columns:1ch 8ch 5ch 6ch 4ch 1fr; gap:6px; padding:2px 10px; cursor:pointer; white-space:nowrap; }
   .tr:hover { background:var(--alt); } .tr.on { background:var(--soft); color:var(--fg); }
@@ -778,6 +778,7 @@ function setHome(a, fly, half) {
 function updateSide() {
   const b = document.body, was = b.className;
   b.classList.toggle('noApt', !home); b.classList.toggle('noCard', $('card').style.display === 'none');
+  b.classList.toggle('sideShut', !!home && homeCardShut && !sel);   // the airport card closed with ✕: no side panel (the List button still opens it on phones)
   if (!home && !sel) b.classList.remove('listOpen');
   if (b.className !== was) resize();
 }
@@ -825,7 +826,7 @@ function renderCard1() {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
     procSel = procSel && procSel.join('|') === k.join('|') ? null : k; mapKey = ''; renderCard();
   });
-  $('cardX').onclick = () => { if (sel) select(null); else { homeCardShut = true; renderCard(); } };
+  $('cardX').onclick = () => { if (sel) select(null); else { homeCardShut = true; document.body.classList.remove('listOpen'); renderCard(); } };
 }
 // the airport's ATIS (FAA D-ATIS, US airports that have one) and latest METAR, refreshed every 2 min
 const atis = new Map();                // ident -> {atis:[{type, code, text, time}], metar:{raw, cat}, t}
