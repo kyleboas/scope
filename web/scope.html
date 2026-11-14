@@ -546,7 +546,7 @@ function drawAircraft() {
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
     ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
-    const l2 = a.ground ? (a.gs > 2 ? 'TAXI ' + a.gs : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
+    const l2 = a.ground ? (a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
     if (l2) ctx.fillText(l2, bx, ly - 2*d + lh);
     if (isSel || isHov) { ctx.fillText([a.type || '----', a.sq, a.route && a.route[3]].filter(Boolean).join(' '), bx, ly - 2*d + 2*lh); if (a.reg || a.user) ctx.fillText(a.reg || a.user, bx, ly - 2*d + 3*lh); }
   }
@@ -1012,6 +1012,12 @@ let flowNeighbours = [];               // the other big airports near the picked
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
 const routes = new Map(), routeAsked = new Map();
+function groundTag(a) {               // taxiing: type, and where it's going (departures) or ARR (just landed), as on ASDE-X
+  const r = routeOf(a), fits = r && routeFits(a, r);
+  const atDest = fits && r[1] != null && r[4] != null && gc(a.lat, a.lon, r[4], r[5]) < gc(a.lat, a.lon, r[1], r[2]);
+  const end = !fits ? '' : atDest ? 'ARR' : r[3];
+  return [a.type, end].filter(Boolean).join(' ');
+}
 function routeOf(a) { return a.route || routes.get(a.cs.toUpperCase()); }     // a.route: the site's own (infinitescope: the filed plan)
 function routeFits(a, r) {
   if (r && r === a.route) return true;
@@ -1033,7 +1039,7 @@ async function loadRoutes() {
   const near = home ? [...S.aircraft].sort((x, y) => gc(x.lat, x.lon, home[5], home[6]) - gc(y.lat, y.lon, home[5], home[6])) : S.aircraft;
   for (const a of near) {
     const cs = a.cs.toUpperCase();
-    if (a.ground || routes.has(cs) || !/^[A-Z0-9]{2,8}$/.test(cs) || cs === a.hex.toUpperCase()) continue;
+    if ((a.ground && a.gs <= 2) || routes.has(cs) || !/^[A-Z0-9]{2,8}$/.test(cs) || cs === a.hex.toUpperCase()) continue;
     if (now - (routeAsked.get(cs) || 0) < 8000) continue;
     if (a.id !== sel && !(home && gc(a.lat, a.lon, home[5], home[6]) < 220)) continue;
     want.push(cs); if (want.length >= 80) break;
