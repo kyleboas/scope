@@ -116,7 +116,7 @@
   #tlbar input[type=range] { flex:1; min-width:60px; accent-color:#ff9f0a; }
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
-  #tlbar .ld { color:var(--dim); white-space:nowrap; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; }
+  #tlbar .ld { color:var(--dim); white-space:nowrap; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags] { color:var(--dim); } #tlbar [data-tl=tags].on { color:#ff9f0a; }
   body.tl #gnote { top:44px; }
   /* phones and small tablets, either way up: the side panel becomes a drawer (landscape) or a bottom sheet (portrait) */
   @media (max-width: 820px), (max-height: 500px) {
@@ -566,6 +566,18 @@ function drawWorld() {
     ctx.strokeStyle = c; ctx.beginPath();
     for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 2*d, y); ctx.arc(x, y, 2 * d, 0, 7); }
     ctx.stroke();
+  }
+  if (L.tags && view.half <= 300) {              // zoomed in (playing back the past): tag the dots like live traffic
+    ctx.font = FONT(11); let n = 0;
+    for (const w of worldPts) {
+      if (w.k !== 0 && w.k !== 3) continue;
+      const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      if (++n > 400) break;
+      const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
+      ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
+      ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
+      ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly + 11*d);
+    }
   }
   if (worldHover) {                              // its tag: callsign, altitude and ground speed, as of the snapshot
     const [x, y, z] = proj(worldHover.p[0], worldHover.p[1]); if (z < 0) return;
@@ -1049,9 +1061,16 @@ function ingest() {
     for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
   }
   const air = S.aircraft.filter(a => a.air).length;
-  $('status').innerHTML = `${air} airborne, ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.ok ? '' : ` <span class="bad">· ${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`) +
-    (worldShown() && WORLD ? ` · ${WORLD.ac.filter(r => !r[8]).length.toLocaleString()} airborne worldwide, ${Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60))} min old (<a href="${esc(SITE.world_link[0])}" target="_blank" rel="noopener">${esc(SITE.world_link[1])}</a>)` : '') +
-    (S.src ? ' · ' + ((SITE.src_links || {})[S.src] ? `<a href="${esc(SITE.src_links[S.src])}" target="_blank" rel="noopener">${esc(S.src)}</a>` : esc(S.src)) : '');
+  const link = (url, name) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
+  const src = S.src ? ` (${link((SITE.src_links || {})[S.src], S.src)})` : '';
+  let st = `${air} airborne · ${S.aircraft.length - air} on ground${src}`, tip = `${air} airborne and ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.src ? `, from ${S.src}` : '');
+  if (!S.ok) st += ` <span class="bad">· ${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
+  if (worldShown() && WORLD) {
+    const n = WORLD.ac.filter(r => !r[8]).length.toLocaleString(), age = Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60));
+    st += ` · ${n} worldwide (${link(SITE.world_link[0], SITE.world_link[1])}${age >= 2 ? `, ${age} min ago` : ''})`;
+    tip += ` · ${n} airborne worldwide from ${SITE.world_link[1]}, ${age} min old`;
+  }
+  $('status').innerHTML = st; $('status').title = tip;
   renderList(); if (sel) renderCard();
 }
 function renderList() {
@@ -1255,13 +1274,18 @@ function tlBar() {
     b.hidden = false; b.dataset.id = RP.rec.id + RP.gen;
     b.innerHTML = `<button data-tl="play" title="Play / pause (space)"></button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
       `<span class="t"></span><span class="ld"></span><span class="sp">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
-      `<button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
+      `<button data-tl="tags" title="Show or hide the data tags">TAGS</button><button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
     r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); liveOff.clear(); RP.ing = 0; });
     b.querySelector('[data-tl=play]').onclick = () => tlPlay(!RP.playing);
     b.querySelector('[data-tl=x]').onclick = () => tlClose();
+    b.querySelector('[data-tl=tags]').onclick = () => {     // the layers' "Data tags", in every scope
+      const on = !L.tags;
+      for (const sc of scopes) { const i = sc.el.querySelector('.layers [data-l=tags]'); if (i && i.checked !== on) { i.checked = on; i.dispatchEvent(new Event('change', { bubbles: true })); } }
+      tlBar();
+    };
     b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => { RP.speed = +x.dataset.sp; try { localStorage.setItem(KEY + (RP.rec.kind === 'world' ? '-tlwsp' : '-tlsp'), RP.speed); } catch (e) {} tlBar(); });
   }
   const r = b.querySelector('input'); r.min = t0; r.max = Math.max(t1, t0 + 1); if (!RP.drag) r.value = RP.t;
@@ -1270,6 +1294,7 @@ function tlBar() {
   const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
   b.querySelector('.ld').textContent = `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
+  b.querySelector('[data-tl=tags]').classList.toggle('on', !!L.tags);
 }
 function tlById(f) { if (!f[2]) f[2] = new Map(f[1].map(r => [r[0], r])); return f[2]; }
 // the traffic at replay time t: each aircraft eased from one snapshot to the next (or carried along its track if it drops out)
