@@ -1500,10 +1500,6 @@ function endPointer(e) {
   select(null);
   const wx = hitWx(mx, my, touch ? 20 : 10); if (wx.length) wxOpen(e.clientX, e.clientY, wx);
 }
-function pickAirport(ap) {
-  if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
-  setHome(ap, false);
-}
 onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
 onCv('pointerleave', () => { hover = null; worldHover = null; boatHover = null; });
 onCv('wheel', e => {
@@ -1511,6 +1507,10 @@ onCv('wheel', e => {
   const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
   const [mx, my] = canvasXY(e); zoomAt(mx, my, Math.exp(Math.max(-0.25, Math.min(0.25, px * (e.ctrlKey ? 0.004 : 0.0012)))));
 }, { passive:false });
+}
+function pickAirport(ap) {
+  if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
+  setHome(ap, false);
 }
 // the menu for a tap on several things at once : airports, then aircraft nearest first
 function pickMenu(x, y, aps, acs) {
