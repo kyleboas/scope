@@ -898,10 +898,9 @@ function renderCard1() {
       (a.user || a.vo ? `${esc(a.user || 'unlinked account')}${a.vo ? ' ' + dim(esc(a.vo)) : ''}<br>` : '') +
       `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
       `${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
-      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')} ${dim('filed' + (plan ? (plan.ifr ? ' IFR' : ' VFR') : ''))}<br>` : dim('no flight plan filed') + '<br>') +
+      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')}<br>` : dim('no flight plan filed') + '<br>') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}`) + '<br>' : '') +
-      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '') +
-      (FL && FL.id === a.id && FL.track ? dim('flown route in blue, plan dashed') : FL && FL.id === a.id && plan ? dim('plan dashed' + (srv === 'casual' ? ' · flown routes are kept only on Expert and Training' : '')) : '');
+      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
