@@ -143,6 +143,7 @@
   #card .fh.on b { color:#ff9f0a; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   /* timelapses: the panel (header button) and the playback bar */
+  #tlBtn.back, #tlBtn.back.on { color:var(--fg); white-space:nowrap; }
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
   #tlp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
@@ -205,7 +206,7 @@
     body { grid-template-columns:1fr; }
     header { padding:3px max(8px, env(safe-area-inset-right)) 10px max(8px, env(safe-area-inset-left)); }
     #q { width:120px; } #srvs button i { display:none; } #res { width:min(340px, 90vw); }
-    #status, #hmetar { display:none; } #tlBtn span { display:none; } #tlbar .sp button:not(:nth-child(3n)) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
+    #status, #hmetar { display:none; } #tlBtn span { display:none; } #tlbar .sp:not(.own) button:not(:nth-child(3n)), #tlbar .sp.own button:not(.on) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
     #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 50vw); z-index:3; background:rgba(28,28,30,.97); display:none;
             padding-right:env(safe-area-inset-right); }
     body.listOpen #side { display:flex; }
@@ -2492,6 +2493,10 @@ async function tlOpen(id, fly, pastH) {
   S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
   history.replaceState(null, '', '?tl=' + id + (pastH ? '&h=' + pastH : '') + location.hash);
   if (!tlSpeeds().includes(RP.speed)) RP.speed = rec.speed || (world ? 600 : 60);
+  if (rec.back) {                          // a site that only plays recordings: the header button goes back to its list
+    const b = $('tlBtn'); b.classList.add('back'); b.title = rec.back[2] || ''; b.innerHTML = '‹ ' + esc(rec.back[1]);
+    b.onclick = () => { location.href = rec.back[0]; };
+  }
   if (has('radio')) radioOpen(rec);
   if (fly) { view.lat = rec.lat; view.lon = rec.lon; view.half = world ? R_NM * 1.05 : Math.max(5, rec.nm / 1.25); viewChanged(true); }
   tlBar(); mapKey = '';
@@ -2530,23 +2535,26 @@ function tlBar() {
   if (b.hidden || b.dataset.id !== RP.rec.id + RP.gen) {
     b.hidden = false; b.dataset.id = RP.rec.id + RP.gen;
     b.innerHTML = `<button data-tl="play" title="Play / pause (space)"></button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
-      `<span class="t"></span><span class="ld"></span><span class="sp">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
+      `<span class="t"></span><span class="ld"></span><span class="sp${RP.rec.speeds ? ' own' : ''}">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
       (RP.fh ? '<button data-tl="follow" title="Keep the aircraft in the middle (dragging the map stops it)">FOLLOW</button>' +
         '<button data-tl="traffic" title="Show the other aircraft that were within 60 nm of it">TRAFFIC</button><button data-tl="prof" title="Altitude and speed through the flight">PROFILE</button>' : '') +
       `<button data-tl="tags" title="Show or hide the data tags">TAGS</button>` +
-      (RP.rec.back ? `<button data-tl="x" title="${esc(RP.rec.back[2] || '')}">${esc(RP.rec.back[1])}</button>` : '<button data-tl="x" title="Back to live traffic">LIVE ✕</button>');
+      (RP.rec.back ? '' : '<button data-tl="x" title="Back to live traffic">LIVE ✕</button>');
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
     r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); motion.clear(); RP.ing = 0; });
     b.querySelector('[data-tl=play]').onclick = () => tlPlay(!RP.playing);
-    b.querySelector('[data-tl=x]').onclick = () => { if (RP.rec.back) location.href = RP.rec.back[0]; else tlClose(); };   // rec.back [url, label, title]
+    const x = b.querySelector('[data-tl=x]'); if (x) x.onclick = () => tlClose();
     b.querySelector('[data-tl=tags]').onclick = () => {     // the layers' "Data tags", in every scope
       const on = !L.tags;
       for (const sc of scopes) { const i = sc.el.querySelector('.layers [data-l=tags]'); if (i && i.checked !== on) { i.checked = on; i.dispatchEvent(new Event('change', { bubbles: true })); } }
       tlBar();
     };
-    b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => { RP.speed = +x.dataset.sp; try { localStorage.setItem(tlSpKey(), RP.speed); } catch (e) {} tlBar(); });
+    b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => {
+      const sp = tlSpeeds(), i = sp.indexOf(+x.dataset.sp);
+      RP.speed = RP.rec.speeds && +x.dataset.sp === RP.speed ? sp[(i + 1) % sp.length] : +x.dataset.sp;   // the lit one: the next speed
+      try { localStorage.setItem(tlSpKey(), RP.speed); } catch (e) {} tlBar(); });
     if (RP.fh) {
       b.querySelector('[data-tl=follow]').onclick = () => { RP.fh.follow = !RP.fh.follow; RP.ing = 0; tlBar(); };
       b.querySelector('[data-tl=traffic]').onclick = () => { fhPref('traffic', !fhPref('traffic')); fhFrames(RP); tlBar(); };
