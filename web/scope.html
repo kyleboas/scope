@@ -592,7 +592,6 @@ function drawAircraft() {
     const blend = far && worldShown() && !isSel && !isHov && !emer;   // zoomed out with the worldwide dots: look like them
     ctx.fillStyle = emer ? COL.alert : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
-    if (isSel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = d; ctx.strokeRect(px - 8*d, py - 8*d, 16*d, 16*d); }
     if ((far || !L.tags) && !isSel && !isHov && !emer) continue;
     if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer) continue;
     if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
