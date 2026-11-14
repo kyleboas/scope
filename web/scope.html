@@ -1436,10 +1436,30 @@ function flightCard(a, la, lo) {
       ['Violations', lg.viol.length ? lg.viol.map(v => `level ${v[0]} ${v[1]}`).join(', ') : 'none']]) : '');
   return `<div class="ph0"></div><div class="dt">${h}</div>`;
 }
+// the flown track coloured by altitude: orange on the ground, through yellow, green and cyan, to blue and violet at FL400
+const ALT_HUE = [[0, 20], [2000, 32], [4000, 43], [6000, 54], [8000, 72], [10000, 100], [20000, 175], [30000, 235], [40000, 285]];
+function altHue(ft) {
+  if (!(ft > 0)) return ALT_HUE[0][1];
+  for (let i = 1; i < ALT_HUE.length; i++) { const [a1, h1] = ALT_HUE[i - 1], [a2, h2] = ALT_HUE[i];
+    if (ft <= a2) return h1 + (h2 - h1) * (ft - a1) / (a2 - a1); }
+  return ALT_HUE[ALT_HUE.length - 1][1];
+}
+function trackLine(tr) {
+  ctx.lineWidth = 1.5 * dpr(); ctx.setLineDash([]); ctx.lineCap = 'round';
+  let prev = null, hue = null;
+  for (const p of tr) { const q = proj(p[0], p[1]); if (q[2] < 0) { if (prev) ctx.stroke(); prev = null; continue; }
+    const h = Math.round(altHue(p[2]) / 5) * 5;           // a new path only when the colour visibly changes
+    if (!prev) { ctx.strokeStyle = `hsl(${h}, 65%, 52%)`; ctx.beginPath(); ctx.moveTo(q[0], q[1]); hue = h; }
+    else { ctx.lineTo(q[0], q[1]);
+      if (h !== hue) { ctx.stroke(); ctx.strokeStyle = `hsl(${h}, 65%, 52%)`; ctx.beginPath(); ctx.moveTo(q[0], q[1]); hue = h; } }
+    prev = q; }
+  if (prev) ctx.stroke();
+  ctx.lineCap = 'butt';
+}
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
   const d = dpr();
-  if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2f3a6e', null, 1);
+  if (FL.track && FL.track.length > 1) trackLine(FL.track);
   const pts = (FL.plan && FL.plan.pts) || [], line = FL.plan && FL.plan.line;
   if (line && line.length > 1) geoLine(ctx, line, '#c86bd8', [6, 4], 1);
   if (pts.length > 1 || (line && line.length > 1)) {
