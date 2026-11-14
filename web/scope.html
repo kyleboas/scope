@@ -187,7 +187,7 @@
   #rlog .row.alert { color:var(--bad); background:#4a2020; } #rlog .row.warn { color:#e0b341; } #rlog .row.note { color:var(--dim); } #rlog .row.future { opacity:.22; }
   @media (max-width: 820px) and (max-aspect-ratio: 1/1) { body.radioOn #side { height:min(55dvh, 520px); } body.tlStrip #side { bottom:calc(41px + env(safe-area-inset-bottom)); } body.tlStrip.radioOn #side { height:min(46dvh, 460px); } body.tlStrip.radioOn #card { max-height:30%; } }   /* the sheet: a height for the card and the log to share */
   @media (min-width: 821px) and (min-height: 501px) {   /* a big screen keeps the side panel while there is a radio log (phones: the Info button) */
-    body.radioOn, body.radioOn.noApt.noCard, body.radioOn.sideShut:not(.listOpen) { grid-template-columns:1fr 330px; } body.radioOn #side { display:flex; }
+    body.radioOn, body.radioOn.noApt.noCard, body.radioOn.sideShut:not(.listOpen) { grid-template-columns:1fr 330px; } body.radioOn #side, body.radioOn.sideShut:not(.listOpen) #side { display:flex; }
   }
   /* a replayed flight's profile: altitude and ground speed, two charts on one time axis (on the panel's own background, line #d97706) */
   #fhprof { position:relative; flex:none; height:236px; box-sizing:border-box; background:transparent; border-bottom:1px solid var(--line); touch-action:none; cursor:crosshair; }
@@ -321,7 +321,7 @@ const PROC_SEL = '#4fb3ff';
 const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['allproc', 'Not in use per the ATIS'], ['nearby', 'At nearby airports'],
                 ['#', 'Navigation'], ['fixes', 'Fixes'], ['fixnames', 'Names', 'fixes'], ['rings', 'Range rings'], ['finals', 'Extended finals and ILS'],
                 ['#', 'Airports'], ['airports', 'Airports'], ['aptnames', 'Names', 'airports'], ['small', 'Small airports and strips'], ['runways', 'Runways'],
-                ['diagram', 'FAA airport diagrams (US)'], ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'],
+                ['diagram', 'FAA airport diagrams (US)'], ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'], ['gatenames', 'Gate and terminal names', 'taxi'],
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
@@ -330,7 +330,7 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
 const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, diagram:false, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
+            finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
             sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
@@ -727,10 +727,10 @@ function drawGround(c) {
         placed.push([ref, x, y]); c.fillText(ref, x, y + 3 * d); }
       c.textAlign = 'left';
     }
-    if (view.half < 1.6) { c.font = FONT(9); c.fillStyle = '#5a5a5a';
+    if (L.gatenames && view.half < 1.6) { c.font = FONT(9); c.fillStyle = '#5a5a5a';
       const seen = new Set(); for (const [n, p] of g.tm) { if (!n || seen.has(n)) continue; seen.add(n); let la = 0, lo = 0; for (const q of p) { la += q[0]; lo += q[1]; } const [x, y, z] = proj(la / p.length, lo / p.length); if (z > 0) { c.textAlign = 'center'; c.fillText(n, x, y); c.textAlign = 'left'; } } }
     if (view.half < 0.7) { c.font = FONT(8); c.fillStyle = '#4a4a4a';
-      for (const [ref, la, lo] of g.pp) { const [x, y, z] = proj(la, lo); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; c.fillRect(x - d, y - d, 2 * d, 2 * d); if (ref) c.fillText(ref, x + 3 * d, y + 3 * d); } }
+      for (const [ref, la, lo] of g.pp) { const [x, y, z] = proj(la, lo); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; c.fillRect(x - d, y - d, 2 * d, 2 * d); if (ref && L.gatenames) c.fillText(ref, x + 3 * d, y + 3 * d); } }
   }
 }
 
@@ -1702,6 +1702,7 @@ window.addEventListener('keydown', e => {
 });
 // Info: phones open or close the panel; wider screens show the airport's card (in place of an aircraft's) or close it
 $('listBtn').onclick = () => {
+  if (small.matches && RADIO && homeCardShut && !sel && document.body.classList.contains('listOpen')) { homeCardShut = false; autoOpen = false; renderCard(); return; }   // the log's sheet is up: show the card in it
   if (small.matches) { if (document.body.classList.toggle('listOpen') && homeCardShut) { homeCardShut = false; renderCard(); } autoOpen = false; updateSide(); return; }
   if (sel) { homeCardShut = false; select(null); } else { homeCardShut = !homeCardShut; renderCard(); }
 };
@@ -2753,7 +2754,11 @@ async function radioOpen(rec) {
   for (const [id, p] of Object.entries(RADIO.procs || {})) if (p) useGiven.set(id, { given: true, arr: new Map((p.arr || []).map(r => [r, new Set()])),
     arrSet: new Set(p.arr || []), dep: new Set(p.dep || []), use: new Set(['sid', 'star', 'approach'].flatMap(k => (p[k] || []).map(n => k + '|' + n))) });
   mapKey = ''; radioRender(); renderCard();   // the airport card lists them
-  if (small.matches && !RADIO.opened) { RADIO.opened = true; document.body.classList.add('listOpen'); updateSide(); }   // phones: the sheet (card and log) up from the start
+  if (!RADIO.opened) {                       // the log up from the start (phones: the sheet), the airport card shut until its button is pressed
+    RADIO.opened = true; if (home && !sel) homeCardShut = true;
+    if (small.matches) document.body.classList.add('listOpen');
+    renderCard();
+  }
 }
 function radioAlert(cs, t) {
   const v = radioAlerts.get(cs), w = (RADIO && RADIO.alert_s) || 20;
