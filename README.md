@@ -63,7 +63,10 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     `wx` (an Airspace and weather group in Layers, all off by default: TFRs, SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`
     endpoint that returns the whole world, `{ok, t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...]]}],
     pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}`, k one of tfr, sigmet,
-    csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; see livescope's `hazards.py`) and
+    csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; see livescope's `hazards.py`),
+    `history` (a Flights list in the aircraft card, each replayed on the scope with the timelapse bar, `?fh=<hex>&t=<start>`,
+    from a `history` endpoint: `?hex=` returns `{ok, every_s, keep_h, flights:[{t0, t1, cs, from, to, top, gnd, live,
+    pts:[[t, lat, lon, alt ft, gs, track, k: 0 air / 1 ground / 2 estimated]]}]}`; see livescope's `history.py`) and
     `boats` (a Boats layer, off by default, from a `boats` endpoint: `?lat=&lon=&nm=` returns `{ok, t, src, v:[[mmsi, lat,
     lon, sog kt, cog, heading or -1, ts, name, AIS ship type, destination, nav status]]}`; see livescope's `boats.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the

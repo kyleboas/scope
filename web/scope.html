@@ -133,6 +133,9 @@
   #card .acx { max-height:280px; overflow:auto; } #card .acm { margin:5px 0; } #card .acm span { display:block; font-size:10px; }
   #card .acm pre { margin:1px 0 0; font:inherit; color:var(--fg); white-space:pre-wrap; overflow-wrap:anywhere; }
   #card .acs em { display:block; font-style:normal; font-size:10px; margin-top:4px; }
+  #card .fh { display:grid; grid-template-columns:auto 1fr; gap:0 8px; align-items:center; margin:4px 0; }
+  #card .fh button { grid-row:1 / span 2; padding:2px 7px; color:#ff9f0a; } #card .fh b { font-weight:normal; color:var(--fg); } #card .fh span { font-size:10px; }
+  #card .fh.on b { color:#ff9f0a; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   /* timelapses: the panel (header button) and the playback bar */
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
@@ -154,7 +157,7 @@
   #tlbar > * { flex:none; } #tlbar input[type=range] { flex:1 1 100px; min-width:60px; accent-color:#ff9f0a; }
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
-  #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags] { color:var(--dim); } #tlbar [data-tl=tags].on { color:#ff9f0a; }
+  #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags], #tlbar [data-tl=follow] { color:var(--dim); } #tlbar [data-tl=tags].on, #tlbar [data-tl=follow].on { color:#ff9f0a; }
   body.tl #gnote { top:calc(var(--top) + 36px); }
   /* ATC (header button): the airports with ATC open and their inbound flights */
   #atcBtn.on { color:#5ac8fa; }
@@ -524,7 +527,7 @@ function drawMap() {
     if (L.coast) drawLines(c, LINES.coast, COL.coast);
   }
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
-  if (S && S.center && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
+  if (S && S.center && !(RP && RP.fh) && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
     const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${WORLD.every < 60 ? WORLD.every + ' s' : Math.round(WORLD.every / 60) + ' min'} (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
   if (L.finals && view.half < 80) drawFinals(c);
   if (view.half < 150) drawProcs(c);
@@ -1362,7 +1365,7 @@ function detailCard(a) {
       ['NACv', num(x.nac_v) ? `${x.nac_v} (${NACV[x.nac_v] || '?'})` : ''], ['NIC', num(x.nic) ? String(x.nic) : ''], ['NIC baro', num(x.nic_baro) ? String(x.nic_baro) : ''],
       ['Rc', num(x.rc) ? x.rc.toLocaleString() + ' m' : ''], ['SIL', num(x.sil) ? x.sil + (x.sil_type ? ' ' + x.sil_type.replace('per', 'per ') : '') : ''],
       ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
-  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`) + acarsCard(a);
+  return `<div class="ph0"></div>` + fhCard(a) + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`) + acarsCard(a);
 }
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
@@ -1388,7 +1391,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    drawWx(); drawWorld(); drawBoats(); drawFlight(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
@@ -1406,6 +1409,7 @@ window.addEventListener('resize', resize);
 const pts = new Map(); let drag = null, pinch = null;
 function canvasXY(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * dpr(), (e.clientY - r.top) * dpr()]; }
 function panBy(dx, dy) {               // move the view so the map follows the pointer
+  if (RP && RP.fh && RP.fh.follow) { RP.fh.follow = false; tlBar(); }
   setFrame(); const g = unproj(P0.w / 2 - dx, P0.h / 2 - dy);
   if (g) { view.lat = Math.max(-89, Math.min(89, g[0])); view.lon = g[1]; }
   else { view.lat = Math.max(-89, Math.min(89, view.lat + dy / P0.k / D2R)); view.lon = ((view.lon - dx / P0.k / D2R / Math.max(.1, P0.cl)) + 540) % 360 - 180; }
@@ -1553,7 +1557,7 @@ function select(id) {
   const b = document.body;
   if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
   if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
-  sel = id; renderCard(); loadFlight(); loadDetail(); loadAcars();
+  sel = id; renderCard(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
@@ -1601,7 +1605,7 @@ function renderCard1() {
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
       (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '') +
       (a.hex && has('aircraft') ? ` · <a href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(a.hex)}" target="_blank" rel="noopener">ADS-B Exchange ↗</a>` +
-        (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? '' : detailCard(a)) : '');
+        (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? (RP.fh ? fhCard(a) : '') : detailCard(a)) : '');
   } else if (home && !homeCardShut && has('atc')) {
     // controllers on duty here (and Centers within 400 nm), then the ATIS block
     const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < (SITE.ctr_nm || 400));
@@ -1996,7 +2000,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars();
+    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
@@ -2251,7 +2255,9 @@ async function tlAuth(q) {              // start / stop / check, with the key; a
   return j;
 }
 const TL_SPEEDS = [10, 30, 60, 120, 300, 600], TL_WSPEEDS = [60, 120, 300, 600, 1800, 3600];   // the world's snapshots are 1.5 or 15 min apart
-const tlSpeeds = () => RP && RP.rec.kind === 'world' ? TL_WSPEEDS : TL_SPEEDS;
+const TL_FSPEEDS = [1, 10, 30, 60, 120, 300];          // a flight's replay
+const tlSpeeds = () => RP && RP.rec.kind === 'world' ? TL_WSPEEDS : RP && RP.fh ? TL_FSPEEDS : TL_SPEEDS;
+const tlSpKey = () => KEY + (RP.rec.kind === 'world' ? '-tlwsp' : RP.fh ? '-fhsp' : '-tlsp');
 const TL_HOURS = [[0.25, '15 min'], [0.5, '30 min'], [1, '1 h'], [2, '2 h'], [3, '3 h'], [6, '6 h'], [12, '12 h'], [24, '24 h']];
 const tlTime = t => { const d = new Date(t * 1000); return d.toISOString().slice(5, 10).replace('-', '/') + ' ' + d.toISOString().slice(11, 19) + 'Z'; };
 // when a recording's next snapshot is due (the world's come every 90 s, or 15 min without an OpenSky API client)
@@ -2385,6 +2391,7 @@ function tlBar() {
     b.hidden = false; b.dataset.id = RP.rec.id + RP.gen;
     b.innerHTML = `<button data-tl="play" title="Play / pause (space)"></button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
       `<span class="t"></span><span class="ld"></span><span class="sp">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
+      (RP.fh ? '<button data-tl="follow" title="Keep the aircraft in the middle (dragging the map stops it)">FOLLOW</button>' : '') +
       `<button data-tl="tags" title="Show or hide the data tags">TAGS</button><button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
@@ -2397,15 +2404,17 @@ function tlBar() {
       for (const sc of scopes) { const i = sc.el.querySelector('.layers [data-l=tags]'); if (i && i.checked !== on) { i.checked = on; i.dispatchEvent(new Event('change', { bubbles: true })); } }
       tlBar();
     };
-    b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => { RP.speed = +x.dataset.sp; try { localStorage.setItem(KEY + (RP.rec.kind === 'world' ? '-tlwsp' : '-tlsp'), RP.speed); } catch (e) {} tlBar(); });
+    b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => { RP.speed = +x.dataset.sp; try { localStorage.setItem(tlSpKey(), RP.speed); } catch (e) {} tlBar(); });
+    if (RP.fh) b.querySelector('[data-tl=follow]').onclick = () => { RP.fh.follow = !RP.fh.follow; RP.ing = 0; tlBar(); };
   }
   const r = b.querySelector('input'); r.min = t0; r.max = Math.max(t1, t0 + 1); if (!RP.drag) r.value = RP.t;
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
   b.querySelector('.t').innerHTML = tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
   const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
-  b.querySelector('.ld').textContent = `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`; b.querySelector('.ld').title = b.querySelector('.ld').textContent;
+  b.querySelector('.ld').textContent = RP.fh ? `${RP.rec.name} · ${tlDur(t1 - t0)}` : `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`; b.querySelector('.ld').title = b.querySelector('.ld').textContent;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
   b.querySelector('[data-tl=tags]').classList.toggle('on', !!L.tags);
+  if (RP.fh) b.querySelector('[data-tl=follow]').classList.toggle('on', !!RP.fh.follow);
 }
 function tlById(f) { if (!f[2]) f[2] = new Map(f[1].map(r => [r[0], r])); return f[2]; }
 // the traffic at replay time t: each aircraft eased from one snapshot to the next (or carried along its track if it drops out)
@@ -2477,7 +2486,92 @@ function tlStep() {
     return;
   }
   S = { ok: true, t: RP.t, src: 'timelapse', center: [RP.rec.lat, RP.rec.lon], nm: RP.rec.nm, aircraft: tlAt(RP.t) };
-  if (now - RP.ing > 400) { RP.ing = now; ingest(); tlBar(); $('clock').textContent = tlTime(RP.t).slice(6); $('status').innerHTML = `timelapse ${esc(RP.rec.name)} · ` + $('status').innerHTML.replace(/ · timelapse$/, ''); }
+  if (RP.fh && RP.fh.follow && S.aircraft[0] && !drag) { const v = scopes[0].view; v.lat = S.aircraft[0].lat; v.lon = S.aircraft[0].lon; if (now - RP.ing > 400) viewChanged(); }
+  if (now - RP.ing > 400) { RP.ing = now; ingest(); tlBar(); $('clock').textContent = tlTime(RP.t).slice(6); $('status').innerHTML = RP.fh ? `replay ${esc(RP.rec.name)} · OpenSky, a position every ${fhEvery(RP.fh.every)}` : `timelapse ${esc(RP.rec.name)} · ` + $('status').innerHTML.replace(/ · timelapse$/, ''); }
+}
+
+// ------------------------------------------------------------------ flight history and replay (SITE feature 'history')
+// /api/live/history?hex= (livescope): the aircraft's flights over the last two days, from the world recording the server
+// keeps anyway (OpenSky every 90 s): {ok, every_s, keep_h, flights:[{t0, t1, cs, from, to, top, gnd, live, pts:[[t, lat,
+// lon, alt, gs, track, k]]}]}, k 0 airborne, 1 on the ground, 2 estimated over an ocean. A flight replays like a
+// timelapse of just that aircraft (the playback bar, 1x to 300x), along its whole track; ?fh=<hex>&t=<start> opens one.
+let FH = null, fhAsked = 0;            // {id, hex, got, ...the answer}
+async function loadHistory() {
+  const a = has('history') && !RP && sel && S && S.aircraft.find(o => o.id === sel);
+  if (!a || !/^[0-9a-f]{6}$/.test(a.hex || '') || (FH && FH.id === sel && Date.now() - FH.got < 60000) || Date.now() - fhAsked < 3000) return;
+  fhAsked = Date.now(); const id = sel;
+  try { const j = await (await fetch('/api/live/history?hex=' + a.hex)).json();
+    if (sel === id) { FH = { ...j, id, hex: a.hex, got: Date.now() }; renderCard(); } } catch (e) {}
+}
+const fhDay = t => new Date(t * 1000).toISOString().slice(8, 10) + ' ' + 'JanFebMarAprMayJunJulAugSepOctNovDec'.substr(new Date(t * 1000).getUTCMonth() * 3, 3);
+const fhEvery = s => s >= 600 ? Math.round(s / 60) + ' min' : s + ' s';
+const fhAlt = v => v >= 18000 ? 'FL' + Math.round(v / 100) : v.toLocaleString() + ' ft';
+function fhName(f, a) {                         // a still flying takes its airports from its route when it has one
+  const r = f.live && a && a.cs.trim() === f.cs && routeOf(a);
+  return `${f.cs || 'no callsign'} ${f.from || (r && r[0]) || '····'} → ${f.to || (r && r[3]) || '····'}${f.live ? ' (flying)' : ''}`;
+}
+function fhCard(a) {
+  if (!has('history') || !/^[0-9a-f]{6}$/.test(a.hex || '')) return '';
+  const d = FH && FH.id === a.id ? FH : null, hm = t => new Date(t * 1000).toISOString().slice(11, 16);
+  const head = `<i>Flights${d && d.ok ? ` · last ${d.keep_h} h` : ''}</i>`;
+  if (!d) return `<div class="acs">${head}<span>loading…</span></div>`;
+  if (!d.ok) return `<div class="acs">${head}<span>${esc(d.error || 'unavailable')}</span></div>`;
+  const fs = (d.flights || []).map((f, i) => [f, i]).reverse();
+  return `<div class="acs">${head}` + (fs.length ? fs.map(([f, i]) => `<div class="fh${RP && RP.fh && RP.fh.f === f ? ' on' : ''}"><button data-fh="${i}" title="Replay this flight">▶</button>` +
+      `<b>${esc(fhName(f, a))}</b><span>${fhDay(f.t0)} ${hm(f.t0)}–${f.live ? 'now' : hm(f.t1)}Z · ${tlDur(f.t1 - f.t0)}${f.gnd ? ' · on the ground' : ' · ' + fhAlt(f.top)}</span></div>`).join('')
+      : `<span>None recorded${d.first ? ' since ' + fhDay(d.first) + ' ' + hm(d.first) + 'Z' : ''}.</span>`) +
+    `<em>From OpenSky's worldwide picture, one position every ${fhEvery(d.every_s)}` +
+    `${d.indexing_h ? ` · still reading the last ${d.indexing_h} h` : ''}</em></div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#card [data-fh]');
+  if (b && FH && FH.flights[+b.dataset.fh]) { const a = S && S.aircraft.find(o => o.id === FH.id); fhPlay(FH.flights[+b.dataset.fh], FH.hex, a, true); }
+});
+async function fhOpen(hex, t, fly) {             // ?fh=<hex>&t=<start>: that flight (the latest if t isn't one of them)
+  if (!/^[0-9a-f]{6}$/.test(hex)) return;
+  try { const j = await (await fetch('/api/live/history?hex=' + hex)).json(), fs = (j && j.flights) || [];
+    FH = { ...j, id: hex, hex, got: Date.now() };
+    const f = fs.find(x => Math.abs(x.t0 - t) < 1) || fs.find(x => x.t0 <= t && t <= x.t1) || fs[fs.length - 1];
+    if (f) fhPlay(f, hex, null, fly); } catch (e) {}
+}
+function fhPlay(f, hex, a, fly) {
+  const P = f.pts; if (!P || P.length < 2) return;
+  const id = (a && a.id) || hex, cs = f.cs || (a && a.cs) || hex.toUpperCase(), type = (a && a.type) || '', reg = (a && a.reg) || '';
+  // frames of just this aircraft, a minute apart at most across the gaps (along the great circle), so the replay eases between them
+  const frames = [], put = (t, la, lo, alt, gs, trk, vs, k) => frames.push([t, [[id, cs, la, lo, Math.round(alt), Math.round(gs), trk, vs, k === 1 ? 1 : 0, type, reg, '', '']]]);
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i], q = P[i + 1], vs = q && q[0] > p[0] ? Math.round((q[3] - p[3]) / (q[0] - p[0]) * 60 / 100) * 100 : 0;
+    put(p[0], p[1], p[2], p[3], p[4], p[5], vs, p[6]);
+    if (!q) break;
+    const gap = q[0] - p[0], n = Math.floor(gap / 60), dist = gc(p[1], p[2], q[1], q[2]), b = brg(p[1], p[2], q[1], q[2]);
+    for (let j = 1; j < n; j++) {
+      const fr = j / n, [la, lo] = dest(p[1], p[2], b, dist * fr), [la2, lo2] = dest(p[1], p[2], b, dist * fr + 1);
+      put(p[0] + gap * fr, la, lo, p[3] + (q[3] - p[3]) * fr, dist / gap * 3600, dist > 0.5 ? brg(la, lo, la2, lo2) : p[5], vs, p[6] === 1 && q[6] === 1 ? 1 : 0);
+    }
+  }
+  let s0 = 90, n0 = -90, w0 = 180, e0 = -180;
+  for (const p of P) { s0 = Math.min(s0, p[1]); n0 = Math.max(n0, p[1]); w0 = Math.min(w0, p[2]); e0 = Math.max(e0, p[2]); }
+  const wide = e0 - w0 > 180, clat = (s0 + n0) / 2, clon = wide ? P[Math.floor(P.length / 2)][2] : (w0 + e0) / 2;
+  const span = Math.max(...P.map(p => gc(clat, clon, p[1], p[2])), 5);
+  tlClose(true);
+  const rec = { id: 'fh-' + hex + '-' + Math.round(f.t0), kind: 'flight', name: fhName(f, a), lat: clat, lon: clon, nm: span, every_s: 60, rec: false, first: f.t0, last: f.t1 };
+  RP = { rec, every: 1, from: 0, frames, t: f.t0, speed: +(localStorage.getItem(KEY + '-fhsp') || 60), playing: false, last: performance.now(), ing: 0, loading: false, gen: Math.random(),
+         fh: { hex, f, id, follow: false, every: (FH && FH.every_s) || 90, line: P.map(p => [p[1], p[2]]) } };
+  if (!TL_FSPEEDS.includes(RP.speed)) RP.speed = 60;
+  S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl');
+  history.replaceState(null, '', `?fh=${hex}&t=${Math.round(f.t0)}` + location.hash);
+  if (fly !== false) { const v = scopes[0].view; v.lat = clat; v.lon = clon; v.half = Math.max(4, Math.min(HALF_GLOBE, span * 1.15)); viewChanged(true); }
+  mapKey = ''; tlBar(); tlPlay(true); sel = id; renderCard();
+}
+function fhDraw() {                              // the replayed flight's whole track: dim ahead, bright where it has flown
+  if (!RP || !RP.fh) return;
+  const F = RP.fh, P = F.f.pts, line = F.line;
+  let lo = 0, hi = P.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (P[m][0] <= RP.t) lo = m; else hi = m - 1; }
+  ctx.globalAlpha = .35; geoLine(ctx, line, '#ff9f0a', null, 1.5); ctx.globalAlpha = 1;
+  const a = S && S.aircraft[0], done = line.slice(0, lo + 1); if (a) done.push([a.lat, a.lon]);
+  if (done.length > 1) geoLine(ctx, done, '#ff9f0a', null, 1.5);
+  for (const p of [P[0], P[P.length - 1]]) { const [x, y, z] = proj(p[1], p[2]); if (z < 0) continue; ctx.fillStyle = '#ff9f0a'; ctx.fillRect(x - 2 * dpr(), y - 2 * dpr(), 4 * dpr(), 4 * dpr()); }
 }
 
 // ------------------------------------------------------------------ start: #KSFO, #KSFO/40 or #lat,lon,half
@@ -2492,11 +2586,13 @@ function tlStep() {
   if (m) { Object.assign(view, { lat:+m[1], lon:+m[2], half:Math.max(HALF_MIN, Math.min(HALF_GLOBE, +m[3])) }); Object.assign(scopes[1].view, { lat:+m[1], lon:+m[2] }); }
   const last = (() => { try { return localStorage.getItem(KEY + '-home'); } catch (e) { return null; } })();   // the airport picked last time
   if (m) {}
-  else if (h || ((SITE.start !== null || last) && !new URLSearchParams(location.search).get('tl'))) want = (h || last || SITE.start || 'KSFO/52').split('/');
+  else if (h || ((SITE.start !== null || last) && !new URLSearchParams(location.search).get('tl') && !new URLSearchParams(location.search).get('fh'))) want = (h || last || SITE.start || 'KSFO/52').split('/');
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
   if (has('atc')) atcInit();
   const tlq = new URLSearchParams(location.search).get('tl');
+  const fhq = new URLSearchParams(location.search).get('fh');
+  if (has('history') && fhq && !tlq) fhOpen(fhq, +new URLSearchParams(location.search).get('t') || 0, !m && !h);
   if (has('timelapse')) { tlInit(); if (tlq) { const ph = +new URLSearchParams(location.search).get('h') || 0; tlOpen(tlq, !m && !h && !ph, ph); } }
   poll();
   fetch('/live/lines.json').then(r => r.json()).then(j => { LINES = { coast:prepLines(j.coast), borders:prepLines(j.borders), states:prepLines(j.states) }; mapKey = ''; });
