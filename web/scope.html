@@ -241,7 +241,7 @@ const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], 
                 ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
-const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
+const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
 // use(s) points cv / ctx / map / view / drawn / L at one of them. Outside drawing and input handlers they
