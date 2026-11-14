@@ -2734,7 +2734,7 @@ async function radioOpen(rec) {
   useGiven.clear();                        // procs: {ident: {arr, dep, sid, star, approach}}, exactly what the session flew
   for (const [id, p] of Object.entries(RADIO.procs || {})) if (p) useGiven.set(id, { given: true, arr: new Map((p.arr || []).map(r => [r, new Set()])),
     arrSet: new Set(p.arr || []), dep: new Set(p.dep || []), use: new Set(['sid', 'star', 'approach'].flatMap(k => (p[k] || []).map(n => k + '|' + n))) });
-  mapKey = ''; radioRender();
+  mapKey = ''; radioRender(); renderCard();   // the airport card lists them
 }
 function radioAlert(cs, t) {
   const v = radioAlerts.get(cs), w = (RADIO && RADIO.alert_s) || 20;
