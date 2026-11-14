@@ -246,12 +246,12 @@ const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approac
 const PROC_HOME = { star:['#4a4a4a', [2, 5]], transition:['#4a4a4a', [2, 5]], approach:['#6a6a6a', null], sid:['#3c3c3c', [8, 6]] };
 const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
-const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['atisproc', 'Only procedures in use per ATIS'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
+const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['allproc', 'Procedures not in use per the ATIS'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['aptnames', 'Airport names'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals and ILS'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['taxinames', 'Taxiway names'], ['states', 'State and province lines'],
                 ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
                 ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
-const L_DEFAULT = { star:true, approach:true, sid:true, atisproc:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
+const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
@@ -285,7 +285,7 @@ function makeScope(v) {
   lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<div class="tagsz"><span>Size</span><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Back to the default">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></div>` : '')).join('');
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround(); if (!n && e.target.dataset.l === 'allproc') renderCard();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
@@ -457,7 +457,7 @@ function fixMark(c, n, la, lo, col, label) {
   if (label) { c.fillStyle = col; c.fillText(n, x + 5*d, y + 3*d); }
 }
 function drawProcs(c) {
-  const d = dpr(), hid = home && home[0], u = L.atisproc && hid && procUse(hid);
+  const d = dpr(), hid = home && home[0], u = !L.allproc && hid && procUse(hid);
   for (const [id, ap] of procs) {
     const mine = id === hid;
     if (!mine && (view.half > 15 || !L.nearby)) continue;
@@ -1186,9 +1186,10 @@ function atisCard() {
 function procCard() {
   const ap = home && procs.get(home[0]);
   if (!ap) return home && home[4] !== 'US' ? '<div class="pr"><i>Procedures are shown for US airports only (FAA CIFP).</i></div>' : '';
-  const u = procUse(home[0]), only = u && scopes[0].L.atisproc;
+  const u = procUse(home[0]), only = u && !scopes[0].L.allproc;
   const groups = [['sid', 'SIDs'], ['star', 'STARs'], ['approach', 'Approaches']].map(([k, label]) => {
-    const names = [...new Set(ap.p.filter(r => r[0] === k).map(r => r[1]))].sort(), on = n => u && u.use.has(k + '|' + n);
+    const on = n => u && u.use.has(k + '|' + n), picked = n => procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n;
+    const names = [...new Set(ap.p.filter(r => r[0] === k).map(r => r[1]))].filter(n => !only || on(n) || picked(n)).sort();
     if (!names.length) return '';
     if (u) names.sort((a, b) => on(b) - on(a));      // the ones in use first
     return `<i>${label}${u ? ` <span class="dim">· ${names.filter(on).length} in use per the ATIS</span>` : ''}</i>` + names.map(n => `<span data-pk="${k}" data-pn="${esc(n)}" class="${procSel && procSel[0] === home[0] && procSel[1] === k && procSel[2] === n ? 'on' : on(n) ? 'use' : only ? 'off' : ''}">${esc(n)}</span>`).join('');
