@@ -261,10 +261,10 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'],
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
-                ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'],
+                ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
+            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -294,14 +294,14 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')));
+  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats')));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
     `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); if (!n && e.target.dataset.l === 'allproc') renderCard();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
@@ -769,6 +769,79 @@ function hitWorld(mx, my) {
   return best;
 }
 
+// ------------------------------------------------------------------ boats (a site with the 'boats' feature, livescope: AIS)
+// /api/live/boats?lat=&lon=&nm= gives {t, src, v:[[mmsi, lat, lon, sog kt, cog, heading or -1, ts, name, AIS type, destination, nav status]]}
+// for the view (the first scope with the layer on), every 15 s; drawn as small hulls pointing along their heading,
+// carried on at their speed and course since their report. Off by default (Layers: Boats). Not in timelapses.
+let BOATS = null, boatsT = 0, boatsKey = '', boatHover = null, boatSel = null;   // hover {b, p}; boatSel an MMSI
+const BOAT_COL = '#3fa9b5', BOAT_DIM = '#2a5f66', BOAT_MS = 15000;
+const boatsOn = () => !RP && eachScope(s => s.L.boats).some(Boolean);
+async function loadBoats() {
+  if (!has('boats') || !boatsOn()) { if (BOATS && !boatsOn()) BOATS = null; return; }
+  const s = scopes.find(x => x.L.boats && x.el.offsetWidth) || scopes[0]; use(s);
+  const nm = Math.max(10, Math.min(1500, viewNm() * 1.05)), lat = view.lat, lon = view.lon; use(scopes[0]);
+  const key = [Math.round(lat * 4), Math.round(lon * 4), Math.round(Math.log2(nm) * 2)].join();
+  if (key === boatsKey && Date.now() - boatsT < BOAT_MS) return;
+  boatsKey = key; boatsT = Date.now();
+  try { const j = await (await fetch(`/api/live/boats?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json(); if (j.ok && boatsOn()) BOATS = j; }
+  catch (e) { boatsT = Date.now() - BOAT_MS + 3000; }
+}
+const BOAT_TYPES = [[30, 'Fishing'], [31, 'Towing'], [32, 'Towing'], [33, 'Dredging'], [34, 'Diving'], [35, 'Military'], [36, 'Sailing'], [37, 'Pleasure craft'],
+  [50, 'Pilot'], [51, 'Search and rescue'], [52, 'Tug'], [53, 'Port tender'], [55, 'Law enforcement'], [58, 'Medical']];
+function boatType(t) {
+  const k = BOAT_TYPES.find(x => x[0] === t); if (k) return k[1];
+  return t >= 40 && t < 50 ? 'High-speed craft' : t >= 60 && t < 70 ? 'Passenger' : t >= 70 && t < 80 ? 'Cargo' : t >= 80 && t < 90 ? 'Tanker' : t >= 20 && t < 30 ? 'Wing in ground' : '';
+}
+const NAV = ['under way', 'at anchor', 'not under command', 'restricted', 'constrained by draught', 'moored', 'aground', 'fishing', 'sailing'];
+function boatPos(b, t = Date.now() / 1000) {    // [lat, lon, heading] now: carried on along its course, for at most 10 min
+  const [, la, lo, sog, cog, hdg, ts] = b, h = hdg >= 0 ? hdg : cog;
+  if (!(sog > 0.5) || cog < 0) return [la, lo, h];
+  return [...dest(la, lo, cog, sog / 3600 * Math.min(600, Math.max(0, t - ts))), h];
+}
+function drawBoats() {
+  if (!BOATS || !L.boats || RP) return;
+  const d = dpr(), close = view.half <= 60, t = Date.now() / 1000, tags = L.tags && view.half <= 12;
+  const pinned = [];
+  ctx.lineWidth = d;
+  for (const b of BOATS.v) {
+    const [la, lo, h] = boatPos(b, t), [x, y, z] = proj(la, lo);
+    if (z < 0 || x < -20 || y < -20 || x > P0.w + 20 || y > P0.h + 20) continue;
+    const moving = b[3] > 0.5, hi = b[0] === boatSel || (boatHover && boatHover.b[0] === b[0]);
+    if (hi) pinned.push([b, x, y]);
+    ctx.fillStyle = ctx.strokeStyle = hi ? COL.sel : moving ? BOAT_COL : BOAT_DIM;
+    if (!close && !hi) { ctx.fillRect(x - d, y - d, 2 * d, 2 * d); continue; }
+    const r = (hi ? 6 : 4.5) * d;
+    if (h == null || h < 0) { ctx.beginPath(); ctx.moveTo(x, y - r * .7); ctx.lineTo(x + r * .7, y); ctx.lineTo(x, y + r * .7); ctx.lineTo(x - r * .7, y); ctx.closePath(); ctx.stroke(); }
+    else {                                       // a hull: pointed bow ahead, square stern
+      const a = h * D2R, s = Math.sin(a), c = Math.cos(a), P = (f, w) => [x + s * f * r + c * w * r, y - c * f * r + s * w * r];
+      ctx.beginPath(); for (const [i, q] of [[1, 0], [.3, .45], [-.8, .45], [-.8, -.45], [.3, -.45]].entries()) { const [px, py] = P(...q); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.closePath(); moving ? ctx.fill() : ctx.stroke();
+      if (moving && view.half <= 20) {            // where it'll be in five minutes
+        const [ea, eo] = dest(la, lo, b[4] >= 0 ? b[4] : h, b[3] / 12), [ex, ey] = proj(ea, eo);
+        if (Math.hypot(ex - x, ey - y) > r * 1.5) { ctx.globalAlpha = .5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1; }
+      }
+    }
+    if (tags && !hi && b[7]) { ctx.font = FONT(TAG(9)); ctx.fillText(b[7], x + 8 * d, y + 3 * d); }
+  }
+  for (const [b, x, y] of pinned) boatTag(b, x, y, t);
+}
+function boatTag(b, x, y, t) {                 // the hovered or clicked boat: name, type and speed, destination, MMSI
+  const d = dpr(), lx = x + 10 * d, ly = y - 12 * d, lh = (TAG(11) + 2) * d;
+  const sp = b[3] > 0.5 ? `${b[3].toFixed(b[3] < 10 ? 1 : 0)} kt ${String(Math.round(b[4] >= 0 ? b[4] : b[5])).padStart(3, '0')}°` : (NAV[b[10]] && b[10] ? NAV[b[10]] : 'stopped');
+  const ago = Math.round(t - b[6]), lines = [b[7] || 'MMSI ' + b[0], [boatType(b[8]), sp].filter(Boolean).join(' · '),
+    b[9] ? '→ ' + b[9] : '', (b[7] ? 'MMSI ' + b[0] + ' · ' : '') + (ago < 90 ? ago + ' s' : Math.round(ago / 60) + ' min') + ' ago'].filter(Boolean);
+  ctx.font = FONT(TAG(11)); const w = Math.max(...lines.map(s => ctx.measureText(s).width)) + 8 * d;
+  ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(lx, ly - lh + 2 * d, w, lh * lines.length + 4 * d);
+  ctx.strokeStyle = ctx.fillStyle = COL.sel; ctx.beginPath(); ctx.moveTo(x + 4 * d, y - 4 * d); ctx.lineTo(lx, ly); ctx.stroke();
+  lines.forEach((s, i) => { ctx.fillStyle = i ? BOAT_COL : COL.sel; ctx.fillText(s, lx + 4 * d, ly - 2 * d + i * lh); });
+}
+function hitBoat(mx, my, r) {
+  if (!BOATS || !L.boats || RP) return null;
+  setFrame(); let best = null, bd = r * dpr();
+  for (const b of BOATS.v) { const p = boatPos(b), [x, y, z] = proj(p[0], p[1]); if (z < 0) continue; const dd = Math.hypot(x - mx, y - my); if (dd < bd) { bd = dd; best = { b, p }; } }
+  return best;
+}
+
 // ------------------------------------------------------------------ the selected flight's filed plan and flown route
 // (infinitescope: /api/live/flight; a site with the 'fplan' feature, livescope: /api/live/fplan by callsign, real
 // flight plans, {dep, arr, route, plan:{pts, line}} or {} when it has none)
@@ -862,7 +935,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    drawWorld(); drawFlight(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    drawWorld(); drawBoats(); drawFlight(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
@@ -945,7 +1018,8 @@ onCv('pointermove', e => {
     zoomAt(mx, my, pinch.half * pinch.d / (Math.hypot(a[0]-b[0], a[1]-b[1]) || 1) / view.half); return; }
   if (mDrag === e.pointerId && measure) { const p = measurePt(e); if (p) measure.b = p; return; }
   if (!drag) { if (e.pointerType === 'mouse') { const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, 16); hover = h ? h.a.id : null;
-    worldHover = !h && worldPts.length && worldShown() ? hitWorld(mx, my) : null; cv.style.cursor = h ? 'pointer' : ''; } return; }
+    worldHover = !h && worldPts.length && worldShown() ? hitWorld(mx, my) : null;
+    boatHover = !h && !worldHover ? hitBoat(mx, my, 12) : null; cv.style.cursor = h || boatHover ? 'pointer' : ''; } return; }
   if (!prev || !drag) return;
   if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) { drag.moved = true; clearTimeout(longT); }
   if (drag.moved) panBy((e.clientX - prev[0]) * dpr(), (e.clientY - prev[1]) * dpr());
@@ -964,8 +1038,10 @@ function endPointer(e) {
   const acs = hitAircraftAll(mx, my, touch ? 26 : 16).map(x => x.a);
   const aps = near && acs.length ? [] : hitAirports(mx, my, near ? 14 : touch ? 30 : 22);
   if (aps.length + acs.length > 1) { pickMenu(e.clientX, e.clientY, aps, acs); return; }
+  boatSel = null;
   if (aps.length) { pickAirport(aps[0]); return; }
   if (acs.length) { select(acs[0].id); return; }
+  const bt = hitBoat(mx, my, touch ? 22 : 12); if (bt) { boatSel = bt.b[0]; return; }
   select(null);
 }
 function pickAirport(ap) {
@@ -973,7 +1049,7 @@ function pickAirport(ap) {
   setHome(ap, false);
 }
 onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
-onCv('pointerleave', () => { hover = null; worldHover = null; });
+onCv('pointerleave', () => { hover = null; worldHover = null; boatHover = null; });
 onCv('wheel', e => {
   e.preventDefault();
   const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
@@ -1001,7 +1077,7 @@ window.addEventListener('wheel', pickClose, { passive:true });
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Escape' && !$('pick').hidden) { pickClose(); return; }
-  if (e.key === 'Escape') { if (measure) measure = null; else select(null); }
+  if (e.key === 'Escape') { if (measure) measure = null; else if (boatSel) boatSel = null; else select(null); }
   const zs = active && active.el.offsetWidth ? active : scopes[0];
   if (e.key === '+' || e.key === '=') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1 / 1.4); use(scopes[0]); }
   if (e.key === '-' || e.key === '_') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1.4); use(scopes[0]); }
@@ -1411,7 +1487,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail();
+    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
