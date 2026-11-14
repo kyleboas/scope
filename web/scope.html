@@ -254,6 +254,7 @@ function onCv(type, fn, opts) {
   for (const s of scopes) s.cv.addEventListener(type, e => { use(s); active = s; try { fn(e); } finally { s.drawn = drawn; use(scopes[0]); } }, opts);
 }
 let home = null;                       // the airport picked (range rings): [ident, iata, name, city, country, lat, lon, elev, kind]
+let homeCardShut = false;              // its card closed with ✕: the airport stays picked (rings, list, filters)
 let S = null, sel = null, hover = null;
 const liveOff = new Map(), hist = new Map();
 let LINES = null, MAJOR = [], KSFO = null;
@@ -730,6 +731,7 @@ function endPointer(e) {
   const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, e.pointerType === 'touch' ? 26 : 16);
   if (h) { select(h.a.id); return; }
   const ap = hitAirport(mx, my);
+  if (ap && home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
   if (ap) { setHome(ap, false); return; }
   select(null);
 }
@@ -764,7 +766,7 @@ function select(id) {
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
-  home = a; select(null); procSel = null; flowMem.clear();
+  home = a; homeCardShut = false; select(null); procSel = null; flowMem.clear();
   flowNeighbours = MAJOR.filter(o => o[0] !== a[0] && gc(a[5], a[6], o[5], o[6]) < 120); if (S) updateFlow(); renderFlt();
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; renderCard(); }).catch(() => {});
@@ -802,7 +804,7 @@ function renderCard1() {
       (routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeFits(a, routeOf(a)) ? 'scheduled route' : "scheduled route, but it doesn't fit where it is"}</span><br>` : '') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
       (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '');
-  } else if (home && has('atc')) {
+  } else if (home && !homeCardShut && has('atc')) {
     // controllers on duty here (and Centers within 400 nm), then the ATIS block
     const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < 400);
     const since = t => t ? new Date(t * 1000).toISOString().slice(11, 16) + 'Z' : '';
@@ -810,7 +812,7 @@ function renderCard1() {
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
       (fs.length || ctr.length ? `<div class="atc">${fs.concat(ctr).map(f => `<span>${esc(f.type)}</span><span>${esc(f.user || 'controller')}</span><span>since ${since(f.since)}</span>`).join('')}</div>`
         : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard();
-  } else if (home) {
+  } else if (home && !homeCardShut) {
     // its radio frequencies (OurAirports) and a link to listen on LiveATC.net, which has the audio for many airports
     const fq = (homeInfo && homeInfo[0] === home[0] && homeInfo[10]) || [];
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
@@ -823,7 +825,7 @@ function renderCard1() {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
     procSel = procSel && procSel.join('|') === k.join('|') ? null : k; mapKey = ''; renderCard();
   });
-  $('cardX').onclick = () => { if (sel) select(null); else { home = null; renderCard(); renderFlt(); renderList(); mapKey = ''; } };
+  $('cardX').onclick = () => { if (sel) select(null); else { homeCardShut = true; renderCard(); } };
 }
 // the airport's ATIS (FAA D-ATIS, US airports that have one) and latest METAR, refreshed every 2 min
 const atis = new Map();                // ident -> {atis:[{type, code, text, time}], metar:{raw, cat}, t}
@@ -1062,12 +1064,11 @@ function ingest() {
   }
   const air = S.aircraft.filter(a => a.air).length;
   const link = (url, name) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
-  const src = S.src ? ` (${link((SITE.src_links || {})[S.src], S.src)})` : '';
-  let st = `${air} airborne · ${S.aircraft.length - air} on ground${src}`, tip = `${air} airborne and ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.src ? `, from ${S.src}` : '');
-  if (!S.ok) st += ` <span class="bad">· ${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
+  let st = S.src ? link((SITE.src_links || {})[S.src], S.src) : '', tip = `${air} airborne and ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.src ? `, from ${S.src}` : '');
+  if (!S.ok) st += `${st ? ' · ' : ''}<span class="bad">${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
   if (worldShown() && WORLD) {
     const n = WORLD.ac.filter(r => !r[8]).length.toLocaleString(), age = Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60));
-    st += ` · ${n} worldwide (${link(SITE.world_link[0], SITE.world_link[1])}${age >= 2 ? `, ${age} min ago` : ''})`;
+    st += `${st ? ' · ' : ''}${n} worldwide (${link(SITE.world_link[0], SITE.world_link[1])}${age >= 2 ? `, ${age} min ago` : ''})`;
     tip += ` · ${n} airborne worldwide from ${SITE.world_link[1]}, ${age} min old`;
   }
   $('status').innerHTML = st; $('status').title = tip;
@@ -1264,7 +1265,7 @@ function tlClose(quiet) {
 }
 function tlPlay(on) {
   if (!RP) return;
-  const F = RP.frames; if (on && F.length && RP.t >= F[F.length - 1][0] && !RP.rec.rec) RP.t = F[0][0];   // from the start again
+  const F = RP.frames; if (on && F.length && RP.t >= F[F.length - 1][0]) RP.t = F[0][0];   // from the start again
   RP.playing = on; RP.last = performance.now(); tlBar();
 }
 function tlBar() {
@@ -1344,11 +1345,20 @@ function tlWorldAt(t) {
   }
   return out;
 }
+function tlLoop() {
+  const F = RP.frames;
+  if (RP.pastH) { const cut = Date.now() / 1000 - RP.pastH * 3600, i = F.findIndex(f => f[0] >= cut); if (i > 0 && F.length - i >= 2) F.splice(0, i); }   // the past stays the last n hours
+  RP.t = F[0][0]; hist.clear(); liveOff.clear(); RP.ing = 0;
+}
 function tlStep() {
   const now = performance.now(), F = RP.frames, el = Math.min(250, now - RP.last); RP.last = now;
   if (!F.length) return;
   const end = F[F.length - 1][0];
-  if (RP.playing && !RP.drag) { RP.t += el / 1000 * RP.speed; if (RP.t >= end) { RP.t = end; if (!RP.rec.rec && !RP.loading) tlPlay(false); } }
+  if (RP.playing && !RP.drag) {                 // plays on a loop: at the end, a second's pause, then from the start
+    if (RP.t < end) { RP.t = Math.min(end, RP.t + el / 1000 * RP.speed); RP.hold = 0; }
+    else if (!RP.hold) RP.hold = now;
+    else if (now - RP.hold > 1200 && !RP.loading) { RP.hold = 0; tlLoop(); }
+  }
   RP.t = Math.max(F[0][0], Math.min(end, RP.t));
   if (RP.rec.kind === 'world') {
     { const [ac, est] = tlWorldAt(RP.t); WORLD = { ok: true, t: RP.t, every: RP.rec.every_s, ac, est }; worldPtsT = 0; }   // every frame (well under a ms), so the dots glide
