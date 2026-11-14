@@ -155,11 +155,17 @@
   #tlp .rec .on { color:#ff453a; } #tlp .past { border-bottom:1px solid var(--line); margin-bottom:6px; } #tlp .past select { margin-right:4px; }
   #tlp .rec div { grid-row:1 / span 2; grid-column:2; display:flex; align-items:center; }
   #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:var(--top); z-index:3; display:flex; align-items:center; gap:4px; width:min(900px, calc(100% - 16px)); box-sizing:border-box;
-           background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); }
+           background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); flex-wrap:wrap; row-gap:0; }
   #tlbar > * { flex:none; } #tlbar input[type=range] { flex:1 1 100px; min-width:60px; accent-color:#ff9f0a; }
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
-  #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags], #tlbar [data-tl=follow] { color:var(--dim); } #tlbar [data-tl=tags].on, #tlbar [data-tl=follow].on { color:#ff9f0a; }
+  #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags], #tlbar [data-tl=follow], #tlbar [data-tl=traffic], #tlbar [data-tl=prof] { color:var(--dim); } #tlbar [data-tl=tags].on, #tlbar [data-tl=follow].on, #tlbar [data-tl=traffic].on, #tlbar [data-tl=prof].on { color:#ff9f0a; }
+  /* a replayed flight's profile: altitude and ground speed, two charts on one time axis (dark surface #141416, line #d97706) */
+  #fhprof { position:absolute; left:50%; transform:translateX(-50%); bottom:44px; z-index:3; width:min(900px, calc(100% - 16px)); height:150px; box-sizing:border-box;
+            background:#141416; border:1px solid var(--line); border-radius:8px; touch-action:none; cursor:crosshair; }
+  #fhprof[hidden] { display:none; } #fhprof canvas { display:block; width:100%; height:100%; }
+  #fhprof .tip { position:absolute; top:4px; pointer-events:none; background:#1c1c1e; border:1px solid var(--line); border-radius:5px; padding:3px 7px;
+                 font:11px/1.4 var(--mono); color:var(--fg); white-space:nowrap; } #fhprof .tip i { font-style:normal; color:var(--dim); }
   body.tl #gnote { top:calc(var(--top) + 36px); }
   /* ATC (header button): the airports with ATC open and their inbound flights */
   #atcBtn.on { color:#5ac8fa; }
@@ -182,6 +188,7 @@
     body { grid-template-columns:1fr; }
     header { padding:3px max(8px, env(safe-area-inset-right)) 10px max(8px, env(safe-area-inset-left)); }
     #q { width:120px; } #srvs button i { display:none; } #res { width:min(340px, 90vw); }
+    #fhprof { height:116px; bottom:calc(max(6px, env(safe-area-inset-bottom)) + 44px); }
     #status, #hmetar { display:none; } #tlBtn span { display:none; } #tlbar .sp button:not(:nth-child(3n)) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
     #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 50vw); z-index:3; background:rgba(28,28,30,.97); display:none;
             padding-right:env(safe-area-inset-right); }
@@ -237,6 +244,7 @@
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
   <div id="tlbar" hidden></div>
+  <div id="fhprof" hidden><canvas aria-label="Altitude and ground speed through the flight"></canvas><div class="tip" hidden></div></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
   <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category)">
     <button data-f="all">ALL</button><button data-f="arr">ARR</button><button data-f="dep">DEP</button><button data-f="both">ARR+DEP</button>
@@ -2391,7 +2399,7 @@ async function tlLoad(rp) {             // all of it, page by page, then (while 
 function tlClose(quiet) {
   if (!RP) return;
   RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; motion.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
-  $('tlbar').hidden = true; history.replaceState(null, '', location.pathname + location.hash);
+  $('tlbar').hidden = true; $('fhprof').hidden = true; history.replaceState(null, '', location.pathname + location.hash);
   if (!quiet) { worldFetchT = 0; schedule(0); }
 }
 function tlPlay(on) {
@@ -2406,7 +2414,8 @@ function tlBar() {
     b.hidden = false; b.dataset.id = RP.rec.id + RP.gen;
     b.innerHTML = `<button data-tl="play" title="Play / pause (space)"></button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
       `<span class="t"></span><span class="ld"></span><span class="sp">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
-      (RP.fh ? '<button data-tl="follow" title="Keep the aircraft in the middle (dragging the map stops it)">FOLLOW</button>' : '') +
+      (RP.fh ? '<button data-tl="follow" title="Keep the aircraft in the middle (dragging the map stops it)">FOLLOW</button>' +
+        '<button data-tl="traffic" title="Show the other aircraft that were within 60 nm of it">TRAFFIC</button><button data-tl="prof" title="Altitude and speed through the flight">PROFILE</button>' : '') +
       `<button data-tl="tags" title="Show or hide the data tags">TAGS</button><button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
@@ -2420,7 +2429,11 @@ function tlBar() {
       tlBar();
     };
     b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => { RP.speed = +x.dataset.sp; try { localStorage.setItem(tlSpKey(), RP.speed); } catch (e) {} tlBar(); });
-    if (RP.fh) b.querySelector('[data-tl=follow]').onclick = () => { RP.fh.follow = !RP.fh.follow; RP.ing = 0; tlBar(); };
+    if (RP.fh) {
+      b.querySelector('[data-tl=follow]').onclick = () => { RP.fh.follow = !RP.fh.follow; RP.ing = 0; tlBar(); };
+      b.querySelector('[data-tl=traffic]').onclick = () => { fhPref('traffic', !fhPref('traffic')); fhFrames(RP); tlBar(); };
+      b.querySelector('[data-tl=prof]').onclick = () => { fhPref('prof', !fhPref('prof')); fhProf(true); tlBar(); };
+    }
   }
   const r = b.querySelector('input'); r.min = t0; r.max = Math.max(t1, t0 + 1); if (!RP.drag) r.value = RP.t;
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
@@ -2429,7 +2442,8 @@ function tlBar() {
   b.querySelector('.ld').textContent = RP.fh ? `${RP.rec.name} · ${tlDur(t1 - t0)}` : `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`; b.querySelector('.ld').title = b.querySelector('.ld').textContent;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
   b.querySelector('[data-tl=tags]').classList.toggle('on', !!L.tags);
-  if (RP.fh) b.querySelector('[data-tl=follow]').classList.toggle('on', !!RP.fh.follow);
+  if (RP.fh) { b.querySelector('[data-tl=follow]').classList.toggle('on', !!RP.fh.follow); b.querySelector('[data-tl=prof]').classList.toggle('on', fhPref('prof'));
+    const tb = b.querySelector('[data-tl=traffic]'); tb.classList.toggle('on', fhPref('traffic')); tb.textContent = 'TRAFFIC' + (RP.fh.around === 'loading' && fhPref('traffic') ? '…' : ''); }
 }
 function tlById(f) { if (!f[2]) f[2] = new Map(f[1].map(r => [r[0], r])); return f[2]; }
 // the traffic at replay time t: each aircraft eased from one snapshot to the next (or carried along its track if it drops out)
@@ -2501,7 +2515,9 @@ function tlStep() {
     return;
   }
   S = { ok: true, t: RP.t, src: 'timelapse', center: [RP.rec.lat, RP.rec.lon], nm: RP.rec.nm, aircraft: tlAt(RP.t) };
-  if (RP.fh && RP.fh.follow && S.aircraft[0] && !drag) { const v = scopes[0].view; v.lat = S.aircraft[0].lat; v.lon = S.aircraft[0].lon; if (now - RP.ing > 400) viewChanged(); }
+  if (RP.fh && now - (RP.fh.drawn || 0) > 100) fhProf();
+  const me = RP.fh && S.aircraft.find(o => o.id === RP.fh.id);
+  if (RP.fh && RP.fh.follow && me && !drag) { const v = scopes[0].view; v.lat = me.lat; v.lon = me.lon; if (now - RP.ing > 400) viewChanged(); }
   if (now - RP.ing > 400) { RP.ing = now; ingest(); tlBar(); $('clock').textContent = tlTime(RP.t).slice(6); $('status').innerHTML = RP.fh ? `replay ${esc(RP.rec.name)} · OpenSky, a position every ${fhEvery(RP.fh.every)}` : `timelapse ${esc(RP.rec.name)} · ` + $('status').innerHTML.replace(/ · timelapse$/, ''); }
 }
 
@@ -2526,7 +2542,7 @@ function fhName(f, a) {                         // a still flying takes its airp
   return `${f.cs || 'no callsign'} ${f.from || (r && r[0]) || '····'} → ${f.to || (r && r[3]) || '····'}${f.live ? ' (flying)' : ''}`;
 }
 function fhCard(a) {
-  if (!has('history') || !/^[0-9a-f]{6}$/.test(a.hex || '')) return '';
+  if (!has('history') || !/^[0-9a-f]{6}$/.test(a.hex || '') || (RP && !(FH && FH.id === a.id))) return '';
   const d = FH && FH.id === a.id ? FH : null, hm = t => new Date(t * 1000).toISOString().slice(11, 16);
   const head = `<i>Flights${d && d.ok ? ` · last ${d.keep_h} h` : ''}</i>`;
   if (!d) return `<div class="acs">${head}<span>loading…</span></div>`;
@@ -2571,12 +2587,122 @@ function fhPlay(f, hex, a, fly) {
   tlClose(true);
   const rec = { id: 'fh-' + hex + '-' + Math.round(f.t0), kind: 'flight', name: fhName(f, a), lat: clat, lon: clon, nm: span, every_s: 60, rec: false, first: f.t0, last: f.t1 };
   RP = { rec, every: 1, from: 0, frames, t: f.t0, speed: +(localStorage.getItem(KEY + '-fhsp') || 60), playing: false, last: performance.now(), ing: 0, loading: false, gen: Math.random(),
-         fh: { hex, f, id, follow: false, every: (FH && FH.every_s) || 90, line: P.map(p => [p[1], p[2]]) } };
+         fh: { hex, f, id, follow: false, every: (FH && FH.every_s) || 90, line: P.map(p => [p[1], p[2]]), solo: frames, around: null } };
   if (!TL_FSPEEDS.includes(RP.speed)) RP.speed = 60;
   S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl');
   history.replaceState(null, '', `?fh=${hex}&t=${Math.round(f.t0)}` + location.hash);
   if (fly !== false) { const v = scopes[0].view; v.lat = clat; v.lon = clon; v.half = Math.max(4, Math.min(HALF_GLOBE, span * 1.15)); viewChanged(true); }
-  mapKey = ''; tlBar(); tlPlay(true); sel = id; renderCard();
+  mapKey = ''; tlBar(); tlPlay(true); sel = id; renderCard(); fhProf(true); fhAround(RP);
+}
+// the traffic around a replayed flight: /api/live/history?a=around gives the world recording's snapshots cut to 60 nm
+// around it ({every_s, frames:[[t, ac, est]]}, OpenSky's compact rows); each of the replay's frames gets them eased
+// between the two snapshots either side, so they glide along with it
+const fhPref = (k, v) => { try { if (v !== undefined) localStorage.setItem(KEY + '-fh' + k, v ? '1' : '0'); return localStorage.getItem(KEY + '-fh' + k) !== '0'; } catch (e) { return true; } };
+async function fhAround(rp) {
+  const F = rp.fh; F.around = 'loading'; tlBar();
+  try { const j = await (await fetch(`/api/live/history?a=around&hex=${F.hex}&t0=${F.f.t0}&t1=${F.f.t1}&nm=60`)).json();
+    if (RP !== rp) return;
+    F.around = j.ok ? j : null; if (F.around) fhFrames(rp);
+  } catch (e) { if (RP === rp) F.around = null; }
+  if (RP === rp) tlBar();
+}
+function fhFrames(rp) {
+  const F = rp.fh, W = F.around && F.around.frames;
+  if (!fhPref('traffic') || !W || !W.length) { rp.frames = F.solo; hist.clear(); motion.clear(); rp.ing = 0; return; }
+  const gapMax = Math.max(600, (F.around.every_s || 90) * 2.5), maps = new Map();
+  const byHex = i => { if (!maps.has(i)) maps.set(i, new Map([...(W[i][1] || []), ...(W[i][2] || [])].map(r => [r[0], r]))); return maps.get(i); };
+  const conv = (r, q, f, gap, est) => {           // OpenSky row (or estimate) eased toward q -> [id, cs, lat, lon, alt, gs, hdg, vs, gnd, type, reg, sq, emer]
+    let la = r[1], lo = r[2], alt = r[5] * 100, gs = r[4], trk = r[3], vs = 0;
+    if (q) { la += (q[1] - r[1]) * f; lo = ((r[2] + (((q[2] - r[2] + 540) % 360) - 180) * f) + 540) % 360 - 180;
+      alt += (q[5] - r[5]) * 100 * f; gs += (q[4] - r[4]) * f; trk = (r[3] + (((q[3] - r[3] + 540) % 360) - 180) * f + 360) % 360;
+      vs = Math.round((q[5] - r[5]) * 100 / gap * 60 / 100) * 100; }
+    return [r[0], r[7] || r[0].toUpperCase(), la, lo, Math.round(alt), Math.round(gs), trk, vs, est ? 0 : r[8] ? 1 : 0, '', '', '', ''];
+  };
+  let w = 0;
+  rp.frames = F.solo.map(([t, rows]) => {
+    while (w + 1 < W.length && W[w + 1][0] <= t) w++;
+    const a = W[w], b = W[w + 1], out = rows.slice();
+    if (a[0] > t || t - a[0] > gapMax) return [t, out];
+    const gap = b ? b[0] - a[0] : 0, f = gap > 0 ? Math.min(1, (t - a[0]) / gap) : 0, bm = b && gap < gapMax ? byHex(w + 1) : null;
+    for (const [k, est] of [[1, false], [2, true]]) for (const r of a[k] || []) {
+      const q = bm && bm.get(r[0]);
+      if (!q && t - a[0] > (F.around.every_s || 90)) continue;           // gone by the next snapshot
+      if (q && gc(r[1], r[2], q[1], q[2]) > Math.max(5, (r[4] + q[4]) / 2 * gap / 3600 * 1.5)) { if (f < .5) out.push(conv(r, null, 0, gap, est)); continue; }
+      out.push(conv(r, q, f, gap, est));
+    }
+    return [t, out];
+  });
+  hist.clear(); motion.clear(); rp.ing = 0;
+}
+
+// the profile: altitude above, ground speed below, one time axis; a crosshair and readout under the pointer, the replay's
+// moment as a hairline with a dot on each line, and pressing or dragging on it moves the replay there
+let fhHover = null;                              // the time under the pointer, or null
+function fhProf(force) {
+  const box = $('fhprof'), on = RP && RP.fh && fhPref('prof');
+  if (box.hidden !== !on) { box.hidden = !on; }
+  if (!on) return;
+  RP.fh.drawn = performance.now();
+  const cv2 = box.querySelector('canvas'), r = cv2.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (!r.width) return;
+  if (cv2.width !== Math.round(r.width * d) || cv2.height !== Math.round(r.height * d)) { cv2.width = Math.round(r.width * d); cv2.height = Math.round(r.height * d); }
+  const c = cv2.getContext('2d'), W = r.width, H = r.height, P = RP.fh.f.pts, t0 = P[0][0], t1 = Math.max(P[P.length - 1][0], t0 + 1);
+  c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, H);
+  const L0 = 52, R0 = 10, axisH = 16, gapY = 12, top = 4, ch = (H - top - axisH - gapY) / 2, x = t => L0 + (t - t0) / (t1 - t0) * (W - L0 - R0);
+  const nice = v => { const e = 10 ** Math.floor(Math.log10(Math.max(v, 1))), m = v / e; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e; };
+  const kfmt = v => v >= 10000 ? Math.round(v / 1000) + 'K' : Math.round(v).toLocaleString();
+  const charts = [{ name: 'Altitude', unit: 'ft', v: p => p[3], fill: true }, { name: 'Ground speed', unit: 'kt', v: p => p[4] }];
+  const at = t => { let lo = 0, hi = P.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (P[m][0] <= t) lo = m; else hi = m - 1; }
+    const a = P[lo], b = P[Math.min(P.length - 1, lo + 1)], f = b[0] > a[0] ? Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0]))) : 0; return [a, b, f]; };
+  c.font = '10px ui-monospace, Menlo, Consolas, monospace'; c.textBaseline = 'middle';
+  charts.forEach((k, i) => {
+    const y0 = top + i * (ch + gapY), max = nice(Math.max(...P.map(k.v)) * 1.05 || 1), y = v => y0 + ch - v / max * (ch - 12);
+    k.y = y;
+    c.strokeStyle = '#2c2c2e'; c.lineWidth = 1; c.fillStyle = '#98989f'; c.textAlign = 'right';
+    for (const v of [0, max / 2, max]) { const yy = Math.round(y(v)) + .5; c.beginPath(); c.moveTo(L0, yy); c.lineTo(W - R0, yy); c.stroke(); c.fillText(kfmt(v), L0 - 6, yy); }
+    c.textAlign = 'left'; c.fillStyle = '#c7c7cc'; c.fillText(`${k.name} (${k.unit})`, L0 + 6, y0 + 6);
+    // the line: 2px, round joins; estimated stretches (over an ocean) fainter
+    for (const est of [false, true]) {
+      c.beginPath(); let pen = false;
+      for (let j = 1; j < P.length; j++) { const a = P[j - 1], b = P[j];
+        if ((a[6] === 2 || b[6] === 2) !== est) { pen = false; continue; }
+        if (!pen) c.moveTo(x(a[0]), y(k.v(a))); c.lineTo(x(b[0]), y(k.v(b))); pen = true; }
+      c.globalAlpha = est ? .4 : 1; c.strokeStyle = '#d97706'; c.lineWidth = 2; c.lineJoin = c.lineCap = 'round'; c.stroke(); c.globalAlpha = 1;
+    }
+    if (k.fill) { c.beginPath(); c.moveTo(x(P[0][0]), y(0)); for (const p of P) c.lineTo(x(p[0]), y(k.v(p))); c.lineTo(x(P[P.length - 1][0]), y(0)); c.closePath();
+      c.fillStyle = 'rgba(217,119,6,.1)'; c.fill(); }
+  });
+  // time ticks along the bottom, on whole 5/10/15/30/60/120-minute marks
+  const span = t1 - t0, step = [300, 600, 900, 1800, 3600, 7200, 10800].find(s => span / s <= Math.max(2, (W - L0) / 90)) || 21600;
+  c.fillStyle = '#98989f'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) { const X = x(t); if (X < L0 + 14 || X > W - R0 - 14) continue;
+    c.fillText(new Date(t * 1000).toISOString().slice(11, 16) + 'Z', X, H - 4);
+    c.strokeStyle = '#2c2c2e'; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(X) + .5, top); c.lineTo(Math.round(X) + .5, H - axisH); c.stroke(); }
+  // the replay's moment, then the pointer's
+  const mark = (t, dots, col) => { const X = Math.round(x(t)) + .5, [a, b, f] = at(t);
+    c.strokeStyle = col; c.lineWidth = 1; c.beginPath(); c.moveTo(X, top); c.lineTo(X, H - axisH); c.stroke();
+    if (dots) for (const k of charts) { const v = k.v(a) + (k.v(b) - k.v(a)) * f, Y = k.y(v);
+      c.beginPath(); c.arc(X, Y, 6, 0, 7); c.fillStyle = '#141416'; c.fill(); c.beginPath(); c.arc(X, Y, 4, 0, 7); c.fillStyle = '#d97706'; c.fill(); } };
+  mark(Math.max(t0, Math.min(t1, RP.t)), true, 'rgba(199,199,204,.6)');
+  const tip = box.querySelector('.tip');
+  if (fhHover == null) { tip.hidden = true; return; }
+  const th = Math.max(t0, Math.min(t1, fhHover)), [a, b, f] = at(th);
+  mark(th, false, 'rgba(242,242,247,.35)');
+  const alt = a[3] + (b[3] - a[3]) * f, gs = a[4] + (b[4] - a[4]) * f, gnd = a[6] === 1 && b[6] === 1, est = a[6] === 2 || b[6] === 2;
+  tip.innerHTML = `<i>${new Date(th * 1000).toISOString().slice(11, 19)}Z</i> · ${gnd ? 'on the ground' : fhAlt(Math.round(alt / 25) * 25)} · ${Math.round(gs)} kt${est ? ' <i>· estimated</i>' : ''}`;
+  tip.hidden = false; const X = x(th), tw = tip.offsetWidth; tip.style.left = Math.max(4, Math.min(W - tw - 4, X + 10 > W - tw - 4 ? X - tw - 10 : X + 10)) + 'px';
+}
+{
+  const box = $('fhprof');
+  const tAt = e => { const r = box.getBoundingClientRect(), P = RP && RP.fh && RP.fh.f.pts; if (!P) return null;
+    const t0 = P[0][0], t1 = Math.max(P[P.length - 1][0], t0 + 1); return t0 + Math.max(0, Math.min(1, (e.clientX - r.left - 52) / (r.width - 62))) * (t1 - t0); };
+  const seek = t => { if (t == null || !RP) return; RP.t = t; hist.clear(); motion.clear(); RP.ing = 0; };
+  let down = false;
+  box.addEventListener('pointerdown', e => { down = true; box.setPointerCapture(e.pointerId); seek(tAt(e)); fhHover = tAt(e); fhProf(); });
+  box.addEventListener('pointermove', e => { fhHover = tAt(e); if (down) seek(fhHover); fhProf(); });
+  box.addEventListener('pointerup', () => { down = false; });
+  box.addEventListener('pointerleave', () => { if (!down) { fhHover = null; fhProf(); } });
+  addEventListener('resize', () => fhProf(true));
 }
 function fhDraw() {                              // the replayed flight's whole track: dim ahead, bright where it has flown
   if (!RP || !RP.fh) return;
@@ -2584,7 +2710,7 @@ function fhDraw() {                              // the replayed flight's whole 
   let lo = 0, hi = P.length - 1;
   while (lo < hi) { const m = (lo + hi + 1) >> 1; if (P[m][0] <= RP.t) lo = m; else hi = m - 1; }
   ctx.globalAlpha = .35; geoLine(ctx, line, '#ff9f0a', null, 1.5); ctx.globalAlpha = 1;
-  const a = S && S.aircraft[0], done = line.slice(0, lo + 1); if (a) done.push([a.lat, a.lon]);
+  const a = S && S.aircraft.find(o => o.id === F.id), done = line.slice(0, lo + 1); if (a) done.push([a.lat, a.lon]);
   if (done.length > 1) geoLine(ctx, done, '#ff9f0a', null, 1.5);
   for (const p of [P[0], P[P.length - 1]]) { const [x, y, z] = proj(p[1], p[2]); if (z < 0) continue; ctx.fillStyle = '#ff9f0a'; ctx.fillRect(x - 2 * dpr(), y - 2 * dpr(), 4 * dpr(), 4 * dpr()); }
 }

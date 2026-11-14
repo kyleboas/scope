@@ -66,7 +66,9 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; see livescope's `hazards.py`),
     `history` (a Flights list in the aircraft card, each replayed on the scope with the timelapse bar, `?fh=<hex>&t=<start>`,
     from a `history` endpoint: `?hex=` returns `{ok, every_s, keep_h, flights:[{t0, t1, cs, from, to, top, gnd, live,
-    pts:[[t, lat, lon, alt ft, gs, track, k: 0 air / 1 ground / 2 estimated]]}]}`; see livescope's `history.py`) and
+    pts:[[t, lat, lon, alt ft, gs, track, k: 0 air / 1 ground / 2 estimated]]}]}`; `?a=around&hex=&t0=&t1=&nm=` returns
+    `{ok, every_s, frames:[[t, OpenSky compact rows, estimate rows]]}`, the other aircraft within nm of it, for the replay's
+    TRAFFIC; the replay also charts altitude and ground speed (PROFILE); see livescope's `history.py`) and
     `boats` (a Boats layer, off by default, from a `boats` endpoint: `?lat=&lon=&nm=` returns `{ok, t, src, v:[[mmsi, lat,
     lon, sog kt, cog, heading or -1, ts, name, AIS ship type, destination, nav status]]}`; see livescope's `boats.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the
