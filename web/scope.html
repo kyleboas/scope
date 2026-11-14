@@ -2299,6 +2299,7 @@ document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
 });
 
 function trailDots(a, la, lo) {         // the trail's dots, oldest first, as [lat, lon]
+  if (RP && RP.rec.every_s <= 5 && RP.frames.length) return tlTrail(a.id);
   const h = hist.get(a.id) || [];
   if (!SITE.smooth_trails || RP) return h.slice(-6, -1);
   const now = Date.now() / 1000, pts = [...h.filter(q => q[2] < now), [la, lo, now]], out = [];
@@ -2538,6 +2539,7 @@ async function tlOpen(id, fly, pastH) {
   RP.speed = +(localStorage.getItem(tlSpKey()) || 0) || rec.speed || (world ? 600 : 60);
   S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
   history.replaceState(null, '', '?tl=' + id + (pastH ? '&h=' + pastH : '') + location.hash);
+  if (rec.clock === 'elapsed') $('clock').textContent = tlClock(RP.t);
   if (!tlSpeeds().includes(RP.speed)) RP.speed = rec.speed || (world ? 600 : 60);
   if (rec.back) {                          // a site that only plays recordings: the header button goes back to its list
     const b = $('tlBtn'); b.classList.add('back'); b.title = rec.back[2] || ''; b.innerHTML = '‹ ' + esc(rec.back[1]);
@@ -2630,6 +2632,20 @@ function tlBar() {
   b.querySelector('[data-tl=tags]').classList.toggle('on', !!L.tags);
   if (RP.fh) { b.querySelector('[data-tl=follow]').classList.toggle('on', !!RP.fh.follow); b.querySelector('[data-tl=prof]').classList.toggle('on', fhPref('prof'));
     const tb = b.querySelector('[data-tl=traffic]'); tb.classList.toggle('on', fhPref('traffic')); tb.textContent = 'TRAFFIC' + (RP.fh.around === 'loading' && fhPref('traffic') ? '…' : ''); }
+}
+// a recording with snapshots every few seconds (atc-at-home's sim, 2 s): the dots are where the aircraft was 4, 8, … 20 s
+// before the replay's time, eased between snapshots like the aircraft, so they glide along its path at any speed
+function tlTrail(id) {
+  const F = RP.frames, out = [];
+  for (let k = 5; k >= 1; k--) {
+    const tt = RP.t - 4 * k; if (tt < F[0][0]) continue;
+    let lo = 0, hi = F.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (F[m][0] <= tt) lo = m; else hi = m - 1; }
+    const p = tlById(F[lo]).get(id); if (!p) continue;
+    const b = F[lo + 1], q = b && tlById(b).get(id), f = q ? (tt - F[lo][0]) / (b[0] - F[lo][0] || 1) : 0;
+    out.push(q ? [p[2] + (q[2] - p[2]) * f, p[3] + ((((q[3] - p[3]) + 540) % 360) - 180) * f] : [p[2], p[3]]);
+  }
+  return out;
 }
 function tlById(f) { if (!f[2]) f[2] = new Map(f[1].map(r => [r[0], r])); return f[2]; }
 // the traffic at replay time t: each aircraft eased from one snapshot to the next (or carried along its track if it drops out)
