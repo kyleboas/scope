@@ -63,7 +63,7 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     `wx` (a Weather group in Layers, all off by default: SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`
     endpoint that returns the whole world, `{ok, t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...]]}],
     pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}`, k one of sigmet,
-    csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; see livescope's `hazards.py`),
+    csigmet, isigmet, airmet, cwa; clicking inside an area or on a report shows its text; served by `scope/hazards.py`: `"wx": Hazards().get`),
     `history` (a Flights list in the aircraft card, each replayed on the scope with the timelapse bar, `?fh=<hex>&t=<start>`,
     from a `history` endpoint: `?hex=` returns `{ok, every_s, keep_h, flights:[{t0, t1, cs, from, to, top, gnd, live,
     pts:[[t, lat, lon, alt ft, gs, track, k: 0 air / 1 ground / 2 estimated]]}]}`; see livescope's `history.py`) and
@@ -101,6 +101,7 @@ Anything every site can use belongs in scope (`scope/` or `web/scope.html`), not
 server.py        HTTP server for one site: the page (with the site's settings), map files, /api/live*
 scope/core.py    geometry, airports (OurAirports) and their ILS, procedures (FAA CIFP), ground maps (OSM), FAA airport diagrams
 scope/weather.py D-ATIS (atis.info) and METARs (aviationweather.gov)
+scope/hazards.py SIGMETs, G-AIRMETs, CWAs and PIREPs (aviationweather.gov) for the weather layers
 web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals
 livedata/        airports (OurAirports), procedures (FAA CIFP); ground/ and timelapse/ are written at runtime
