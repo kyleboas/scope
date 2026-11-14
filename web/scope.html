@@ -21,12 +21,14 @@
   #status a { color:var(--dim); }
   #status .bad { color:var(--bad); }
   .srch { position:relative; }
-  #q { width:230px; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 8px; font:12px var(--mono); }
-  #q:focus { outline:none; border-color:#636366; }
-  .altf { display:flex; align-items:center; gap:3px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
-  .altf input { width:6.5ch; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 5px; font:12px var(--mono); text-align:center; }
-  .altf input:focus { outline:none; border-color:#636366; }
-  .altf.on input { border-color:#4fb3ff88; }
+  /* search and altitude filter: bare text fields, a faint fill only while typing */
+  #q, .altf input { background:none; color:var(--fg); border:0; border-radius:4px; font:12px var(--mono); }
+  #q { width:200px; padding:5px 6px; }
+  #q:focus, .altf input:focus { outline:none; background:var(--alt); }
+  #q::placeholder, .altf input::placeholder { color:#5a5a5e; }
+  .altf { display:flex; align-items:center; gap:1px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
+  .altf input { width:4.5ch; padding:5px 2px; text-align:center; }
+  .altf.on, .altf.on input { color:#4fb3ff; }
   #res { position:absolute; left:0; top:calc(100% + 4px); z-index:5; width:340px; max-height:60vh; overflow:auto; background:rgba(28,28,30,.98);
          border-radius:6px; box-shadow:0 8px 24px #0008; display:none; }
   #res div { padding:7px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -138,7 +140,7 @@
   @media (max-width: 820px), (max-height: 500px) {
     body { grid-template-columns:1fr; }
     header { grid-column:1; padding:3px max(8px, env(safe-area-inset-right)) 3px max(8px, env(safe-area-inset-left)); }
-    #q { width:120px; } #srvs button i { display:none; } .altf input { width:5.5ch; } #res { width:min(340px, 90vw); }
+    #q { width:120px; } #srvs button i { display:none; } #res { width:min(340px, 90vw); }
     #status { display:none; } #tlBtn span { display:none; } #tlbar .sp button:not(:nth-child(3n)) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
     #listBtn { display:inline-block; margin-left:auto; } body.noApt #listBtn { display:none; }
     #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 50vw); z-index:3; background:rgba(28,28,30,.97); display:none;
@@ -158,12 +160,11 @@
     #list { min-height:120px; }
     #card .fq, #card .pr { max-height:120px; }
   }
-  /* narrow phones: the header takes two rows (clock, search, List / ALT, servers), and ALL/ARR/DEP sits above the view buttons */
+  /* narrow phones: one header row (clock, search, ALT, buttons; servers wrap below if there are any), and ALL/ARR/DEP sits above the view buttons */
   @media (max-width: 480px) {
-    header { flex-wrap:wrap; row-gap:3px; }
-    header::after { content:""; flex-basis:100%; order:3; }
-    #clock { order:0; font-size:13px; } .srch { order:1; flex:1 1 0; min-width:0; } #q { width:100%; } #listBtn { order:2; }
-    .altf { order:4; } #srvs { order:5; margin-left:auto; }
+    header { flex-wrap:wrap; row-gap:0; gap:4px; }
+    #clock { font-size:12px; margin-right:0; } .srch { flex:1 1 0; min-width:0; } #q { width:100%; }
+    #listBtn { margin-left:0; } header button { padding:5px 5px; } #srvs { order:9; }
     #tiles.one ~ .flt { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 36px); }
     #gnote { max-width:calc(100% - 16px); overflow:hidden; text-overflow:ellipsis; }
     #tiles:not(.one) ~ #gnote { top:42px; }
@@ -173,9 +174,9 @@
 <body>
 <header>
   <span id="clock">--:--:--Z</span>
-  <div class="srch"><input id="q" placeholder="Airport: KSFO, LHR, Narita…" autocomplete="off" spellcheck="false"><div id="res"></div></div>
+  <div class="srch"><input id="q" placeholder="Airport" title="Airport: code or name (KSFO, LHR, Narita)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
   <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category).">ALT
-    <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">–<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
+    <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <span id="srvs" title="Server"></span>
   <span id="status"></span>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
