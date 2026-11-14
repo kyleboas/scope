@@ -93,7 +93,8 @@ class Airports:
 class Ground:
     """Airport ground maps (taxiways with their letters, taxilanes, aprons, terminals, gates, hold lines) from
     OpenStreetMap through the Overpass API (ODbL), fetched the first time someone looks at an airport (one
-    query at a time; they take up to a minute) and kept in livedata/ground/ for 30 days."""
+    query at a time; they take up to a minute) and kept in livedata/ground/ for good: after 30 days the old
+    copy is still served while a fresh one is fetched behind it, so an airport is only ever waited on once."""
     URL = "https://overpass-api.de/api/interpreter"
     KINDS = "taxiway|taxilane|apron|terminal|parking_position|holding_position"
     TTL = 30 * 86400
@@ -186,18 +187,23 @@ class Ground:
         if ident not in self.airports.by_id:
             return None, "unknown"
         p = self.path(ident)
-        if os.path.exists(p) and time.time() - os.path.getmtime(p) < self.TTL:
+        if os.path.exists(p):
+            if time.time() - os.path.getmtime(p) >= self.TTL:
+                self.ask(ident)                     # old: refresh it behind the copy we have
             with open(p, "rb") as f:
                 return f.read(), None
+        return None, self.ask(ident)
+
+    def ask(self, ident):
         with self.lock:
             if time.time() - self.failed.get(ident, 0) < 600:
-                return None, "failed"
+                return "failed"
             if ident not in self.queue:
                 if len(self.queue) >= 20:
-                    return None, "busy"
+                    return "busy"
                 self.queue.append(ident)
                 self.wake.set()
-            return None, "pending"
+            return "pending"
 
 
 class Diagrams:

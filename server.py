@@ -55,7 +55,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def send(self, code, body, ctype="application/json", gz=None):
+    def send(self, code, body, ctype="application/json", gz=None, cache="no-store"):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, separators=(",", ":")).encode()
         elif isinstance(body, str):
@@ -68,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
         if zipped:
             self.send_header("Content-Encoding", "gzip")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         self.wfile.write(body)
 
@@ -109,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
             gz, state = GROUND.get(s("id"))
             if gz is None:
                 return self.send(200, {"state": state})
-            return self.send(200, gzip.decompress(gz), gz=gz)
+            return self.send(200, gzip.decompress(gz), gz=gz, cache="max-age=86400")   # the browser keeps it a day
         if path == "/api/live/diagram":
             pdf, state = DIAGRAMS.get(s("id"))
             return self.send(200, pdf, "application/pdf") if pdf else self.send(200, {"state": state})
