@@ -23,7 +23,6 @@ AIRPORTS = PROCS = GROUND = DIAGRAMS = None
 
 
 def load(site_dir):
-    global AIRPORTS, PROCS, GROUND, DIAGRAMS
     site_dir = os.path.abspath(site_dir)
     path = os.path.join(site_dir, "site.py")
     if not os.path.isfile(path):
@@ -32,9 +31,17 @@ def load(site_dir):
     spec = importlib.util.spec_from_file_location("scope_site", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    SITE.update(mod.SITE)
+    init(mod.SITE, mod.providers)
+
+
+def init(site, providers):
+    """Set the server up for a site: its SITE dict and providers() (see the README). load() calls this for a
+    site directory; another server can call it to serve a site in its own process (atc-at-home's dashboard
+    does, for its sim replays) and pass requests on to Handler.get."""
+    global AIRPORTS, PROCS, GROUND, DIAGRAMS
+    SITE.update(site)
     AIRPORTS = core.Airports()
-    P.update(mod.providers(airports=AIRPORTS) if "airports" in mod.providers.__code__.co_varnames else mod.providers())
+    P.update(providers(airports=AIRPORTS) if "airports" in providers.__code__.co_varnames else providers())
     PROCS = core.Procs(AIRPORTS)
     GROUND = core.Ground(AIRPORTS)
     DIAGRAMS = core.Diagrams(AIRPORTS)

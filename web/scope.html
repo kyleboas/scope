@@ -163,6 +163,21 @@
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
   #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags], #tlbar [data-tl=follow], #tlbar [data-tl=traffic], #tlbar [data-tl=prof] { color:var(--dim); } #tlbar [data-tl=tags].on, #tlbar [data-tl=follow].on, #tlbar [data-tl=traffic].on, #tlbar [data-tl=prof].on { color:#ff9f0a; }
+  /* the radio log (feature 'radio'): under the card, filling the rest of the side panel */
+  #rlog { flex:1 1 0; min-height:120px; display:flex; flex-direction:column; border-bottom:1px solid var(--line); font:11px/1.4 var(--mono); color:var(--fg2); }
+  #rlog[hidden] { display:none; } body.radioOn #card { max-height:45%; }
+  #rlog .rh { padding:6px 10px 4px; color:var(--dim); white-space:pre-wrap; } #rlog .rh span { display:block; } #rlog .rh .bad { color:var(--bad); }
+  #rlog .rf { display:flex; flex-wrap:wrap; gap:2px 10px; padding:2px 10px 6px; border-bottom:1px solid var(--line); color:var(--fg2); }
+  #rlog .rf label { display:inline-flex; align-items:center; gap:4px; cursor:pointer; } #rlog .rf input { margin:0; }
+  #rlog .rs { padding:4px 10px; border-bottom:1px solid var(--line); background:var(--card); } #rlog .rs[hidden] { display:none; } #rlog .rs b { color:var(--fg); } #rlog .rs button { margin-left:6px; padding:1px 6px; }
+  #rlog .rl { flex:1; overflow:auto; overscroll-behavior:contain; padding:3px 0; -webkit-user-select:text; user-select:text; }
+  #rlog .row { padding:1px 10px; white-space:pre-wrap; cursor:pointer; } #rlog .row:hover { background:var(--alt); }
+  #rlog .row .t { color:var(--dim); } #rlog .row .who { color:var(--fg); }
+  #rlog .row.alert { color:var(--bad); background:#4a2020; } #rlog .row.warn { color:#e0b341; } #rlog .row.note { color:var(--dim); } #rlog .row.future { opacity:.22; }
+  @media (max-width: 820px) and (max-aspect-ratio: 1/1) { body.radioOn #side { height:min(55dvh, 520px); } }   /* the sheet: a height for the card and the log to share */
+  @media (min-width: 821px) and (min-height: 501px) {   /* a big screen keeps the side panel while there is a radio log (phones: the Info button) */
+    body.radioOn, body.radioOn.noApt.noCard, body.radioOn.sideShut:not(.listOpen) { grid-template-columns:1fr 330px; } body.radioOn #side { display:flex; }
+  }
   /* a replayed flight's profile: altitude and ground speed, two charts on one time axis (on the panel's own background, line #d97706) */
   #fhprof { position:relative; flex:none; height:236px; box-sizing:border-box; background:transparent; border-bottom:1px solid var(--line); touch-action:none; cursor:crosshair; }
   #fhprof[hidden] { display:none; } #fhprof canvas { display:block; width:100%; height:100%; }
@@ -253,6 +268,7 @@
 </div>
 <div id="side">
   <div id="card"></div>
+  <div id="rlog" hidden></div>
   <div id="fhprof" hidden><canvas aria-label="Altitude and ground speed through the flight"></canvas><div class="tip" hidden></div></div>
 </div>
 <script>
@@ -1008,22 +1024,28 @@ function drawAircraft() {
     }
     const keep = fOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
     const blend = far && worldShown() && !isSel && !isHov && !emer && !keep;   // zoomed out with the worldwide dots: look like them
-    ctx.fillStyle = emer ? COL.alert : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
-    ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
+    ctx.fillStyle = emer ? COL.alert : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
+    if (a.ps && !blend && !far) {        // a.ps [letter, colour]: the STARS position symbol (the controlling position) instead of the dot
+      ctx.font = FONT(TAG(a.ground ? 9 : 11)); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.ps[0], px, py + .5*d);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    } else { ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill(); }
     if ((far || !L.tags) && !isSel && !isHov && !emer && !keep) continue;
     if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer) continue;
     if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
     const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
-    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + lh + 3*d), isSel || isHov || emer || keep)) continue;
+    const l3 = !a.ground && a.l3 ? a.l3 : '';                // a.l3: the site's third line (sim replays: assigned heading and altitude)
+    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep)) continue;
     tagNow.add(a.id);
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
-    ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
-    const l2 = a.ground ? (a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
+    ctx.fillText(a.cs + (radioTalk.has(a.cs) ? ' ◀' : '') + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
+    const l2 = a.ground ? (a.gt != null ? a.gt : a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
     if (l2) ctx.fillText(l2, bx, ly - 2*d + lh);
-    if (isSel || isHov) { ctx.fillText([a.type || '----', a.sq, a.route && a.route[3]].filter(Boolean).join(' '), bx, ly - 2*d + 2*lh); if (a.reg || a.user) ctx.fillText(a.reg || a.user, bx, ly - 2*d + 3*lh); }
+    if (l3) ctx.fillText(l3, bx, ly - 2*d + 2*lh);
+    const n = l3 ? 3 : 2;
+    if (isSel || isHov) { ctx.fillText([a.type || '----', a.sq, a.route && a.route[3]].filter(Boolean).join(' '), bx, ly - 2*d + n*lh); if (a.reg || a.user) ctx.fillText(a.reg || a.user, bx, ly - 2*d + (n + 1)*lh); }
   }
 }
 function shortTag(x, y, txt, col) {     // a short leader to the right, then the text level with the dot
@@ -1661,7 +1683,7 @@ function select(id) {
   const b = document.body;
   if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
   if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
-  sel = id; renderCard(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
+  sel = id; renderCard(); loadFlight(); loadDetail(); loadAcars(); loadHistory(); if (RADIO) radioFilter();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
@@ -1695,7 +1717,7 @@ function renderCard1() {
       (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
-    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
+    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` + (a.st ? `${esc(a.st)}<br>` : '') +
       `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
       `squawk ${esc(a.sq || '----')}${a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : ''} · ${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
       (FL && FL.id === a.id && FL.dep ? `${esc(FL.dep)} → ${esc(FL.arr || '????')} <span style="color:var(--dim)">filed flight plan</span><br>` +
@@ -2366,8 +2388,12 @@ async function tlAuth(q) {              // start / stop / check, with the key; a
 }
 const TL_SPEEDS = [10, 30, 60, 120, 300, 600], TL_WSPEEDS = [60, 120, 300, 600, 1800, 3600];   // the world's snapshots are 1.5 or 15 min apart
 const TL_FSPEEDS = [1, 10, 30, 60, 120, 300];          // a flight's replay
-const tlSpeeds = () => RP && RP.rec.kind === 'world' ? TL_WSPEEDS : RP && RP.fh ? TL_FSPEEDS : TL_SPEEDS;
-const tlSpKey = () => KEY + (RP.rec.kind === 'world' ? '-tlwsp' : RP.fh ? '-fhsp' : '-tlsp');
+// a recording may bring its own speeds (rec.speeds, the first one it opens at: rec.speed) and say its times are a session's
+// elapsed time (rec.clock 'elapsed': sim replays, t from 0) rather than UTC
+const tlSpeeds = () => RP && RP.rec.speeds ? RP.rec.speeds : RP && RP.rec.kind === 'world' ? TL_WSPEEDS : RP && RP.fh ? TL_FSPEEDS : TL_SPEEDS;
+const tlSpKey = () => KEY + (RP.rec.speeds ? '-tlrsp' : RP.rec.kind === 'world' ? '-tlwsp' : RP.fh ? '-fhsp' : '-tlsp');
+const hms = t => { t = Math.max(0, Math.round(t)); const h = Math.floor(t / 3600), m = String(Math.floor(t / 60) % 60).padStart(2, '0'), x = String(t % 60).padStart(2, '0'); return (h ? h + ':' : '') + m + ':' + x; };
+const tlClock = t => RP && RP.rec.clock === 'elapsed' ? hms(t - (RP.rec.zero || 0)) : tlTime(t).slice(6);   // rec.zero: the session's start
 const TL_HOURS = [[0.25, '15 min'], [0.5, '30 min'], [1, '1 h'], [2, '2 h'], [3, '3 h'], [6, '6 h'], [12, '12 h'], [24, '24 h']];
 const tlTime = t => { const d = new Date(t * 1000); return d.toISOString().slice(5, 10).replace('-', '/') + ' ' + d.toISOString().slice(11, 19) + 'Z'; };
 // when a recording's next snapshot is due (the world's come every 90 s, or 15 min without an OpenSky API client)
@@ -2402,7 +2428,7 @@ function tlPanel(force) {
   const what = here.world ? `worldwide traffic (OpenSky, one snapshot every ${TL.world_every >= 600 ? Math.round(TL.world_every / 60) + ' min' : TL.world_every + ' s'})`
     : `the ${here.nm} nm around the middle of this view`;
   const slow = here.world && TL.world_every >= 600 ? `<div class="note">The worldwide picture only updates every ${Math.round(TL.world_every / 60)} min (the server has no working OpenSky API client), so a world timelapse can play once it has two, after ${Math.round(TL.world_every / 60)}–${Math.round(TL.world_every / 30)} min, and an hour holds about ${Math.round(3600 / TL.world_every) + 1} pictures.</div>` : '';
-  p.innerHTML = tlPastRow(roll) + (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed${TL.keep_h ? ', and is deleted ' + TL.keep_h + ' h after it ends' : ''}. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
+  p.innerHTML = tlPastRow(roll) + (TL.no_rec ? `<div class="hd">${esc(TL.note || '')}</div>` : can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed${TL.keep_h ? ', and is deleted ' + TL.keep_h + ' h after it ends' : ''}. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
       (TL.need_key ? ' <button id="tlLock" title="Forget the key in this browser">LOCK</button>' : '') + '</div>' +
     `<div class="new"><input id="tlName" maxlength="40" spellcheck="false" placeholder="name" value="${esc(keep ?? here.name)}">` +
     `<select id="tlH">${TL_HOURS.filter(([h]) => h <= (TL.max_h || 24)).map(([h, t]) => `<option value="${h}"${h === hrs ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
@@ -2418,9 +2444,10 @@ function tlPanel(force) {
         : (ready ? span : r.first ? 'only one snapshot, nothing to play' : 'empty');
       return `<div class="rec"><b>${esc(r.name)}</b><div>${ready ? `<button data-tlplay="${r.id}">${RP && RP.rec.id === r.id ? 'PLAYING' : 'PLAY'}</button>` : ''}` +
         `${r.rec && can ? `<button data-tlstop="${r.id}" title="Stop recording">STOP</button>` : ''}</div>` +
-        `<i>${tlTime(r.start).slice(0, 11)} · ${st}${snaps} · ${r.kind === 'world' ? 'worldwide' : r.nm + ' nm'}${r.peak ? ' · up to ' + r.peak + ' aircraft' : ''}</i></div>`;
+        `<i>${r.sub != null ? esc(r.sub) : `${tlTime(r.start).slice(0, 11)} · ${st}${snaps} · ${r.kind === 'world' ? 'worldwide' : r.nm + ' nm'}${r.peak ? ' · up to ' + r.peak + ' aircraft' : ''}`}</i></div>`;   // r.sub: the site's own line (sim replays)
     }).join('');
-  if (!can) {
+  if (TL.no_rec) {}
+  else if (!can) {
     const go = async () => { tlSetKey($('tlKeyIn').value); try { await tlAuth('a=check'); } catch (e) { tlSetKey(''); tlErr = 'server unreachable'; } tlPanel(true); };
     $('tlUnlock').onclick = go; $('tlKeyIn').onkeydown = e => { if (e.key === 'Enter') go(); };
   } else {
@@ -2460,10 +2487,12 @@ async function tlOpen(id, fly, pastH) {
   // at most ~5000 snapshots in memory: long recordings are thinned (the easing covers the gaps)
   const from = pastH ? Math.max(rec.first, Date.now() / 1000 - pastH * 3600) : rec.first;
   const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - from) / rec.every_s + 1) / (world ? 150 : 5000)));
-  RP = { rec, every, from: pastH ? from : 0, pastH, frames: [], t: from, speed: +(localStorage.getItem(KEY + (world ? '-tlwsp' : '-tlsp')) || (world ? 600 : 60)), playing: false, last: performance.now(), ing: 0, loading: true, gen: Math.random() };
+  RP = { rec, every, from: pastH ? from : 0, pastH, frames: [], t: from, speed: 0, playing: false, last: performance.now(), ing: 0, loading: true, gen: Math.random() };
+  RP.speed = +(localStorage.getItem(tlSpKey()) || 0) || rec.speed || (world ? 600 : 60);
   S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
   history.replaceState(null, '', '?tl=' + id + (pastH ? '&h=' + pastH : '') + location.hash);
-  if (!tlSpeeds().includes(RP.speed)) RP.speed = world ? 600 : 60;
+  if (!tlSpeeds().includes(RP.speed)) RP.speed = rec.speed || (world ? 600 : 60);
+  if (has('radio')) radioOpen(rec);
   if (fly) { view.lat = rec.lat; view.lon = rec.lon; view.half = world ? R_NM * 1.05 : Math.max(5, rec.nm / 1.25); viewChanged(true); }
   tlBar(); mapKey = '';
   await tlLoad(RP);
@@ -2486,6 +2515,7 @@ async function tlLoad(rp) {             // all of it, page by page, then (while 
 function tlClose(quiet) {
   if (!RP) return;
   RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; motion.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
+  if (RADIO) radioClose();
   $('tlbar').hidden = true; $('fhprof').hidden = true; history.replaceState(null, '', location.pathname + location.hash);
   if (!quiet) { worldFetchT = 0; schedule(0); }
 }
@@ -2503,13 +2533,14 @@ function tlBar() {
       `<span class="t"></span><span class="ld"></span><span class="sp">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
       (RP.fh ? '<button data-tl="follow" title="Keep the aircraft in the middle (dragging the map stops it)">FOLLOW</button>' +
         '<button data-tl="traffic" title="Show the other aircraft that were within 60 nm of it">TRAFFIC</button><button data-tl="prof" title="Altitude and speed through the flight">PROFILE</button>' : '') +
-      `<button data-tl="tags" title="Show or hide the data tags">TAGS</button><button data-tl="x" title="Back to live traffic">LIVE ✕</button>`;
+      `<button data-tl="tags" title="Show or hide the data tags">TAGS</button>` +
+      (RP.rec.back ? `<button data-tl="x" title="${esc(RP.rec.back[2] || '')}">${esc(RP.rec.back[1])}</button>` : '<button data-tl="x" title="Back to live traffic">LIVE ✕</button>');
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
     r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); motion.clear(); RP.ing = 0; });
     b.querySelector('[data-tl=play]').onclick = () => tlPlay(!RP.playing);
-    b.querySelector('[data-tl=x]').onclick = () => tlClose();
+    b.querySelector('[data-tl=x]').onclick = () => { if (RP.rec.back) location.href = RP.rec.back[0]; else tlClose(); };   // rec.back [url, label, title]
     b.querySelector('[data-tl=tags]').onclick = () => {     // the layers' "Data tags", in every scope
       const on = !L.tags;
       for (const sc of scopes) { const i = sc.el.querySelector('.layers [data-l=tags]'); if (i && i.checked !== on) { i.checked = on; i.dispatchEvent(new Event('change', { bubbles: true })); } }
@@ -2524,7 +2555,7 @@ function tlBar() {
   }
   const r = b.querySelector('input'); r.min = t0; r.max = Math.max(t1, t0 + 1); if (!RP.drag) r.value = RP.t;
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
-  b.querySelector('.t').innerHTML = tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
+  b.querySelector('.t').innerHTML = RP.rec.clock === 'elapsed' ? tlClock(RP.t) : tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
   const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
   b.querySelector('.ld').textContent = RP.fh ? `${RP.rec.name} · ${tlDur(t1 - t0)}` : `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`; b.querySelector('.ld').title = b.querySelector('.ld').textContent;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
@@ -2550,8 +2581,8 @@ function tlAt(t) {
       if (dt > Math.max(20, RP.rec.every_s * RP.every * 1.5)) continue;     // gone
       if (!gnd && gs0 > 2) [lat, lon] = dest(la0, lo0, hdg0, gs0 / 3600 * dt);
     }
-    out.push({ id, cs, hex: /^[0-9a-f]{6}$/.test(id) ? id : '', lat, lon, alt: Math.round(alt), gs: Math.round(gs), hdg, vs, type, reg, sq, emer,
-               air: !gnd, ground: !!gnd, cat: '', ts: now, dist: gc(RP.rec.lat, RP.rec.lon, lat, lon) });
+    out.push({ id, cs, hex: /^[0-9a-f]{6}$/.test(id) ? id : '', lat, lon, alt: Math.round(alt), gs: Math.round(gs), hdg, vs, type, reg, sq,
+               emer: emer || (has('radio') ? radioAlert(cs, t) : ''), air: !gnd, ground: !!gnd, cat: '', ts: now, dist: gc(RP.rec.lat, RP.rec.lon, lat, lon), ...(r[13] || {}) });
   }
   return out;
 }
@@ -2597,7 +2628,7 @@ function tlStep() {
   RP.t = Math.max(F[0][0], Math.min(end, RP.t));
   if (RP.rec.kind === 'world') {
     { const [ac, est] = tlWorldAt(RP.t); WORLD = { ok: true, t: RP.t, every: RP.rec.every_s, ac, est }; worldPtsT = 0; }   // every frame (well under a ms), so the dots glide
-    if (now - RP.ing > 400) { RP.ing = now; tlBar(); $('clock').textContent = tlTime(RP.t).slice(6);
+    if (now - RP.ing > 400) { RP.ing = now; tlBar(); $('clock').textContent = tlClock(RP.t);
       $('status').textContent = `timelapse ${RP.rec.name} · ${WORLD.ac.filter(r => !r[8]).length.toLocaleString()} airborne worldwide` + (L.est && WORLD.est.length ? `, ${WORLD.est.length.toLocaleString()} estimated over the oceans` : '') + ' · OpenSky'; }
     return;
   }
@@ -2605,7 +2636,102 @@ function tlStep() {
   if (RP.fh && now - (RP.fh.drawn || 0) > 100) fhProf();
   const me = RP.fh && S.aircraft.find(o => o.id === RP.fh.id);
   if (RP.fh && RP.fh.follow && me && !drag) { const v = scopes[0].view; v.lat = me.lat; v.lon = me.lon; if (now - RP.ing > 400) viewChanged(); }
-  if (now - RP.ing > 400) { RP.ing = now; ingest(); tlBar(); $('clock').textContent = tlTime(RP.t).slice(6); $('status').innerHTML = RP.fh ? `replay ${esc(RP.rec.name)} · OpenSky, a position every ${fhEvery(RP.fh.every)}` : `timelapse ${esc(RP.rec.name)} · ` + $('status').innerHTML.replace(/ · timelapse$/, ''); }
+  if (has('radio')) radioStep();
+  if (now - RP.ing > 400) { RP.ing = now; ingest(); tlBar(); $('clock').textContent = tlClock(RP.t); $('status').innerHTML = RP.fh ? `replay ${esc(RP.rec.name)} · OpenSky, a position every ${fhEvery(RP.fh.every)}` : `timelapse ${esc(RP.rec.name)} · ` + $('status').innerHTML.replace(/ · timelapse$/, ''); }
+}
+
+// ------------------------------------------------------------------ radio log (SITE feature 'radio': sim replays)
+// A recording's radio transcript beside the scope, kept to the replay's time: /api/live/radio?id=<recording> returns
+// {ok, head, lines:[{t, who, cs, g, k, a, text}], colors:{who: colour}, groups:[[g, label, on]], talk_s, alert_s, atis}.
+// who is the speaker (coloured by colors, a pilot's callsign otherwise), cs the aircraft the line is about, g its group
+// (the filter checkboxes), k 'alert' / 'warn' / 'note' for the monitor's lines; a line with a (say 'CA') marks its
+// aircraft in red with that, alert_s either side of it. An aircraft talking or talked to in the last talk_s gets ◀.
+// Clicking a line jumps there and selects its aircraft; a selected aircraft shows only its own lines.
+let RADIO = null;                      // {id, lines, ok, ...}: the open recording's
+const radioTalk = new Set();
+let radioAlerts = new Map();           // cs -> [[t, label]]
+const radioPref = (k, d) => { try { const v = localStorage.getItem(KEY + '-radio-' + k); return v == null ? d : v === '1'; } catch (e) { return d; } };
+const radioSet = (k, on) => { try { localStorage.setItem(KEY + '-radio-' + k, on ? '1' : '0'); } catch (e) {} };
+async function radioOpen(rec) {
+  if (RADIO && RADIO.id === rec.id) return;
+  RADIO = { id: rec.id, lines: [], loading: true }; radioAlerts = new Map(); radioTalk.clear(); radioRender();
+  try {
+    const j = await (await fetch('/api/live/radio?id=' + encodeURIComponent(rec.id))).json();
+    if (!RADIO || RADIO.id !== rec.id) return;
+    RADIO = { ...j, id: rec.id, lines: (j.lines || []).slice().sort((p, q) => p.t - q.t), loading: false };
+  } catch (e) { if (RADIO && RADIO.id === rec.id) RADIO = { id: rec.id, lines: [], ok: false, error: 'radio log unavailable' }; }
+  for (const l of RADIO.lines) if (l.a) for (const cs of [l.cs, l.ao]) if (cs) { const v = radioAlerts.get(cs); if (v) v.push([l.t, l.a]); else radioAlerts.set(cs, [[l.t, l.a]]); }   // ao: the other aircraft in it
+  // the session's own ATIS ({ident: [{type, code, text, time}]}): the procedures in use are read from it, as from a live one
+  for (const [id, list] of Object.entries(RADIO.atis || {})) { atis.set(srv + id, { atis: list, metar: null, t: Date.now() }); useCache.delete(id); }
+  mapKey = ''; radioRender();
+}
+function radioAlert(cs, t) {
+  const v = radioAlerts.get(cs), w = (RADIO && RADIO.alert_s) || 20;
+  if (v) for (const [bt, lb] of v) if (Math.abs(bt - t) <= w) return lb;
+  return '';
+}
+function radioClose() { RADIO = null; radioTalk.clear(); radioAlerts = new Map(); $('rlog').hidden = true; document.body.classList.remove('radioOn'); resize(); }
+function radioRender() {                 // the whole panel (rows built once per recording)
+  const box = $('rlog'); if (!RADIO) return radioClose();
+  const was = document.body.classList.contains('radioOn');
+  box.hidden = false; document.body.classList.add('radioOn'); if (!was) resize();
+  const groups = RADIO.groups || [];
+  box.innerHTML = `<div class="rh">${RADIO.head ? esc(RADIO.head) : ''}${RADIO.loading ? '<span>loading the radio log…</span>' : RADIO.ok === false ? `<span class="bad">${esc(RADIO.error || 'unavailable')}</span>` : ''}</div>` +
+    `<div class="rf">${groups.map(([g, lb, on]) => `<label><input type="checkbox" data-rg="${esc(g)}"${radioPref('g-' + g, on) ? ' checked' : ''}>${esc(lb)}</label>`).join('')}` +
+    `<label title="Keep the latest line in view as the replay plays"><input type="checkbox" data-rfollow${radioPref('follow', true) ? ' checked' : ''}>FOLLOW</label></div>` +
+    `<div class="rs" hidden></div><div class="rl"></div>`;
+  const list = box.querySelector('.rl'), col = RADIO.colors || {};
+  const frag = document.createDocumentFragment();
+  for (const l of RADIO.lines) {
+    const d = document.createElement('div');
+    d.className = 'row' + (l.k ? ' ' + l.k : '') + ' future';
+    d.innerHTML = `<span class="t">${tlClock(l.t).replace(/Z$/, '')}</span> <span class="who"${col[l.who] ? ` style="color:${esc(col[l.who])}"` : ''}>${esc((l.who || '').padEnd(7))}</span> ${esc(l.text)}`;
+    d.onclick = () => radioJump(l);
+    l.el = d; frag.appendChild(d);
+  }
+  list.appendChild(frag);
+  box.querySelectorAll('[data-rg]').forEach(i => i.onchange = () => { radioSet('g-' + i.dataset.rg, i.checked); radioFilter(); });
+  box.querySelector('[data-rfollow]').onchange = e => { radioSet('follow', e.target.checked); RADIO.followT = null; radioStep(); };
+  RADIO.past = 0; RADIO.sel = undefined; radioFilter();
+}
+function radioJump(l) {                   // to just before the line, its aircraft selected
+  if (!RP) return;
+  RP.t = Math.max(RP.frames.length ? RP.frames[0][0] : 0, l.t - 3); hist.clear(); motion.clear(); RP.ing = 0;
+  if (l.cs) { const a = S && S.aircraft.find(o => o.cs === l.cs); select(a ? a.id : l.cs); }
+  RADIO.followT = null; tlStep(); radioStep();
+}
+function radioFilter() {                  // which rows show: the groups ticked, and only the selected aircraft's
+  if (!RADIO) return;
+  const on = {}; $('rlog').querySelectorAll('[data-rg]').forEach(i => on[i.dataset.rg] = i.checked);
+  const a = sel && S && S.aircraft.find(o => o.id === sel), cs = a ? a.cs : sel;
+  RADIO.sel = sel;
+  for (const l of RADIO.lines) l.el.style.display = on[l.g] !== false && (!cs || l.cs === cs) ? '' : 'none';
+  const sb = $('rlog').querySelector('.rs');
+  if (cs) { sb.hidden = false; sb.innerHTML = `<b>${esc(cs)}</b> only <button>Show all</button>`; sb.querySelector('button').onclick = () => select(null); }
+  else sb.hidden = true;
+  RADIO.followT = null; radioStep();
+}
+function radioStep() {                    // every frame while playing: past rows lit, who's talking, the newest row in view
+  if (!RADIO || !RP || !RADIO.lines.length) return;
+  if (RADIO.sel !== sel) return radioFilter();
+  const L1 = RADIO.lines, t = RP.t;
+  let lo = 0, hi = L1.length;            // rows with l.t <= t
+  while (lo < hi) { const m = (lo + hi) >> 1; if (L1[m].t <= t) lo = m + 1; else hi = m; }
+  if (lo !== RADIO.past) {
+    for (let i = Math.min(lo, RADIO.past); i < Math.max(lo, RADIO.past); i++) L1[i].el.classList.toggle('future', i >= lo);
+    RADIO.past = lo;
+  }
+  radioTalk.clear();
+  const ts = RADIO.talk_s || 6;
+  for (let i = lo - 1; i >= 0 && L1[i].t > t - ts; i--) if (L1[i].cs && !L1[i].k) radioTalk.add(L1[i].cs);
+  if (RADIO.followT !== t && $('rlog').querySelector('[data-rfollow]').checked) {
+    RADIO.followT = t;
+    let last = null; for (let i = lo - 1; i >= 0; i--) if (L1[i].el.style.display !== 'none') { last = L1[i].el; break; }
+    const list = $('rlog').querySelector('.rl');
+    if (last) { const y = last.offsetTop - list.offsetTop, h = last.offsetHeight;
+      if (y < list.scrollTop || y + h > list.scrollTop + list.clientHeight) list.scrollTop = Math.max(0, y + h - list.clientHeight + 4); }
+    else list.scrollTop = 0;
+  }
 }
 
 // ------------------------------------------------------------------ flight history and replay (SITE feature 'history')
@@ -2817,7 +2943,7 @@ function fhDraw() {                              // the replayed flight's whole 
   if (m) { Object.assign(view, { lat:+m[1], lon:+m[2], half:Math.max(HALF_MIN, Math.min(HALF_GLOBE, +m[3])) }); Object.assign(scopes[1].view, { lat:+m[1], lon:+m[2] }); }
   const last = (() => { try { return localStorage.getItem(KEY + '-home'); } catch (e) { return null; } })();   // the airport picked last time
   if (m) {}
-  else if (h || ((SITE.start !== null || last) && !new URLSearchParams(location.search).get('tl') && !new URLSearchParams(location.search).get('fh'))) want = (h || last || SITE.start || 'KSFO/52').split('/');
+  else if (h || ((SITE.start !== null || last) && (SITE.tl_home || !new URLSearchParams(location.search).get('tl')) && !new URLSearchParams(location.search).get('fh'))) want = (h || last || SITE.start || 'KSFO/52').split('/');
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
   if (has('atc')) atcInit();

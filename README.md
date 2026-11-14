@@ -44,11 +44,15 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     defaults 2000 and 30000); `start` (hash to open on, default `KSFO/52`; `None` = the globe);
     `metar_label`; `audio`, ICAO → `[[label, stream URL], ...]`, live audio buttons in the airport card
     (MP3 streams are fed through Media Source Extensions when the server sends CORS headers, so they start
-    in a second or two instead of 10–15 s; anything else plays in a plain `<audio>`)
+    in a second or two instead of 10–15 s; anything else plays in a plain `<audio>`); `tl_home` (set the home
+    airport from `start` even when the page opens on a recording, `?tl=`)
 - `providers()` (or `providers(airports=None)` to get the shared `core.Airports`), which returns a dict:
   - `traffic` (required): an object whose `get(lat, lon, nm)` returns
     `{ok, t, center:[lat, lon], nm, src, aircraft:[...]}`. Each aircraft is
-    `{id, cs, lat, lon, alt, gs, hdg, vs, ts, ground, air, type, reg, sq, emer}`, optionally with `hex`.
+    `{id, cs, lat, lon, alt, gs, hdg, vs, ts, ground, air, type, reg, sq, emer}`, optionally with `hex`, and with
+    `ps` (`[letter, colour]`, a position symbol drawn instead of the dot), `l3` (a third data-block line in the air),
+    `gt` (the second line of a ground tag) and `st` (a status line in the aircraft card); a recording passes these in
+    its rows' last element, `x`.
   - `max_nm` (required): the most the traffic source covers around a point.
   - `world` (optional): `get()` returns `(json_bytes, gzipped)` in OpenSky's compact form (see
     livescope's `adsb.py` World).
@@ -59,7 +63,14 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     year}, country:[name, ISO], typeinfo:{desc, engines, kind, wake}, photo:{src, link, by}}`; `scope.aircraft.Lookup` gives
     the country and type), `servers` (a server picker; then `traffic`, `world` and
     `atis` get a `server=` keyword, from the page's `srv`), `atc`, `flight` and `timelapse` (a header
-    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`),
+    button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`;
+    `?a=list` may answer `no_rec` with a `note` for a site that only plays recordings, and a recording may carry
+    `clock: "elapsed"` with `zero` (the bar counts from it instead of showing the time of day), `speeds`, `speed`,
+    `back: [url, label, title]` (a bar button in place of LIVE ✕) and `sub` (its line in the list)),
+    `radio` (with `timelapse`: a radio log beside a recording, from a `radio` endpoint: `?id=` returns `{ok, head, lines:[{t,
+    who, cs, g, k, a, ao, text}], colors:{who: colour}, groups:[[g, label, on]], talk_s, alert_s, atis:{ident: atis list}}`;
+    lines play along with the bar, a click jumps there, the aircraft talking get ◀, `a` is an alert label (CA) shown on
+    `cs` and `ao` for `alert_s` seconds, `k` is alert / warn / note; see atc-at-home's `dashboard/replays.py`),
     `wx` (a Weather group in Layers, all off by default: SIGMETs, G-AIRMETs, CWAs and PIREPs from a `wx`
     endpoint that returns the whole world, `{ok, t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...]]}],
     pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}`, k one of sigmet,
@@ -75,6 +86,9 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     query string. infinitescope's: `servers`, `atc` (`{ok, atc:[{icao, type, user, lat, lon, since}]}`) and
     `flight` (`{plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}`).
   - An aircraft may carry `route` (`[from, lat, lon, to, lat, lon]`): it is trusted over `routes`.
+
+Another Python server can run a site in its own process: import `server.py`, call `init(SITE, providers)`
+and pass requests to `Handler.get` (atc-at-home's dashboard does this for its sim replays).
 
 A provider left out turns its feature off in the page (no world dots, no ATIS block, no route lookups).
 Anything every site can use belongs in scope (`scope/` or `web/scope.html`), not in a site.
