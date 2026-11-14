@@ -218,12 +218,12 @@ const PROC_HOME = { star:['#4a4a4a', [2, 5]], transition:['#4a4a4a', [2, 5]], ap
 const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
 const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
-                ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['small', 'Small airports and strips'],
+                ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['aptnames', 'Airport names'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
                 ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
                 ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
-const L_DEFAULT = { star:true, approach:true, sid:true, nearby:true, fixes:true, fixnames:true, rings:true, airports:true, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:true, ground:true, world:true, est:true };
+const L_DEFAULT = { star:true, approach:true, sid:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
+            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -392,7 +392,7 @@ function drawMap() {
     } else if (view.half > 400) { c.strokeStyle = '#3a3a3a'; c.lineWidth = d; c.strokeRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); }
     else { c.strokeStyle = kd === 'L' ? COL.apt : COL.aptDim; c.lineWidth = d; c.strokeRect(x - 2*d, y - 2*d, 4*d, 4*d); }
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
-    if (label && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
+    if (label && (L.aptnames || (home && a[0] === home[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
   }
 }
 // SIDs, STARs and approaches: all of them for the airport you picked, faint for its neighbours close in,
