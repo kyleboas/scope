@@ -937,8 +937,8 @@ function apdFit(ol, OPS, rwys, lat0, lon0) {
 // TURN_TAU s, so a turn that has ended doesn't spin on). A new report doesn't jump or kink the path: over about the gap
 // between reports, the drawn aircraft blends from the path it was on onto the new one, its speed and direction unbroken.
 const TURN_TAU = 8, MAX_TURN = 4;      // s, °/s
-function track(r, rate, t) {           // [lat, lon, track] of report r, t (epoch s) carried on for at most STALE_S
-  const dt = Math.max(0, Math.min(STALE_S, t - r.ts));
+function track(r, rate, t, ts = r.ts) {   // [lat, lon, track] of report r (taken at ts), t (epoch s) carried on for at most STALE_S
+  const dt = Math.max(0, Math.min(STALE_S, t - ts));
   if (!(r.gs > 2) || !dt) return [r.lat, r.lon, r.hdg];
   if (!rate) return [...dest(r.lat, r.lon, r.hdg, r.gs / 3600 * dt), r.hdg];
   const turned = s => rate * TURN_TAU * (1 - Math.exp(-s / TURN_TAU)), n = Math.min(16, Math.ceil(dt)), step = dt / n, v = r.gs / 3600 * step;
@@ -947,7 +947,7 @@ function track(r, rate, t) {           // [lat, lon, track] of report r, t (epoc
   const lat = r.lat + no / 60;
   return [lat, ((r.lon + ea / (60 * Math.cos((r.lat + lat) / 2 * D2R))) + 540) % 360 - 180, (r.hdg + turned(dt) + 360) % 360];
 }
-function deadReckon(a, t = Date.now() / 1000) { const m = motion.get(a.id); return track(a, m ? m.rate : 0, t); }
+function deadReckon(a, t = Date.now() / 1000) { const m = motion.get(a.id); return track(a, m ? m.rate : 0, t, m && m.ets || a.ts); }
 function pos(a, t = Date.now() / 1000) {   // [lat, lon, track] as drawn now
   const q = deadReckon(a, t), m = motion.get(a.id); if (!m || !m.from) return q;
   let f = (t - m.t0) / m.T; if (f >= 1) { m.from = null; return q; }
@@ -955,15 +955,32 @@ function pos(a, t = Date.now() / 1000) {   // [lat, lon, track] as drawn now
   const p = track(m.from, m.fromRate, t), dlo = ((q[1] - p[1] + 540) % 360) - 180, dh = ((q[2] - p[2] + 540) % 360) - 180;
   return [p[0] + (q[0] - p[0]) * f, ((p[1] + dlo * f) + 540) % 360 - 180, (p[2] + dh * f + 360) % 360];
 }
+// SITE.report_jitter (Infinite Flight): a report's time is the whole list's, not when that aircraft's position was
+// taken, which is off by a few seconds either way (and now and then the position is a repeat of the last one). So the
+// time a report is carried on from (ets) leans on how far the aircraft really flew since the last one, at its speed:
+// most of the way (JIT_K), never more than JIT_MAX s from the list's time; a repeated position isn't a new report.
+const JIT_K = .8, JIT_MAX = 8;
+function reportTime(o, a, oEts, gap) {
+  const sp = (o.gs + a.gs) / 2 / 3600, h = (o.hdg + (((a.hdg - o.hdg + 540) % 360) - 180) / 2) * D2R;
+  const n = (a.lat - o.lat) * 60, e = ((((a.lon - o.lon) + 540) % 360) - 180) * 60 * Math.cos((a.lat + o.lat) / 2 * D2R);
+  const along = n * Math.cos(h) + e * Math.sin(h);
+  if (along < sp * gap * .15) return null;       // hasn't moved: the same position again
+  return a.ts + Math.max(-JIT_MAX, Math.min(JIT_MAX, JIT_K * (oEts + along / sp - a.ts)));
+}
 function newReport(o, a) {             // a replaces o (same aircraft, a later report): its turn rate and the blend onto it
   const t = Date.now() / 1000, gap = a.ts - o.ts, m = motion.get(a.id), was = pos(o, t);
+  let ets = a.ts;
+  if (SITE.report_jitter && !a.ground && !o.ground && o.gs > 60 && a.gs > 60 && gap > 0 && gap <= 60) {
+    ets = reportTime(o, a, m && m.ets || o.ts, gap);
+    if (ets === null) return;          // keep carrying on the last one (the next poll compares against this same position)
+  }
   const rate = !a.ground && !o.ground && a.gs > 30 && gap > 0 && gap <= 30
     ? Math.max(-MAX_TURN, Math.min(MAX_TURN, (((a.hdg - o.hdg + 540) % 360) - 180) / gap)) : 0;
-  const nm = { rate, from: null, fromRate: 0, t0: t, T: Math.max(2, Math.min(10, gap * .8)) };
+  const nm = { rate, ets, from: null, fromRate: 0, t0: t, T: SITE.report_jitter ? Math.max(2, Math.min(20, gap)) : Math.max(2, Math.min(10, gap * .8)) };
   motion.set(a.id, nm);
   const q = deadReckon(a, t); if (gc(was[0], was[1], q[0], q[1]) > 3) return;   // too far off: jump
   nm.from = { lat: was[0], lon: was[1], hdg: was[2], gs: o.gs, ts: t };
-  nm.fromRate = m ? m.rate * Math.exp(-Math.max(0, t - o.ts) / TURN_TAU) : 0;
+  nm.fromRate = m ? m.rate * Math.exp(-Math.max(0, t - (m.ets || o.ts)) / TURN_TAU) : 0;
 }
 const a3 = v => String(Math.max(0, Math.round(v / 100))).padStart(3, '0');
 // wake category (FAA consolidated wake turbulence, A heaviest … I lightest) from the ICAO type, for the short tags
@@ -1008,7 +1025,7 @@ function drawAircraft() {
     if (out && fOn && fltHide) continue;                     // ARR / DEP filter with the others hidden: not drawn at all
     drawn.push({ a, px, py });
     const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
-    if (lines && L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
+    if (lines && L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of trailDots(a, la, lo).entries()) {
       const [hx, hy, hz] = proj(q[0], q[1]); if (hz < 0) continue;
       ctx.globalAlpha = 0.25 + i * 0.12; ctx.fillStyle = COL.hist; ctx.beginPath(); ctx.arc(hx, hy, (a.ground ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
     }
@@ -2267,16 +2284,31 @@ document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
   flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt(); worldPtsT = 0;
 });
 
+function trailDots(a, la, lo) {         // the trail's dots, oldest first, as [lat, lon]
+  const h = hist.get(a.id) || [];
+  if (!SITE.smooth_trails || RP) return h.slice(-6, -1);
+  const now = Date.now() / 1000, pts = [...h.filter(q => q[2] < now), [la, lo, now]], out = [];
+  for (let k = 5; k >= 1; k--) {
+    const tt = now - 4 * k; let j = pts.length - 1;
+    while (j > 0 && pts[j - 1][2] > tt) j--;
+    if (j === 0) continue;                // not that old yet
+    const p = pts[j - 1], q = pts[j], f = (tt - p[2]) / (q[2] - p[2] || 1);
+    out.push([p[0] + (q[0] - p[0]) * f, p[1] + ((((q[1] - p[1]) + 540) % 360) - 180) * f]);
+  }
+  return out;
+}
 // trails: where each aircraft was drawn, every 4 s (on the clock, so a slow feed's dead-reckoned track still gets dots),
-// kept in this page only and never older than hist_s seconds (pruned 4 s early, as samples are 4 s apart)
+// kept in this page only and never older than hist_s seconds (pruned 4 s early, as samples are 4 s apart).
+// SITE.smooth_trails: sampled every second instead, and the dots drawn where the aircraft was 4, 8, … s ago, so they
+// follow it along its path at an even spacing rather than stopping and then catching up every 4 s
 let lastHistT = 0;
-const HIST_S = SITE.hist_s || 32;
+const HIST_S = SITE.hist_s || 32, HIST_EVERY = SITE.smooth_trails ? 1 : 4;
 function sampleHist() {
   if (SITE.no_history || !S) return;
   const t = RP ? S.t : Date.now() / 1000;
-  if (t - lastHistT < 4 && t >= lastHistT) return;
+  if (t - lastHistT < HIST_EVERY && t >= lastHistT) return;
   lastHistT = t; const ids = new Set();
-  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + 4 && q[2] <= t); h.push([...pos(a).slice(0, 2), t]); hist.set(a.id, h); }
+  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); h.push([...pos(a).slice(0, 2), t]); hist.set(a.id, h); }
   for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
 }
 function ingest() {
