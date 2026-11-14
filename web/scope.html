@@ -38,6 +38,10 @@
   #res div { padding:7px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #res div b { color:var(--fg); margin-right:6px; }
   #res div:hover, #res div.on { background:var(--soft); }
+  #pick { position:fixed; z-index:20; min-width:180px; max-width:320px; padding:3px 0; background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px #0008; }
+  #pick div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pick div b { color:var(--fg); margin-right:8px; font-weight:normal; } #pick div.ac b { color:#6ee36e; }
+  #pick div:hover { background:var(--soft); } #pick [data-pa] + .ac { border-top:1px solid var(--line); } #pick .more { color:var(--dim); cursor:default; }
   button { background:none; border:0; color:var(--dim); font:12px var(--mono); padding:5px 7px; border-radius:4px; cursor:pointer; }
   button:hover { color:var(--fg); background:var(--alt); }
   button.on { color:var(--fg); }
@@ -189,6 +193,7 @@
 </header>
 <div id="wrap">
   <div id="tiles" class="one"></div>
+  <div id="pick" hidden></div>
   <div id="gnote"></div>
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
@@ -645,11 +650,18 @@ function hitAircraft(mx, my, r) {
   for (const e of drawn) { const dd = Math.hypot(e.px - mx, e.py - my); if (dd < bd) { bd = dd; best = e; } }
   return best;
 }
-function hitAirport(mx, my) {
-  const list = view.half < 80 ? [...areaAps.values()] : MAJOR, d = dpr(); let best = null, bd = 14 * d;
-  for (const a of list) { if (view.half >= 80 && (view.half > 400 ? a[8] !== 'L' : !'LM'.includes(a[8]))) continue;
-    const [x, y, z] = proj(a[5], a[6]); if (z < 0) continue; const dd = Math.hypot(x - mx, y - my); if (dd < bd) { bd = dd; best = a; } }
-  return best;
+function hitAircraftAll(mx, my, r) {  // every aircraft within r px, nearest first
+  const R = r * dpr();
+  return drawn.map(e => [Math.hypot(e.px - mx, e.py - my), e]).filter(x => x[0] < R).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+}
+function hitAirports(mx, my, r) {      // every airport drawn within r px, nearest first
+  const list = view.half < 80 ? [...areaAps.values()] : MAJOR, R = r * dpr(), out = [];
+  for (const a of list) { const kd = a[8], mine = home && a[0] === home[0];
+    if (view.half >= 80 && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
+    if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
+    if (!L.airports && !mine) continue;
+    const [x, y, z] = proj(a[5], a[6]); if (z < 0) continue; const dd = Math.hypot(x - mx, y - my); if (dd < R) out.push([dd, a]); }
+  return out.sort((p, q) => p[0] - q[0]).map(x => x[1]);
 }
 
 // ------------------------------------------------------------------ the whole world, zoomed out
@@ -916,13 +928,38 @@ function endPointer(e) {
   const dg = drag; drag = null;
   if (dg.moved || e.type === 'pointercancel') return;
   if (dg.hadMeasure) { measure = null; return; }     // a click first clears the ruler
-  const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, e.pointerType === 'touch' ? 26 : 16);
-  if (h) { select(h.a.id); return; }
-  const ap = hitAirport(mx, my);
-  if (ap && home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
-  if (ap) { setHome(ap, false); return; }
+  // zoomed in, aircraft come first; zoomed out, airports do (a wider target), and a tap that could mean
+  // more than one thing opens a small menu listing them, airports on top
+  const [mx, my] = canvasXY(e), touch = e.pointerType === 'touch', far = view.half >= 80;
+  const acs = hitAircraftAll(mx, my, touch ? 26 : 16), aps = hitAirports(mx, my, far ? (touch ? 30 : 22) : 14);
+  if (far && aps.length + acs.length > 1) { pickMenu(e.clientX, e.clientY, aps, acs.map(x => x.a)); return; }
+  if (far && aps.length) { pickAirport(aps[0]); return; }
+  if (acs.length) { select(acs[0].a.id); return; }
+  if (aps.length) { pickAirport(aps[0]); return; }
   select(null);
 }
+function pickAirport(ap) {
+  if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
+  setHome(ap, false);
+}
+// the menu for a tap on several things at once (zoomed out): airports, then aircraft nearest first
+function pickMenu(x, y, aps, acs) {
+  const m = $('pick'), A = aps.slice(0, 6), C = acs.slice(0, 10 - A.length);
+  m.innerHTML = A.map((a, i) => `<div data-pa="${i}"><b>${esc(a[0])}</b>${esc(a[2] || '')}</div>`).join('') +
+    C.map((a, i) => `<div data-pc="${i}" class="ac"><b>${esc(a.cs || a.id)}</b>${esc([a.type, a.ground ? 'GND' : a3(a.alt)].filter(Boolean).join(' '))}</div>`).join('') +
+    (acs.length > C.length ? `<div class="more">+${acs.length - C.length} more: zoom in</div>` : '');
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x + 6, innerWidth - r.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(y + 6, innerHeight - r.height - 4)) + 'px';
+  m.onpointerover = ev => { const t = ev.target.closest('[data-pc]'); hover = t ? C[+t.dataset.pc].id : null; };
+  m.onpointerleave = () => { hover = null; };
+  m.onclick = ev => { const t = ev.target.closest('[data-pa],[data-pc]'); if (!t) return; pickClose();
+    if (t.dataset.pa) pickAirport(A[+t.dataset.pa]); else select(C[+t.dataset.pc].id); };
+}
+function pickClose() { const m = $('pick'); if (!m.hidden) { m.hidden = true; hover = null; } }
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#pick')) pickClose(); }, true);
+window.addEventListener('wheel', pickClose, { passive:true });
 onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
 onCv('pointerleave', () => { hover = null; worldHover = null; });
 onCv('wheel', e => {
@@ -933,6 +970,7 @@ onCv('wheel', e => {
 }
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape' && !$('pick').hidden) { pickClose(); return; }
   if (e.key === 'Escape') { if (measure) measure = null; else select(null); }
   const zs = active && active.el.offsetWidth ? active : scopes[0];
   if (e.key === '+' || e.key === '=') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1 / 1.4); use(scopes[0]); }
