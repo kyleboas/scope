@@ -38,7 +38,7 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
   - required: `name` (also the localStorage prefix), `title` and `url`
   - optional: `port`; `old_hosts`, host prefixes to 301-redirect to `url`; `src_links`, feed name → URL
     for the status line; `hex_link`, `[url with {hex}, label with {HEX}]`; `world_link`, `[url, name]`;
-    `no_history` (no trails); `stale_s` (how long to dead-reckon a report, default 20); `idle_min` (stop
+    `no_history` (no trails); `hist_s` (seconds of trail the page keeps, default 32); `stale_s` (how long to dead-reckon a report, default 20); `idle_min` (stop
     polling while hidden or after that many minutes without input); `poll_ms`, `world_ms` (page refresh,
     defaults 2000 and 30000); `start` (hash to open on, default `KSFO/52`; `None` = the globe);
     `metar_label`

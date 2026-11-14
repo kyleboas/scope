@@ -199,7 +199,7 @@
 // (procs, ground, world, routes, atis); a feature a site doesn't have is skipped.
 const has = f => SITE.features.includes(f);
 const KEY = SITE.name;                 // localStorage prefix
-// optional site settings: no_history (no trails), stale_s (dead reckoning limit), idle_min (stop polling after that
+// optional site settings: no_history (no trails), hist_s (seconds of trail to keep, default 32), stale_s (dead reckoning limit), idle_min (stop polling after that
 // long without input), poll_ms, world_ms, start (hash to open on; null = the globe), metar_label
 const STALE_S = SITE.stale_s || 20, POLL_MS = SITE.poll_ms || 2000, WORLD_MS = SITE.world_ms || 30000;
 const $ = id => document.getElementById(id);
@@ -1151,20 +1151,27 @@ document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
   flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt();
 });
 
+// trails: where each aircraft was drawn, every 4 s (on the clock, so a slow feed's dead-reckoned track still gets dots),
+// kept in this page only and never older than hist_s seconds (pruned 4 s early, as samples are 4 s apart)
 let lastHistT = 0;
+const HIST_S = SITE.hist_s || 32;
+function sampleHist() {
+  if (SITE.no_history || !S) return;
+  const t = RP ? S.t : Date.now() / 1000;
+  if (t - lastHistT < 4 && t >= lastHistT) return;
+  lastHistT = t; const ids = new Set();
+  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + 4 && q[2] <= t); h.push([...pos(a), t]); hist.set(a.id, h); }
+  for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
+}
 function ingest() {
   updateFlow();
-  if (!SITE.no_history && (S.t - lastHistT >= 4 || S.t < lastHistT)) {
-    lastHistT = S.t; const ids = new Set();
-    for (const a of S.aircraft) { ids.add(a.id); const h = hist.get(a.id) || []; h.push(pos(a)); if (h.length > 8) h.shift(); hist.set(a.id, h); }
-    for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
-  }
+  sampleHist();
   if (wantSel && S.aircraft.some(a => a.id === wantSel)) { const id = wantSel; wantSel = null; select(id); }
   // the header says nothing while the feed is fine; only its errors show there
   $('status').innerHTML = S.ok ? '' : `<span class="bad">${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
   if (sel) renderCard();
 }
-setInterval(() => { if (!RP) $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; if (sel) renderCard(); }, 1000);
+setInterval(() => { if (!RP) { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; sampleHist(); } if (sel) renderCard(); }, 1000);
 
 // ------------------------------------------------------------------ servers (infinitescope: Casual / Training / Expert)
 const ERRS = { 'no API key':'no API key on the server yet', 'not approved yet':'API client waiting for approval', busy:'over the API rate limit, retrying', 'rate limited':'rate limited, retrying' };
