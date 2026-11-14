@@ -19,7 +19,8 @@ feeds are in that site's NOTICE):
 - **Airport diagrams** are the FAA's (d-TPP, U.S. Government work, public domain), fetched at run time from aeronav.faa.gov
   and cached for the cycle. Not for navigation. They're drawn in the page with **pdf.js** (Mozilla, Apache License 2.0,
   <https://github.com/mozilla/pdf.js>), loaded from jsDelivr.
-- **ATIS** is from atis.info (FAA D-ATIS); **METARs** from aviationweather.gov.
+- **ATIS** is from atis.info (FAA D-ATIS); **METARs**, and the weather layers' **SIGMETs, G-AIRMETs, CWAs and PIREPs**,
+  from aviationweather.gov (NOAA/NWS Aviation Weather Center; US government data, not for navigation).
 - **Map backgrounds** (the MAP button: street map and satellite) are Esri's tile services, loaded by the browser at run time:
   the Dark Gray Canvas (Esri, HERE, Garmin, © OpenStreetMap contributors) and World Imagery (Esri, Maxar, Earthstar Geographics).
   They are credited on the map while shown.

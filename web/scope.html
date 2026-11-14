@@ -295,12 +295,12 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans'],
-                ['#', 'Airspace and weather'], ['tfr', 'TFRs (US)'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
+                ['#', 'Weather'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
-const WX_KEYS = ['tfr', 'sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
+const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, diagram:false, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
-            tfr:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
+            sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -959,11 +959,26 @@ for (const [k, l] of Object.entries({
   H: 'CL30 CL35 C560 C56X C650 C680 C700 LJ45 LJ60 LJ75 H25B E55P E545 E550 GALX ASTR B350 PC12 C208 PC24 BE40',
   I: 'C150 C152 C162 C170 C172 C175 C177 C180 C182 C185 C206 C210 C310 C340 C414 C421 C510 C525 C25A C25B C25C C25M E50P SF50 PA18 PA22 PA24 PA28 P28A P28B P28R PA32 PA34 PA44 PA46 P46T SR20 SR22 S22T BE20 BE33 BE35 BE36 BE55 BE58 BE9L DA40 DA42 DA62 DV20 M20P M20T TBM7 TBM8 TBM9 AA5 RV7 RV8 RV10 EC35 EC45 R22 R44 R66 AS50 B06 B407 H60 S76',
 })) for (const t of l.split(' ')) CWT[t] = k;
+// tag declutter: a data block is drawn only where it doesn't cover one already placed this frame (the rest are dots
+// until you zoom in or hover them); tags placed last frame go first, so the same ones keep their tags as traffic moves
+let tagGrid = new Map(), tagWas = new Set(), tagNow = new Set();
+const TAG_CELL = 48;
+function tagReset(s) { tagGrid = new Map(); tagWas = s.tagNow || new Set(); tagNow = s.tagNow = new Set(); }   // per scope (split views)
+function tagFits(x0, y0, x1, y1, force) {   // the box is free (or force): reserve it and say yes
+  const c0 = Math.floor(x0 / TAG_CELL), c1 = Math.floor(x1 / TAG_CELL), r0 = Math.floor(y0 / TAG_CELL), r1 = Math.floor(y1 / TAG_CELL);
+  if (!force) for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++)
+    for (const b of tagGrid.get(c + ',' + r) || []) if (x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1]) return false;
+  const b = [x0, y0, x1, y1];
+  for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) { const k = c + ',' + r, l = tagGrid.get(k); if (l) l.push(b); else tagGrid.set(k, [b]); }
+  return true;
+}
+const tagFirst = key => (a, b) => tagWas.has(key(b)) - tagWas.has(key(a));
 function drawAircraft() {
   const d = dpr(), ppn = pxPerNm(), far = view.half > 300 || worldShown(), now = performance.now();
   drawn = [];
   if (!S) return;
-  for (const a of S.aircraft) {
+  const pri = a => a.id === sel || a.id === hover || a.emer ? 2 : tagWas.has(a.id) ? 1 : 0;
+  for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel) continue;
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
@@ -982,7 +997,8 @@ function drawAircraft() {
     }
     if (out) {
       ctx.fillStyle = '#5a5a5a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill();
-      if (L.tags && !far && !a.ground) shortTag(px, py, a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : ''), COL.dbDim);
+      const st = a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : '');
+      if (L.tags && !far && !a.ground && tagFits(px - 3*d, py - 6*d, px + (14 + st.length * .62 * TAG(10)) * d, py + 6*d)) { tagNow.add(a.id); shortTag(px, py, st, COL.dbDim); }
       continue;
     }
     const blend = far && worldShown() && !isSel && !isHov && !emer;   // zoomed out with the worldwide dots: look like them
@@ -994,6 +1010,8 @@ function drawAircraft() {
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
     const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
+    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + lh + 3*d), isSel || isHov || emer)) continue;
+    tagNow.add(a.id);
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
     ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
@@ -1069,21 +1087,25 @@ function drawWorld() {
     ctx.stroke();
   }
   if (L.tags && view.half <= 300) {              // zoomed in (playing back the past): tag the dots like live traffic
-    ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d;
-    for (const w of worldPts) {
+    ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d, fs = TAG(11), wk = w => 'w' + w.r[0];
+    for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if (w.k !== 0 && w.k !== 3) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
-      if (++n > 400) break;
       const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
+      if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d))) continue;
+      if (++n > 400) break;
+      tagNow.add(wk(w));
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
       ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + wl);
     }
     n = 0;                                       // outside the altitude filter: a short tag, the altitude
-    for (const w of worldPts) {
+    for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if (w.k !== 1 && w.k !== 4) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      if (!tagFits(x - 3*d, y - 6*d, x + (14 + 3 * .62 * TAG(10)) * d, y + 6*d)) continue;
       if (++n > 400) break;
+      tagNow.add(wk(w));
       shortTag(x, y, a3(w.r[5] * 100), w.est ? '#2c5a2c' : COL.dbDim);
     }
   }
@@ -1178,16 +1200,16 @@ function hitBoat(mx, my, r) {
 
 // ------------------------------------------------------------------ airspace and weather (a site with the 'wx' feature, livescope)
 // /api/live/wx gives the whole world's {t, areas:[{k, id, name, hz, alt, from, to, text, poly:[[[lat, lon], ...], ...]}],
-// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]], err:{tfr}}, fetched every 5 min while
-// one of its layers is on (all off by default; not shown when playing back a timelapse). k: tfr, sigmet, csigmet
+// pireps:[[lat, lon, FL or -1, kind 0 AIREP / 1 PIREP / 2 urgent, ts, raw, turbulence, icing]]}, fetched every 5 min while
+// one of its layers is on (all off by default; not shown when playing back a timelapse). k: sigmet, csigmet
 // (convective), isigmet (international), airmet (G-AIRMET), cwa. Click inside an area or on a report for its text.
 let WX = null, wxT = 0, wxSel = null;            // wxSel: the items in the open popup, drawn brighter
 const WX_MS = 5 * 60000;
-const WX_LAYER = { tfr:'tfr', sigmet:'sigmet', csigmet:'sigmet', isigmet:'sigmet', airmet:'airmet', cwa:'cwa' };
-const WX_COL = { tfr:'#e04848', sigmet:'#e0892b', csigmet:'#e04fb0', isigmet:'#e0892b', cwa:'#d8c447',
+const WX_LAYER = { sigmet:'sigmet', csigmet:'sigmet', isigmet:'sigmet', airmet:'airmet', cwa:'cwa' };
+const WX_COL = { sigmet:'#e0892b', csigmet:'#e04fb0', isigmet:'#e0892b', cwa:'#d8c447',
   IFR:'#9a7cff', MT_OBSC:'#c48ad8', 'TURB-HI':'#c2a35a', 'TURB-LO':'#c2a35a', ICE:'#4aa8e0', SFC_WND:'#86b852', LLWS:'#b8b852', M_FZLVL:'#4ad0c0' };
-const WX_DASH = { tfr:null, sigmet:[8, 4], csigmet:[8, 4], isigmet:[8, 4], airmet:[3, 4], cwa:[2, 3] };
-const WX_KIND = { tfr:'TFR', sigmet:'SIGMET', csigmet:'Convective SIGMET', isigmet:'SIGMET', airmet:'G-AIRMET', cwa:'CWA' };
+const WX_DASH = { sigmet:[8, 4], csigmet:[8, 4], isigmet:[8, 4], airmet:[3, 4], cwa:[2, 3] };
+const WX_KIND = { sigmet:'SIGMET', csigmet:'Convective SIGMET', isigmet:'SIGMET', airmet:'G-AIRMET', cwa:'CWA' };
 const PIREP_COL = ['#5f7f99', '#8fc8f0', '#ff5a5a'];
 const wxOn = () => has('wx') && !RP && eachScope(s => WX_KEYS.some(k => s.L[k])).some(Boolean);
 const wxCol = a => WX_COL[a.k === 'airmet' ? a.hz : a.k] || '#999';
@@ -1222,7 +1244,7 @@ function drawWx() {
     ctx.globalAlpha = hi ? 1 : later ? .4 : .8;
     for (const g of a.rings) {
       const whole = wxRing(ctx, g.r); ctx.stroke();
-      if (whole) { ctx.globalAlpha = hi ? .16 : a.k === 'tfr' ? .07 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
+      if (whole) { ctx.globalAlpha = hi ? .16 : .05; ctx.fill(); ctx.globalAlpha = hi ? 1 : later ? .4 : .8; }
     }
     ctx.setLineDash([]);
     if (labels) {                                // a short label inside, when the area is big enough on screen
@@ -1230,14 +1252,12 @@ function drawWx() {
       const [x, y, z] = proj(g.mid[0], g.mid[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) { ctx.globalAlpha = 1; continue; }
       const [x2, y2] = proj(g.r[0][0], g.r[0][1]);
       if (Math.hypot(x2 - x, y2 - y) < 30 * d && !hi) { ctx.globalAlpha = 1; continue; }
-      const t = a.k === 'tfr' ? 'TFR' + (a.alt ? ' ' + a.alt.replace(' AGL', '') : '') : a.k === 'airmet' ? a.hz.replace('_', ' ') + (a.alt ? ' ' + a.alt : '') :
+      const t = a.k === 'airmet' ? a.hz.replace('_', ' ') + (a.alt ? ' ' + a.alt : '') :
         (a.k === 'csigmet' ? 'CONV' : a.hz.split(' ').pop()) + (a.alt ? ' ' + a.alt : '');
       ctx.globalAlpha = hi ? 1 : .9; ctx.textAlign = 'center'; ctx.fillText(t + (later ? ' ' + wxTime(a.from) : ''), x, y); ctx.textAlign = 'left';
     }
     ctx.globalAlpha = 1;
   }
-  if (L.tfr && WX.err && WX.err.tfr) {           // its source is down for this server: say so rather than show nothing
-    ctx.font = FONT(10); ctx.fillStyle = WX_COL.tfr; ctx.textAlign = 'center'; ctx.fillText('TFRs unavailable: ' + WX.err.tfr, P0.w / 2, P0.h - 40 * d); ctx.textAlign = 'left'; }
   if (!L.pirep) return;
   const tags = L.tags && view.half <= 80, r = 3.2 * d;
   for (const p of WX.pireps) {
@@ -1272,8 +1292,8 @@ function wxOpen(x, y, items) {
       return `<div><div class="wh"><b style="color:${PIREP_COL[it[3]]}">${['AIREP', 'PIREP', 'Urgent PIREP'][it[3]]}</b>${it[2] >= 0 ? 'FL' + String(it[2]).padStart(3, '0') : ''}<span>${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago</span></div>` +
         ([it[6] && 'Turbulence ' + it[6], it[7] && 'Icing ' + it[7]].filter(Boolean).map(t => `<div class="wm">${esc(t)}</div>`).join('')) + `<pre>${esc(it[5])}</pre></div>`;
     }
-    const when = it.from && it.from > now ? `${wxTime(it.from)}–${wxTime(it.to) || 'UFN'}` : it.to ? 'until ' + wxTime(it.to) : it.k === 'tfr' ? 'until further notice' : '';
-    return `<div><div class="wh"><b style="color:${wxCol(it)}">${esc(WX_KIND[it.k])}</b>${esc(it.name.replace(/^(TFR|SIGMET|G-AIRMET|CWA) /, ''))}<span>${esc(when)}</span></div>` +
+    const when = it.from && it.from > now ? `${wxTime(it.from)}–${wxTime(it.to) || 'UFN'}` : it.to ? 'until ' + wxTime(it.to) : '';
+    return `<div><div class="wh"><b style="color:${wxCol(it)}">${esc(WX_KIND[it.k])}</b>${esc(it.name.replace(/^(SIGMET|G-AIRMET|CWA) /, ''))}<span>${esc(when)}</span></div>` +
       `<div class="wm">${esc([it.hz, it.alt].filter(Boolean).join(' · '))}</div>` + (it.text ? `<pre>${esc(it.text)}</pre>` : '') + '</div>';
   }).join('');
   wxSel = items; m.hidden = false; m.scrollTop = 0;
@@ -1286,7 +1306,7 @@ function wxClose() { const m = $('wxpop'); if (!m.hidden) { m.hidden = true; wxS
 // ------------------------------------------------------------------ the selected flight's filed plan and flown route
 // (infinitescope: /api/live/flight; a site with the 'fplan' feature, livescope: /api/live/fplan by callsign, real
 // flight plans, {dep, arr, route, plan:{pts, line}} or {} when it has none)
-let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]], line:[[lat, lon]]}, track:[[lat, lon, alt]]}
+let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]], line:[[lat, lon]]}, track:[[lat, lon, alt, gs, t]], log (infinitescope: flightCard)}
 let flAsked = 0;
 async function loadFlight() {
   const byCs = !has('flight') && has('fplan');
@@ -1330,12 +1350,13 @@ function acarsCard(a) {
       : `<span>Nothing heard from it in the last ${d.since_h} h.</span>`) +
     `<em>Data provided by <a href="https://app.airframes.io/" target="_blank" rel="noopener">Airframes.io</a> and its community of feeders${d.stale ? ' · not updated just now' : ''}</em></div>`;
 }
-const photos = new Map();              // hex -> the photo's element (kept, so the card's redraws don't reload it)
+const photos = new Map();              // hex (infinitescope: model and livery) -> the photo's element (kept, so the card's redraws don't reload it)
+// p: {src, link, by} from planespotters.net, or a site's own with credit (where it's from), license and what (what it shows)
 function photoEl(hex, p) {
   if (!p || !p.src || !/^https:\/\//.test(p.src)) return null;
   if (!photos.has(hex)) { const el = document.createElement('a'); el.className = 'ph'; el.target = '_blank'; el.rel = 'noopener';
     if (/^https:\/\//.test(p.link)) el.href = p.link;
-    el.innerHTML = `<img src="${esc(p.src)}" alt=""><i>© ${esc(p.by || 'unknown')} · planespotters.net</i>`; photos.set(hex, el); }
+    el.innerHTML = `<img src="${esc(p.src)}" alt=""><i>${p.what ? esc(p.what) + '<br>' : ''}© ${esc(p.by || 'unknown')}${p.license ? ' · ' + esc(p.license) : ''} · ${esc(p.credit || 'planespotters.net')}</i>`; photos.set(hex, el); }
   return photos.get(hex);
 }
 const CATS = { A1:'light, under 15,500 lb', A2:'small, 15,500–75,000 lb', A3:'large, 75,000–300,000 lb', A4:'high vortex large (757)', A5:'heavy, over 300,000 lb',
@@ -1374,10 +1395,51 @@ function detailCard(a) {
       ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
   return `<div class="ph0"></div>` + fhCard(a) + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`) + acarsCard(a);
 }
+// the selected flight's aircraft and flight (infinitescope): the flight list's entry plus /api/live/flight's plan, flown
+// track (Expert and Training) and logbook entry; distances along the filed plan from where the aircraft is now
+function flightCard(a, la, lo) {
+  const f = FL && FL.id === a.id ? FL : null, plan = f && f.plan, pts = (plan && plan.pts) || [], r = routeOf(a), lg = f && f.log;
+  const num = v => typeof v === 'number' && isFinite(v), nm = v => Math.round(v).toLocaleString() + ' nm';
+  const altS = v => v >= 18000 ? 'FL' + Math.round(v / 100) : Math.round(v).toLocaleString() + ' ft', deg = v => String(Math.round(v) % 360).padStart(3, '0') + '°';
+  const hm = m => (m = Math.round(m)) >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`, zt = t => new Date(t * 1000).toISOString().slice(11, 16) + 'Z',
+    zd = t => (Date.now() / 1000 - t > 72000 ? new Date(t * 1000).toUTCString().slice(5, 11) + ' ' : '') + zt(t);
+  const ap = id => { const x = id && (areaAps.get(id) || MAJOR.find(o => o[0] === id)); return x ? `${id} · ${x[1]}` : id || ''; };
+  // where it is on the plan: the leg it's flying is the one it's nearest to; the next fix is that leg's end
+  let next = -1, toGo = null;
+  if (pts.length > 1) {
+    let best = 1e9;
+    for (let i = 1; i < pts.length; i++) { const p = pts[i - 1], q = pts[i], leg = gc(p[1], p[2], q[1], q[2]) || 1e-6;
+      const off = gc(la, lo, p[1], p[2]) + gc(la, lo, q[1], q[2]) - leg; if (off < best) { best = off; next = i; } }
+    toGo = gc(la, lo, pts[next][1], pts[next][2]);
+    for (let i = next + 1; i < pts.length; i++) toGo += gc(pts[i - 1][1], pts[i - 1][2], pts[i][1], pts[i][2]);
+  } else if (r && r[4] != null) toGo = gc(la, lo, r[4], r[5]);
+  const eta = toGo != null && !a.ground && a.gs > 50 ? toGo / a.gs * 60 : null;
+  const tr = (f && f.track) || [], t0 = tr.length && tr[0][4];
+  let flown = 0; for (let i = 1; i < tr.length; i++) flown += gc(tr[i - 1][0], tr[i - 1][1], tr[i][0], tr[i][1]);
+  const top = tr.length ? Math.max(...tr.map(p => p[2])) : null, kinds = k => ((plan && plan.procs) || []).filter(p => p[1] === k).map(p => p[0]).join(', ');
+  const sec = (title, rows) => { rows = rows.filter(x => x[1] !== '' && x[1] != null);
+    return rows.length ? `<i>${title}</i>` + rows.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('') : ''; };
+  const ld = lg && lg.landing;
+  const h = sec('Aircraft', [['Aircraft', a.acName], ['Livery', a.livery], ['Type', a.type], ['Pilot', [a.user || 'unlinked account', a.vo].filter(Boolean).join(' · ')]]) +
+    sec('Now', [['Altitude', a.ground ? 'on the ground' : altS(a.alt)], ['Vertical speed', a.vs && !a.ground ? (a.vs > 0 ? '+' : '') + a.vs.toLocaleString() + ' fpm' : ''],
+      ['Ground speed', a.gs + ' kt'], ['Track', deg(a.hdg)], ['Heading', num(a.head) ? deg(a.head) : ''], ['Position', `${la.toFixed(3)}, ${lo.toFixed(3)}`]]) +
+    sec('Flight', [['From', ap(r && r[0])], ['To', ap(r && r[3])], ['Flight plan', plan ? (plan.ifr ? 'IFR' : 'VFR') + (pts.length ? ` · ${pts.length} fixes` : '') : f ? 'none filed' : 'loading…'],
+      ['SID', kinds('SID')], ['STAR', kinds('STAR')], ['Approach', kinds('approach')], ['Oceanic track', kinds('track')],
+      ['Cruise (planned)', plan && plan.cruise ? altS(plan.cruise) : ''],
+      ['Next fix', next >= 0 ? `${pts[next][0]} · ${nm(gc(la, lo, pts[next][1], pts[next][2]))}${pts[next][3] > 0 ? ' · at ' + altS(pts[next][3]) : ''}` : ''],
+      ['To go', toGo != null ? nm(toGo) + (next >= 0 ? ' along the plan' : ' direct') : ''], ['ETA', eta != null ? `${zt(Date.now() / 1000 + eta * 60)} · in ${hm(eta)}` : ''],
+      ['Flown', tr.length > 1 ? `${nm(flown)}${t0 ? ' since ' + zd(t0) : ''}` : ''], ['Highest so far', top ? altS(top) : '']]) +
+    (lg ? sec('Logbook', [['Flight time', num(lg.min) ? hm(lg.min) + (num(lg.night) && lg.night > 0.5 ? ` (${hm(lg.night)} at night)` : '') : ''],
+      ['Landings', num(lg.landings) ? String(lg.landings) : ''], ['Fuel used', num(lg.fuel) ? Math.round(lg.fuel).toLocaleString() + ' kg' : ''], ['XP', num(lg.xp) ? lg.xp.toLocaleString() : ''],
+      ['Last landing', ld && num(ld.vs) ? [Math.round(ld.vs * 196.85) + ' fpm', num(ld.g) ? ld.g.toFixed(2) + ' g' : '', num(ld.ias) ? Math.round(ld.ias) + ' kt' : '',
+        num(ld.cl) ? ld.cl.toFixed(1) + ' m off centreline' : ''].filter(Boolean).join(' · ') : ''],
+      ['Violations', lg.viol.length ? lg.viol.map(v => `level ${v[0]} ${v[1]}`).join(', ') : 'none']]) : '');
+  return `<div class="ph0"></div><div class="dt">${h}</div>`;
+}
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
   const d = dpr();
-  if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2c46ff', null, 1.5);
+  if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2f3a6e', null, 1);
   const pts = (FL.plan && FL.plan.pts) || [], line = FL.plan && FL.plan.line;
   if (line && line.length > 1) geoLine(ctx, line, '#c86bd8', [6, 4], 1);
   if (pts.length > 1 || (line && line.length > 1)) {
@@ -1398,7 +1460,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
@@ -1506,6 +1568,8 @@ function endPointer(e) {
   if (aps.length) { pickAirport(aps[0]); return; }
   if (acs.length) { select(acs[0].id); return; }
   const bt = hitBoat(mx, my, touch ? 22 : 12); if (bt) { boatSel = bt.b[0]; return; }
+  // zoomed out, the dots are the worldwide picture (no live feed): one zooms in on it and selects it once the feed has it
+  const w = worldPts.length && worldShown() ? hitWorld(mx, my) : null; if (w) { pick({ ac: true, id: w.r[0], lat: w.p[0], lon: w.p[1] }); return; }
   select(null);
   const wx = hitWx(mx, my, touch ? 20 : 10); if (wx.length) wxOpen(e.clientX, e.clientY, wx);
 }
@@ -1569,7 +1633,7 @@ function select(id) {
 let homeInfo = null;
 function setHome(a, fly, half) {
   home = a; homeCardShut = false; select(null); try { localStorage.setItem(KEY + '-home', a[0]); } catch (e) {} procSel = null; flowMem.clear();
-  flowNeighbours = MAJOR.filter(o => o[0] !== a[0] && gc(a[5], a[6], o[5], o[6]) < 120); if (S) updateFlow(); renderFlt();
+  if (S) updateFlow(); renderFlt();
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
   if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = half || 40; }
@@ -1591,16 +1655,11 @@ function renderCard1() {
   const card = $('card'), a = S && sel && S.aircraft.find(o => o.id === sel);
   const acx = card.querySelector('.acx'), acTop = acx ? acx.scrollTop : 0;   // the ACARS list keeps its scroll through redraws
   if (a && has('flight')) {
-    const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
-    const r = routeOf(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
-    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)}${a.away ? ' ' + dim('pilot away') : ''}<br>` +
-      dim(esc(a.acName) + (a.livery ? ' · ' + esc(a.livery) : '')) + '<br>' +
-      (a.user || a.vo ? `${esc(a.user || 'unlinked account')}${a.vo ? ' ' + dim(esc(a.vo)) : ''}<br>` : '') +
-      `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
-      `${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
-      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')}<br>` : dim('no flight plan filed') + '<br>') +
-      (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}`) + '<br>' : '') +
-      (plan && plan.text ? `<div class="fp">${esc(plan.text)}${plan.alt ? ' ' + dim('at ' + esc(plan.alt)) : ''}</div>` : plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
+    const [la, lo] = pos(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
+    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)}${a.away ? ' ' + dim(esc(a.state || 'pilot away')) : ''}<br>` +
+      (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}`) + '<br>' : '') +
+      flightCard(a, la, lo) +
+      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
@@ -1609,7 +1668,7 @@ function renderCard1() {
       (FL && FL.id === a.id && FL.dep ? `${esc(FL.dep)} → ${esc(FL.arr || '????')} <span style="color:var(--dim)">filed flight plan</span><br>` +
         (FL.route ? `<div class="fp">${esc(FL.route)}</div>` : '')
       : routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeOf(a)[6] === 'filed' ? 'filed flight plan' : 'scheduled route'}${routeFits(a, routeOf(a)) ? '' : ", but it doesn't fit where it is"}</span><br>` : '') +
-      (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
+      (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}</span><br>` : '') +
       (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '') +
       (a.hex && has('aircraft') ? ` · <a href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(a.hex)}" target="_blank" rel="noopener">ADS-B Exchange ↗</a>` +
         (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? (RP.fh ? fhCard(a) : '') : detailCard(a)) : '');
@@ -1634,7 +1693,8 @@ function renderCard1() {
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (acTop && card.querySelector('.acx')) card.querySelector('.acx').scrollTop = acTop;
-  const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
+  const ph = card.querySelector('.ph0'), pe = ph && a && (has('flight') ? FL && FL.id === a.id && photoEl(a.acName + '|' + a.livery, FL.photo)
+    : AD && AD.id === a.id && photoEl(a.hex, AD.photo)); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
@@ -2026,27 +2086,14 @@ async function poll() {
   schedule(POLL_MS);
 }
 // ------------------------------------------------------------------ arrivals / departures of the picked airport
-// ADS-B carries no flight plan and callsign route databases are often stale, so this guesses from the
-// geometry: heading for the field below a generous descent profile = arrival, heading away climbing = departure.
-// A guess is kept for 2 minutes so a downwind or a vector away from the field doesn't drop it.
+// only from a route that fits (the site's filed plan, or the callsign's route): nothing is guessed from the track.
+// One is kept for 2 minutes so a route lookup that comes and goes doesn't drop it.
 let flt = localStorage.getItem(KEY + '.flt') || 'all';
 const flowMem = new Map();             // id -> ['arr' | 'dep' | 'gnd', Date.now() when last seen as that]
 function brg(lat1, lon1, lat2, lon2) {
   const p1 = lat1 * D2R, p2 = lat2 * D2R, dl = (lon2 - lon1) * D2R;
   return (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / D2R + 360) % 360;
 }
-const angOff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
-// fit of one aircraft to one airport: distance if it looks like arriving there / departing from there, else null
-function fitArr(a, ap) {
-  const d = gc(a.lat, a.lon, ap[5], ap[6]), agl = a.alt - (ap[7] || 0), off = angOff(a.hdg, brg(a.lat, a.lon, ap[5], ap[6]));
-  if (d < 10 && agl < 3500 && !(a.vs > 300 && off > 90)) return d;            // in the pattern or on final
-  return d < 160 && off < 45 && agl < d * 330 + 4000 && (a.vs < -300 || agl < 12000 || d < 30) ? d + off / 15 : null;
-}
-function fitDep(a, ap) {
-  const d = gc(a.lat, a.lon, ap[5], ap[6]), agl = a.alt - (ap[7] || 0), off = angOff(a.hdg, brg(a.lat, a.lon, ap[5], ap[6]));
-  return d < 100 && off > 90 && a.vs > 300 && agl < d * 550 + 4000 ? d : null;
-}
-let flowNeighbours = [];               // the other big airports near the picked one: traffic that fits them better isn't ours
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
 // a callsign the server found no route for is asked again after 2 min and one with only a scheduled route after 10 (the FAA's filed
@@ -2095,12 +2142,7 @@ async function loadRoutes() {
 }
 function guessFlow(a) {
   if (a.ground) return gc(a.lat, a.lon, home[5], home[6]) < 4 ? 'gnd' : '';
-  const rf = routeFlow(a); if (rf) return rf;
-  for (const [kind, fit] of [['arr', fitArr], ['dep', fitDep]]) {
-    const mine = fit(a, home); if (mine === null) continue;
-    if (!flowNeighbours.some(ap => { const f = fit(a, ap); return f !== null && f < mine; })) return kind;
-  }
-  return '';
+  return routeFlow(a);
 }
 function updateFlow() {
   const now = Date.now();
