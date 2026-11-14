@@ -8,7 +8,7 @@ behind several sites. Each site is its own repo that plugs in one traffic source
 | [livescope](https://github.com/kyleboas/livescope) | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
 | [infinitescope](https://github.com/kyleboas/infinitescope) | Infinite Flight's live multiplayer servers | https://infinitescope.kyleboas.com |
 
-scope gives every site the page (canvas, no build step), airports and runways, US procedures, OSM ground
+scope gives every site the page (canvas, no build step), airports and runways, ILS and extended finals worldwide, US procedures, OSM ground
 maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
 [livescope's README](https://github.com/kyleboas/livescope#readme) for the full feature list.
 
@@ -68,13 +68,16 @@ Anything every site can use belongs in scope (`scope/` or `web/scope.html`), not
   `web/geo/lines.json` from OurAirports and Natural Earth.
 - `python3 -I tools/build_procs.py FAACIFP18 livedata/procs.json` rebuilds the procedures. The FAA
   publishes a new CIFP every 28 days; the one included is cycle 2611.
+- `python3 -I tools/build_ils.py nav.dat.gz` writes `livedata/ils.json`, the world's ILS and localizers (Robin Peel's
+  navaids, GPL, cycle 2013.10; see the script for the download), matched to the runways in `livedata/airports.json`.
+  The page draws a 10 nm final along each localizer, and along the runway itself on long runways that have none on file.
 - `web/geo/ksfo.json` holds KSFO's extended finals, from the atcscope project.
 
 ## Layout
 
 ```
 server.py        HTTP server for one site: the page (with the site's settings), map files, /api/live*
-scope/core.py    geometry, airports (OurAirports), procedures (FAA CIFP), ground maps (OSM)
+scope/core.py    geometry, airports (OurAirports) and their ILS, procedures (FAA CIFP), ground maps (OSM)
 scope/weather.py D-ATIS (atis.info) and METARs (aviationweather.gov)
 web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals
