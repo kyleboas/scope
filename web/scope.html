@@ -2532,8 +2532,12 @@ async function tlOpen(id, fly, pastH) {
   if (has('radio')) radioOpen(rec);
   if (fly) { view.lat = rec.lat; view.lon = rec.lon; view.half = world ? R_NM * 1.05 : Math.max(5, rec.nm / 1.25); viewChanged(true); }
   tlBar(); mapKey = '';
-  await tlLoad(RP);
-  if (RP && RP.frames.length) tlPlay(true);
+  const rp = RP;
+  if (rec.back) {                          // a finished recording on its own page: play from the first page while the rest loads
+    const go = setInterval(() => { if (RP !== rp) clearInterval(go); else if (rp.frames.length > 1) { clearInterval(go); rp.auto = true; tlPlay(true); } }, 250);
+  }
+  await tlLoad(rp);
+  if (RP === rp && rp.frames.length && !rp.auto) tlPlay(true);   // (a pause while it loaded stays)
 }
 async function tlLoad(rp) {             // all of it, page by page, then (while it's still recording) whatever is new
   const from = () => rp.frames.length ? rp.frames[rp.frames.length - 1][0] + 0.05 : rp.from;
