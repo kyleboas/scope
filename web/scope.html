@@ -96,6 +96,8 @@
   #idle { position:absolute; inset:0; z-index:4; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.55);
           font:13px var(--mono); color:var(--fg2); cursor:pointer; text-align:center; padding:20px; }
   body.idle #idle { display:flex; }
+  #card .au { margin:5px 0; } #card .au button { margin:1px 4px 1px 0; padding:1px 6px; font-size:11px; }
+  #card .au button.on, #radioBtn { color:#30d158; } #lwBtn { color:#7aa2ff; } #card .au button.err { color:var(--bad); }
   #card .atc { display:grid; grid-template-columns:max-content 1fr max-content; gap:0 10px; margin:5px 0; color:var(--dim); }
   #card .atc span:nth-child(3n+1) { color:#5ac8fa; }
   #card .atc span:nth-child(3n+2) { color:var(--fg); overflow:hidden; text-overflow:ellipsis; }
@@ -187,6 +189,8 @@
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <span id="srvs" title="Server"></span>
   <span id="status"></span>
+  <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
+  <button id="radioBtn" hidden title="Stop the live audio"></button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
   <button id="listBtn" title="The airport or aircraft card">Info</button>
@@ -1041,23 +1045,115 @@ function renderCard1() {
       (fs.length || ctr.length ? `<div class="atc">${fs.concat(ctr).map(f => `<span>${esc(f.type)}</span><span>${esc(f.user || 'controller')}</span><span>since ${since(f.since)}</span>`).join('')}</div>`
         : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard();
   } else if (home && !homeCardShut) {
-    // its radio frequencies (OurAirports) and a link to listen on LiveATC.net, which has the audio for many airports
+    // its radio frequencies (OurAirports), its live audio feeds (SITE.audio) and a link to listen on LiveATC.net
     const info = homeInfo && homeInfo[0] === home[0] ? homeInfo : null, fq = (info && info[10]) || [];
     const ils = info ? info[9].flatMap(r => [[r[0], r[7]], [r[1], r[8]]]).filter(([, l]) => l).sort((p, q) => p[0].localeCompare(q[0], 'en', { numeric:true })) : [];
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
       (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
         `${ils.map(([e, l]) => `<span>${esc(l[0] + ' ' + e)}</span><span>${l[2].toFixed(2)}</span><span>${esc(l[1])} · ${Math.round(l[3])}° true${l[6] ? ` · glideslope ${l[6]}°` : ''}</span>`).join('')}</div>` : '') +
-      `<a href="https://www.liveatc.net/search/?icao=${encodeURIComponent(home[0])}" target="_blank" rel="noopener">Listen on LiveATC.net ↗</a>` + atisCard() + procCard();
+      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard();
+    if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
   const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
+  if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
+  card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
     procSel = procSel && procSel.join('|') === k.join('|') ? null : k; mapKey = ''; renderCard();
   });
   $('cardX').onclick = () => { if (sel) select(null); else { homeCardShut = true; document.body.classList.remove('listOpen'); renderCard(); } };
 }
+// live audio: SITE.audio maps an airport to its feeds, [[label, stream URL], ...]; any MP3/AAC/Ogg stream the
+// browser can play (an Icecast mount, say). One plays at a time, outside the card, so it carries on when the
+// card closes or the view moves; the header's button stops it.
+const radio = new Audio(); radio.preload = 'none';
+let radioNow = null, radioErr = '', radioUp = false, radioAbort = null;   // [airport, label, url] playing; the URL that failed; sound has started
+const radioFeeds = id => (SITE.audio && SITE.audio[id]) || [];
+function radioCard() {
+  const fs = radioFeeds(home[0]);
+  if (!fs.length) return '';
+  return `<div class="au">${fs.map(([lb, u], i) => {
+    const on = radioNow && radioNow[2] === u;
+    return `<button data-au="${i}" class="${on ? 'on' : radioErr === u ? 'err' : ''}" title="${on ? 'Stop' : radioErr === u ? 'Couldn’t play it: try again' : 'Listen live'}">${on ? (radioUp ? '■' : '…') : '▶'} ${esc(lb)}</button>`;
+  }).join('')}</div>`;
+}
+function radioStop() {
+  if (radioAbort) radioAbort.abort(); radioAbort = null;
+  radio.pause(); radio.removeAttribute('src'); radio.load(); radioNow = null; radioUp = false;
+}
+function radioPlay(f) {
+  const same = f && radioNow && radioNow[2] === f[2];
+  radioStop(); radioErr = '';
+  if (f && !same) { radioNow = f; radioStart(f[2]); }
+  radioShow();
+}
+// A low-bitrate stream (ATC feeds are often 8–16 kbps) takes a plain <audio> 10–15 s to buffer before it starts, so
+// where the browser has Media Source Extensions the stream is fetched and fed in as it arrives: sound in a second or two.
+function radioStart(u) {
+  const fail = () => radioNow && radioNow[2] === u && radioFail(u);
+  const plain = () => { radio.src = u; radio.play().catch(fail); };   // other formats, or a server without CORS headers
+  if (!window.MediaSource || !MediaSource.isTypeSupported('audio/mpeg')) return plain();
+  const ac = radioAbort = new AbortController();
+  (async () => {
+    let r;
+    try { r = await fetch(u, { signal: ac.signal, cache: 'no-store' }); } catch (e) { if (!ac.signal.aborted) plain(); return; }
+    if (!r.ok) return fail();
+    if (!/^audio\/mpeg/.test(r.headers.get('content-type') || '')) { ac.abort(); return plain(); }
+    const ms = new MediaSource();
+    radio.src = URL.createObjectURL(ms);
+    await new Promise(ok => ms.addEventListener('sourceopen', ok, { once:true }));
+    if (ac.signal.aborted) return;
+    const sb = ms.addSourceBuffer('audio/mpeg'), idle = () => sb.updating && new Promise(ok => sb.addEventListener('updateend', ok, { once:true }));
+    sb.mode = 'sequence';
+    try {
+      const rd = r.body.getReader();
+      radio.play().catch(fail);
+      for (;;) {
+        const { done, value } = await rd.read();
+        if (done || ac.signal.aborted) break;
+        await idle();
+        const b = sb.buffered, t = radio.currentTime;
+        if (b.length && t - b.start(0) > 60) { sb.remove(0, t - 30); await idle(); }     // keep half a minute behind
+        if (b.length && b.end(b.length - 1) - t > 8) radio.currentTime = b.end(b.length - 1) - 1;   // fell behind: back to live
+        sb.appendBuffer(value);
+      }
+      if (!ac.signal.aborted) fail();          // the stream ended
+    } catch (e) { if (!ac.signal.aborted) fail(); }
+  })();
+}
+function radioFail(u) { if (radioNow && radioNow[2] === u) { radioStop(); radioErr = u; radioShow(); } }
+radio.onerror = () => radioNow && radio.getAttribute('src') && radioFail(radioNow[2]);
+radio.onplaying = () => { if (radioNow && !radioUp) { radioUp = true; radioShow(); } };
+function radioShow() {
+  const b = $('radioBtn'); b.hidden = !radioNow;
+  if (radioNow) b.textContent = `${radioUp ? '■' : '…'} ${radioNow[0]} ${radioNow[1]}`;
+  if (home && !sel) renderCard();
+}
+$('radioBtn').onclick = () => radioPlay(null);
+// LiveATC.net's airport page in a tab of its own. Their terms rule out playing their streams
+// here, and their player page cuts its link to the page that opened it, so this tab is as far as control goes: it
+// opens, follows the airport picked, and closes from the header; the feeds play in LiveATC's own player.
+let lw = null, lwId = '';
+const lwUrl = id => 'https://www.liveatc.net/search/?icao=' + encodeURIComponent(id);
+const lwOpen = () => { try { return !!lw && !lw.closed; } catch (e) { return false; } };
+function lwGo(id, focus) {
+  if (lwOpen()) { if (lwId !== id) lw.location.href = lwUrl(id); }
+  else {
+    lw = window.open(lwUrl(id), 'livescope-liveatc');
+    if (!lw) return;
+  }
+  lwId = id; if (focus) try { lw.focus(); } catch (e) {}
+  lwShow(); if (home && !sel) renderCard();
+}
+function lwShow() {
+  const b = $('lwBtn'), on = lwOpen(); b.hidden = !on;
+  if (on) b.textContent = `LiveATC ${lwId} ✕`;
+  else if (lw) { lw = null; lwId = ''; if (home && !sel) renderCard(); }
+}
+$('lwBtn').onclick = () => { try { lw.close(); } catch (e) {} lwShow(); };
+setInterval(lwShow, 1000);                  // closed from its own title bar
 // the airport's ATIS (FAA D-ATIS, US airports that have one) and latest METAR, refreshed every 2 min
 const atis = new Map();                // ident -> {atis:[{type, code, text, time}], metar:{raw, cat}, t}
 const atisAsked = new Map();
