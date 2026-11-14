@@ -227,7 +227,8 @@
 const has = f => SITE.features.includes(f);
 const KEY = SITE.name;                 // localStorage prefix
 // optional site settings: no_history (no trails), hist_s (seconds of trail to keep, default 32), stale_s (dead reckoning limit), idle_min (stop polling after that
-// long without input), poll_ms, world_ms, start (hash to open on; null = the globe), metar_label
+// long without input), poll_ms, world_ms, start (hash to open on; null = the globe), metar_label,
+// network (one network's name, no server picker), ctr_nm (Centers listed in an airport card, default within 400 nm)
 const STALE_S = SITE.stale_s || 20, POLL_MS = SITE.poll_ms || 2000, WORLD_MS = SITE.world_ms || 30000;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[ch]));
@@ -409,7 +410,7 @@ function drawMap() {
   }
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
   if (S && S.center && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
-    const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${Math.round(WORLD.every / 60)} min (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
+    const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${WORLD.every < 60 ? WORLD.every + ' s' : Math.round(WORLD.every / 60) + ' min'} (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
   if (L.finals && view.half < 80) drawFinals(c);
   if (view.half < 150) drawProcs(c);
   if (L.taxi && view.half < 4) drawGround(c);
@@ -1044,7 +1045,7 @@ function renderCard1() {
       `${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
       (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')}<br>` : dim('no flight plan filed') + '<br>') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}`) + '<br>' : '') +
-      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
+      (plan && plan.text ? `<div class="fp">${esc(plan.text)}${plan.alt ? ' ' + dim('at ' + esc(plan.alt)) : ''}</div>` : plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
@@ -1057,7 +1058,7 @@ function renderCard1() {
         (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? '' : detailCard(a)) : '');
   } else if (home && !homeCardShut && has('atc')) {
     // controllers on duty here (and Centers within 400 nm), then the ATIS block
-    const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < 400);
+    const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < (SITE.ctr_nm || 400));
     const since = t => t ? new Date(t * 1000).toISOString().slice(11, 16) + 'Z' : '';
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
@@ -1195,7 +1196,7 @@ function atisCard() {
   if (u) h += `<div class="atis use"><i>Runways in use, read from the ATIS</i>${[['Landing', [...u.arr.keys()].map(k => k + (u.arr.get(k).size ? ' (' + [...u.arr.get(k)].join(', ') + ')' : ''))], ['departing', [...u.dep]]]
     .filter(([, v]) => v.length).map(([w, v], i) => `${i ? ' · ' + w : w} <b>${esc(v.join(' '))}</b>`).join('')}</div>`;
   if (d.metar && d.metar.raw) h += `<div class="atis"><i>${SITE.metar_label || 'METAR'}${d.metar.cat ? ' · ' + esc(d.metar.cat) : ''}</i>${esc(d.metar.raw)}</div>`;
-  if (!(d.atis || []).length) h += `<div class="atis"><span class="dim">${has('servers') ? `No ATIS open here on ${esc(srvName())}.` : home[4] === 'US' ? 'No D-ATIS published for this airport.' : 'ATIS text is only available for US airports (FAA D-ATIS).'}</span></div>`;
+  if (!(d.atis || []).length) h += `<div class="atis"><span class="dim">${has('servers') || SITE.network ? `No ATIS open here on ${esc(srvName())}.` : home[4] === 'US' ? 'No D-ATIS published for this airport.' : 'ATIS text is only available for US airports (FAA D-ATIS).'}</span></div>`;
   return h;
 }
 function procCard() {
@@ -1562,7 +1563,7 @@ setInterval(() => { if (!RP) { $('clock').textContent = new Date().toISOString()
 const ERRS = { 'no API key':'no API key on the server yet', 'not approved yet':'API client waiting for approval', busy:'over the API rate limit, retrying', 'rate limited':'rate limited, retrying' };
 let srv = has('servers') && (() => { try { return localStorage.getItem(KEY + '.srv'); } catch (e) { return null; } })() || (has('servers') ? 'expert' : ''), SERVERS = [];
 const srvQ = () => srv ? `srv=${srv}&` : '';
-const srvName = () => (SERVERS.find(o => o.key === srv) || { name: srv ? srv[0].toUpperCase() + srv.slice(1) + ' Server' : '' }).name;
+const srvName = () => (SERVERS.find(o => o.key === srv) || { name: srv ? srv[0].toUpperCase() + srv.slice(1) + ' Server' : SITE.network || '' }).name;   // SITE.network: one network, no server picker (vatscope)
 async function loadServers() {
   try { const j = await (await fetch('/api/live/servers')).json(); SERVERS = j.servers || []; } catch (e) {}
   renderServers(); setTimeout(loadServers, 600000);
