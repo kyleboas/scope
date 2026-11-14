@@ -294,7 +294,7 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')));
+  const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
     `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
@@ -769,13 +769,18 @@ function hitWorld(mx, my) {
   return best;
 }
 
-// ------------------------------------------------------------------ the selected flight's filed plan and flown route (infinitescope)
-let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]]}, track:[[lat, lon, alt]]}
+// ------------------------------------------------------------------ the selected flight's filed plan and flown route
+// (infinitescope: /api/live/flight; a site with the 'fplan' feature, livescope: /api/live/fplan by callsign, real
+// flight plans, {dep, arr, route, plan:{pts, line}} or {} when it has none)
+let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]], line:[[lat, lon]]}, track:[[lat, lon, alt]]}
 let flAsked = 0;
 async function loadFlight() {
-  if (!has('flight') || !sel || (FL && FL.id === sel && Date.now() - FL.t < 60000) || Date.now() - flAsked < 5000) return;
-  flAsked = Date.now(); const id = sel;
-  try { const j = await (await fetch(`/api/live/flight?${srvQ()}id=${encodeURIComponent(id)}`)).json();
+  const byCs = !has('flight') && has('fplan');
+  if (!(has('flight') || byCs) || !sel || (FL && FL.id === sel && Date.now() - FL.t < 60000) || Date.now() - flAsked < 5000) return;
+  const id = sel, a = byCs && S && S.aircraft.find(o => o.id === id), cs = a && a.cs.trim();
+  if (byCs && !(cs && /^[A-Z0-9]{2,8}$/i.test(cs))) return;
+  flAsked = Date.now();
+  try { const j = await (await fetch(byCs ? `/api/live/fplan?cs=${encodeURIComponent(cs)}` : `/api/live/flight?${srvQ()}id=${encodeURIComponent(id)}`)).json();
     if (sel === id) { FL = { ...j, id, t: Date.now() }; renderCard(); } } catch (e) {}
 }
 // ------------------------------------------------------------------ everything the feed says about the selected aircraft (livescope)
@@ -837,9 +842,10 @@ function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
   const d = dpr();
   if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2c46ff', null, 1.5);
-  const pts = (FL.plan && FL.plan.pts) || [];
-  if (pts.length > 1) {
-    geoLine(ctx, pts.map(p => [p[1], p[2]]), '#c86bd8', [6, 4], 1);
+  const pts = (FL.plan && FL.plan.pts) || [], line = FL.plan && FL.plan.line;
+  if (line && line.length > 1) geoLine(ctx, line, '#c86bd8', [6, 4], 1);
+  if (pts.length > 1 || (line && line.length > 1)) {
+    if (!(line && line.length > 1)) geoLine(ctx, pts.map(p => [p[1], p[2]]), '#c86bd8', [6, 4], 1);
     ctx.font = FONT(9);
     for (const [n, la, lo] of pts) { const [x, y, z] = proj(la, lo); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
       ctx.fillStyle = '#c86bd8'; ctx.fillRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); if (view.half < 120) ctx.fillText(n, x + 4*d, y - 3*d); }
@@ -1051,7 +1057,9 @@ function renderCard1() {
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
       `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
       `squawk ${esc(a.sq || '----')}${a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : ''} · ${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
-      (routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeFits(a, routeOf(a)) ? 'scheduled route' : "scheduled route, but it doesn't fit where it is"}</span><br>` : '') +
+      (FL && FL.id === a.id && FL.dep ? `${esc(FL.dep)} → ${esc(FL.arr || '????')} <span style="color:var(--dim)">filed flight plan</span><br>` +
+        (FL.route ? `<div class="fp">${esc(FL.route)}</div>` : '')
+      : routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeOf(a)[6] === 'filed' ? 'filed flight plan' : 'scheduled route'}${routeFits(a, routeOf(a)) ? '' : ", but it doesn't fit where it is"}</span><br>` : '') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
       (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '') +
       (a.hex && has('aircraft') ? ` · <a href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(a.hex)}" target="_blank" rel="noopener">ADS-B Exchange ↗</a>` +
