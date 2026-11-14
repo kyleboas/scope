@@ -624,14 +624,14 @@ function drawWorld() {
     for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + rad[k], y); ctx.arc(x, y, rad[k], 0, 7); }
     ctx.fill();
   }
-  ctx.lineWidth = d;
-  for (const [k, c] of [[4, '#333'], [3, COL.dbDim]]) {   // estimated positions: hollow rings
+  ctx.lineWidth = 0.7 * d;
+  for (const [k, c] of [[4, '#333'], [3, COL.dbDim]]) {   // estimated positions: hollow rings, about a dot's size
     ctx.strokeStyle = c; ctx.beginPath();
-    for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 2*d, y); ctx.arc(x, y, 2 * d, 0, 7); }
+    for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 1.3*d, y); ctx.arc(x, y, 1.3 * d, 0, 7); }
     ctx.stroke();
   }
   if (L.tags && view.half <= 300) {              // zoomed in (playing back the past): tag the dots like live traffic
-    ctx.font = FONT(11); let n = 0;
+    ctx.font = FONT(11); ctx.lineWidth = d; let n = 0;
     for (const w of worldPts) {
       if (w.k !== 0 && w.k !== 3) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
