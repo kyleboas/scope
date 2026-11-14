@@ -35,6 +35,8 @@
   .altf { display:flex; align-items:center; gap:1px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
   .altf input { width:4.5ch; padding:5px 2px; text-align:center; }
   .altf.on, .altf.on input { color:#4fb3ff; }
+  #altT { cursor:pointer; padding:5px 2px; } #altT:hover { color:var(--fg); } .altf.on #altT:hover { color:#8fd0ff; }
+  .altf.off input { text-decoration:line-through; }
   #res { position:absolute; left:0; top:calc(100% + 4px); z-index:5; width:340px; max-height:60vh; overflow:auto; background:rgba(28,28,30,.98);
          border-radius:6px; box-shadow:0 8px 24px #0008; display:none; }
   #res div { padding:7px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -213,7 +215,7 @@
 <header>
   <span id="clock">--:--:--Z</span>
   <div class="srch"><input id="q" placeholder="Search..." title="Search: airport code or name (KSFO, LHR, Narita), or an aircraft by callsign, tail number or hex code (UAL123, N12345, a1b2c3)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
-  <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category).">ALT
+  <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category). Click ALT to turn it off and on (the boxes are kept)."><span id="altT">ALT</span>
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <button id="listBtn" title="Airport information (the picked airport's card)">Info</button>
   <span id="hmetar"></span>
@@ -2102,7 +2104,7 @@ function updateFlow() {
 }
 function flowOf(a) { const m = home && flowMem.get(a.id); return m ? m[0] : ''; }
 // altitude filter (header): feet, or null for no limit
-let altLo = null, altHi = null;
+let altLo = null, altHi = null, altOff = false;   // altOff: switched off by clicking ALT, the boxes kept
 function parseAlt(t) {
   t = String(t || '').trim().toUpperCase().replace(/[, ]/g, ''); if (!t) return null;
   const fl = t.startsWith('FL'), n = parseFloat(fl ? t.slice(2) : t);
@@ -2114,13 +2116,20 @@ function altOk(alt, ground) {
   return (altLo == null || v >= altLo) && (altHi == null || v <= altHi);
 }
 function setAltFilter() {
-  altLo = parseAlt($('altLo').value); altHi = parseAlt($('altHi').value);
-  $('altf').classList.toggle('on', altLo != null || altHi != null);
-  try { localStorage.setItem(KEY + '-alt', JSON.stringify([$('altLo').value, $('altHi').value])); } catch (e) {}
+  const lo = parseAlt($('altLo').value), hi = parseAlt($('altHi').value), set = lo != null || hi != null;
+  if (!set) altOff = false;
+  altLo = altOff ? null : lo; altHi = altOff ? null : hi;
+  $('altf').classList.toggle('on', set && !altOff); $('altf').classList.toggle('off', set && altOff);
+  try { localStorage.setItem(KEY + '-alt', JSON.stringify([$('altLo').value, $('altHi').value, altOff])); } catch (e) {}
   worldPtsT = 0;
 }
-try { const [lo, hi] = JSON.parse(localStorage.getItem(KEY + '-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; } catch (e) {}
-for (const id of ['altLo', 'altHi']) { $(id).addEventListener('input', setAltFilter); $(id).addEventListener('keydown', e => { if (e.key === 'Escape') { $(id).value = ''; setAltFilter(); $(id).blur(); } }); }
+try { const [lo, hi, off] = JSON.parse(localStorage.getItem(KEY + '-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; altOff = !!off; } catch (e) {}
+$('altT').addEventListener('click', e => {      // ALT turns the filter off and on, keeping the boxes (the label would only focus the min box)
+  e.preventDefault();
+  if (parseAlt($('altLo').value) == null && parseAlt($('altHi').value) == null) { $('altLo').focus(); return; }
+  altOff = !altOff; setAltFilter();
+});
+for (const id of ['altLo', 'altHi']) { $(id).addEventListener('input', () => { altOff = false; setAltFilter(); }); $(id).addEventListener('keydown', e => { if (e.key === 'Escape') { $(id).value = ''; setAltFilter(); $(id).blur(); } }); }
 setAltFilter();
 function matches(a) {               // does it pass the altitude and ARR / DEP filters
   if (!altOk(a.alt, a.ground)) return false;
