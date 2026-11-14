@@ -977,7 +977,7 @@ function drawAircraft() {
   const d = dpr(), ppn = pxPerNm(), far = view.half > 300 || worldShown(), now = performance.now();
   drawn = [];
   if (!S) return;
-  const fltOn = flt !== 'all' && !!home;   // ARR / DEP filter on: only its arrivals / departures are tagged, and always (any zoom, no declutter)
+  const fOn = fltOn();   // ARR / DEP filter on: only its arrivals / departures are tagged, and always (any zoom, no declutter)
   const pri = a => a.id === sel || a.id === hover || a.emer ? 2 : tagWas.has(a.id) ? 1 : 0;
   for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel) continue;
@@ -999,10 +999,10 @@ function drawAircraft() {
     if (out) {
       ctx.fillStyle = '#5a5a5a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill();
       const st = a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : '');
-      if (L.tags && !fltOn && !far && !a.ground && tagFits(px - 3*d, py - 6*d, px + (14 + st.length * .62 * TAG(10)) * d, py + 6*d)) { tagNow.add(a.id); shortTag(px, py, st, COL.dbDim); }
+      if (L.tags && !fOn && !far && !a.ground && tagFits(px - 3*d, py - 6*d, px + (14 + st.length * .62 * TAG(10)) * d, py + 6*d)) { tagNow.add(a.id); shortTag(px, py, st, COL.dbDim); }
       continue;
     }
-    const keep = fltOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
+    const keep = fOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
     const blend = far && worldShown() && !isSel && !isHov && !emer && !keep;   // zoomed out with the worldwide dots: look like them
     ctx.fillStyle = emer ? COL.alert : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
@@ -1063,17 +1063,18 @@ function drawWorld() {
   const now = Date.now();
   if (now - worldPtsT > 1000) {                  // dead-reckon at most once a second (thousands of them)
     worldPtsT = now; worldPts = [];
-    const t = now / 1000, inLive = S && S.center ? [S.center[0], S.center[1], S.nm] : null;
+    const t = now / 1000, inLive = S && S.center ? [S.center[0], S.center[1], S.nm] : null, fOn = fltOn();
     for (const r of WORLD.ac) {
       const [, la, lo, trk, gs, alt, ts, , gnd] = r;
       if (gnd && !L.ground) continue;
       const dt = Math.min(1200, Math.max(0, t - ts)), p = !gnd && gs > 30 ? dest(la, lo, trk, gs / 3600 * dt) : [la, lo];
       if (inLive && gc(p[0], p[1], inLive[0], inLive[1]) < inLive[2]) continue;
-      worldPts.push({ p, r, k: gnd ? 2 : altOk(alt * 100, false) ? 0 : 1 });   // 0 shown, 1 outside the altitude filter, 2 on the ground
+      const fo = fOn && !fltWant(flowCs.get(String(r[7] || '').trim().toUpperCase()));   // ARR / DEP filter: the rest are grey
+      worldPts.push({ p, r, k: fo ? 1 : gnd ? 2 : altOk(alt * 100, false) ? 0 : 1 });   // 0 shown, 1 outside the altitude (or ARR / DEP) filter, 2 on the ground
     }
     if (L.est) for (const r of WORLD.est || []) {  // estimated: out of every receiver's range (oceans), carried on by the server
       const [, la, lo, trk, gs, alt, ts] = r, dt = Math.min(1200, Math.max(0, t - ts)), p = dest(la, lo, trk, gs / 3600 * dt);
-      worldPts.push({ p, r, k: altOk(alt * 100, false) ? 3 : 4, est: true });
+      worldPts.push({ p, r, k: altOk(alt * 100, false) && !(fOn && !fltWant(flowCs.get(String(r[7] || '').trim().toUpperCase()))) ? 3 : 4, est: true });
     }
   }
   const d = dpr(), rad = [1.3 * d, 1.1 * d, 1 * d], col = [COL.dbDim, '#3a3a3a', '#5a5f66'];
@@ -1088,21 +1089,22 @@ function drawWorld() {
     for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 1.3*d, y); ctx.arc(x, y, 1.3 * d, 0, 7); }
     ctx.stroke();
   }
-  if (L.tags && view.half <= 300 && !(flt !== 'all' && home)) {   // zoomed in (playing back the past): tag the dots like live traffic (not while ARR / DEP filters)
+  const fOn = fltOn();
+  if (L.tags && (view.half <= 300 || fOn)) {     // zoomed in (playing back the past): tag the dots like live traffic; ARR / DEP filter: only its own, at any zoom
     ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d, fs = TAG(11), wk = w => 'w' + w.r[0];
     for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if (w.k !== 0 && w.k !== 3) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
       const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
-      if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d))) continue;
-      if (++n > 400) break;
+      if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d), fOn)) continue;
+      if (++n > 400 && !fOn) break;
       tagNow.add(wk(w));
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
       ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + wl);
     }
     n = 0;                                       // outside the altitude filter: a short tag, the altitude
-    for (const w of worldPts.slice().sort(tagFirst(wk))) {
+    if (!fOn) for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if (w.k !== 1 && w.k !== 4) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
       if (!tagFits(x - 3*d, y - 6*d, x + (14 + 3 * .62 * TAG(10)) * d, y + 6*d)) continue;
@@ -2079,12 +2081,14 @@ async function poll() {
   const nm = Math.max(10, Math.min(250, viewNm() * 1.05));
   // zoomed out on the worldwide picture (every scope, nothing picked): the dots are all there is to see, so the
   // 250 nm feed isn't asked; it's back the moment a scope zooms in under 250 nm
-  const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && eachScope(worldShown).every(Boolean);
+  // ARR / DEP filter on and zoomed out past the feed: it's asked around the picked airport instead, so its arrivals and departures stay live
+  const aroundHome = fltOn() && viewNm() > MAX_LIVE_NM * 1.05;
+  const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && !aroundHome && eachScope(worldShown).every(Boolean);
   if (RP) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
   else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
     ingest(); loadWorld(); loadBoats(); loadWx(); loadAtc(); }
   else try {
-    const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
+    const s = await (await fetch(`/api/live?${srvQ()}lat=${(aroundHome ? home[5] : view.lat).toFixed(3)}&lon=${(aroundHome ? home[6] : view.lon).toFixed(3)}&nm=${(aroundHome ? MAX_LIVE_NM : nm).toFixed(0)}`)).json();
     if (RP) throw 0;                               // a timelapse started while this was on its way
     if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; motion.clear(); }
     if (S && s.t !== S.t) {
@@ -2113,7 +2117,10 @@ async function poll() {
 // only from a route that fits (the site's filed plan, or the callsign's route): nothing is guessed from the track.
 // One is kept for 2 minutes so a route lookup that comes and goes doesn't drop it.
 let flt = localStorage.getItem(KEY + '.flt') || 'all';
-const flowMem = new Map();             // id -> ['arr' | 'dep' | 'gnd', Date.now() when last seen as that]
+const flowMem = new Map();             // id -> ['arr' | 'dep' | 'gnd', Date.now() when last seen as that, callsign]
+const flowCs = new Map();              // callsign -> 'arr' | 'dep', so the worldwide dots (zoomed out) can be told apart too
+const fltOn = () => flt !== 'all' && !!home;
+const fltWant = f => (f === 'arr' && flt !== 'dep') || (f === 'dep' && flt !== 'arr');
 function brg(lat1, lon1, lat2, lon2) {
   const p1 = lat1 * D2R, p2 = lat2 * D2R, dl = (lon2 - lon1) * D2R;
   return (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / D2R + 360) % 360;
@@ -2170,14 +2177,16 @@ function guessFlow(a) {
 }
 function updateFlow() {
   const now = Date.now();
-  if (!home || !S) { flowMem.clear(); return; }
+  if (!home || !S) { flowMem.clear(); flowCs.clear(); return; }
   for (const a of S.aircraft) {
     const g = guessFlow(a), m = flowMem.get(a.id);
-    if (g === 'x') flowMem.delete(a.id);
-    else if (g) flowMem.set(a.id, [g, now]);
-    else if (m && (now - m[1] > 120000 || gc(a.lat, a.lon, home[5], home[6]) > 170)) flowMem.delete(a.id);
+    const cs = a.cs.trim().toUpperCase();
+    if (g === 'x') { flowMem.delete(a.id); flowCs.delete(cs); }
+    else if (g) { flowMem.set(a.id, [g, now]); if (g !== 'gnd') flowCs.set(cs, g); }
+    else if (m && (now - m[1] > 120000 || gc(a.lat, a.lon, home[5], home[6]) > 170)) { flowMem.delete(a.id); flowCs.delete(cs); }
   }
   if (flowMem.size > 3000) flowMem.clear();
+  if (flowCs.size > 3000) flowCs.clear();
 }
 function flowOf(a) { const m = home && flowMem.get(a.id); return m ? m[0] : ''; }
 // altitude filter (header): feet, or null for no limit
@@ -2212,14 +2221,14 @@ function matches(a) {               // does it pass the altitude and ARR / DEP f
   if (!altOk(a.alt, a.ground)) return false;
   if (flt === 'all' || !home) return true;
   const f = flowOf(a);
-  return f === 'gnd' || (f === 'arr' && flt !== 'dep') || (f === 'dep' && flt !== 'arr');
+  return f === 'gnd' || fltWant(f);
 }
 function renderFlt() {
   const box = $('flt'); box.classList.toggle('off', !home);
   box.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === flt));
 }
 document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
-  flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt();
+  flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt(); worldPtsT = 0;
 });
 
 // trails: where each aircraft was drawn, every 4 s (on the clock, so a slow feed's dead-reckoned track still gets dots),
