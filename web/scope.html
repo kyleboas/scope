@@ -189,7 +189,7 @@
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <span id="srvs" title="Server"></span>
   <span id="status"></span>
-  <button id="lwBtn" hidden title="Close the LiveATC window (a feed's player opened from it has its own window: close that there)"></button>
+  <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
@@ -1052,7 +1052,7 @@ function renderCard1() {
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
       (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
         `${ils.map(([e, l]) => `<span>${esc(l[0] + ' ' + e)}</span><span>${l[2].toFixed(2)}</span><span>${esc(l[1])} · ${Math.round(l[3])}° true${l[6] ? ` · glideslope ${l[6]}°` : ''}</span>`).join('')}</div>` : '') +
-      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a small window beside the scope; it follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC window' : 'Show in the LiveATC window') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard();
+      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard();
     if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
@@ -1132,8 +1132,8 @@ function radioShow() {
   if (home && !sel) renderCard();
 }
 $('radioBtn').onclick = () => radioPlay(null);
-// LiveATC.net's airport page in a small window of its own beside the scope. Their terms rule out playing their streams
-// here, and their player page cuts its link to the page that opened it, so this window is as far as control goes: it
+// LiveATC.net's airport page in a tab of its own. Their terms rule out playing their streams
+// here, and their player page cuts its link to the page that opened it, so this tab is as far as control goes: it
 // opens, follows the airport picked, and closes from the header; the feeds play in LiveATC's own player.
 let lw = null, lwId = '';
 const lwUrl = id => 'https://www.liveatc.net/search/?icao=' + encodeURIComponent(id);
@@ -1141,9 +1141,8 @@ const lwOpen = () => { try { return !!lw && !lw.closed; } catch (e) { return fal
 function lwGo(id, focus) {
   if (lwOpen()) { if (lwId !== id) lw.location.href = lwUrl(id); }
   else {
-    const w = 640, h = Math.min(760, screen.availHeight - 40), x = (screen.availLeft || 0) + screen.availWidth - w - 20, y = (screen.availTop || 0) + 20;
-    lw = window.open(lwUrl(id), 'livescope-liveatc', `popup,width=${w},height=${h},left=${x},top=${y}`);
-    if (!lw) { window.open(lwUrl(id), '_blank'); return; }        // popups blocked: a tab, as before
+    lw = window.open(lwUrl(id), 'livescope-liveatc');
+    if (!lw) return;
   }
   lwId = id; if (focus) try { lw.focus(); } catch (e) {}
   lwShow(); if (home && !sel) renderCard();
