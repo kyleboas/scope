@@ -1431,7 +1431,7 @@ function flightCard(a, la, lo) {
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
   const d = dpr();
-  if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2c46ff', null, 1.5);
+  if (FL.track && FL.track.length > 1) geoLine(ctx, FL.track.map(p => [p[0], p[1]]), '#2f3a6e', null, 1);
   const pts = (FL.plan && FL.plan.pts) || [], line = FL.plan && FL.plan.line;
   if (line && line.length > 1) geoLine(ctx, line, '#c86bd8', [6, 4], 1);
   if (pts.length > 1 || (line && line.length > 1)) {
