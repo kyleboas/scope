@@ -84,7 +84,7 @@
   .layers label:hover { background:#1c1c1e; }
   .layers input { accent-color:#8e8e93; margin:0; }
   .layers .tagsz { display:flex; align-items:center; gap:2px; padding:2px 14px 6px 36px; color:var(--dim); }
-  .layers .tagsz span { margin-right:6px; } .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz button.on { color:var(--fg); background:var(--soft); }
+  .layers .tagsz span { margin-right:6px; } .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz b { font-weight:normal; color:var(--fg); min-width:2.2em; text-align:center; cursor:pointer; }
   #listBtn { display:none; }
   #srvs { display:flex; gap:0; }
   #srvs button { padding:5px 6px; } #srvs button.on { color:var(--fg); background:var(--alt); }
@@ -211,15 +211,16 @@ const dpr = () => devicePixelRatio || 1;
 const R_NM = 3440.065, D2R = Math.PI / 180;
 const FONT = px => `bold ${px * dpr()}px ui-monospace, Menlo, Consolas, monospace`;
 const PHONE = matchMedia('(max-width: 820px), (max-height: 500px)');
-// aircraft data tags' text size, in the layers menu: small / medium / large (7, 11 and 13 px for the callsign line), remembered;
-// left alone, small on phones (where tags crowd) and medium elsewhere
-const TAG_SIZES = [['-4', 'S', 'Small'], ['0', 'M', 'Medium'], ['2', 'L', 'Large']];
-let tagSz = (() => { try { return localStorage.getItem(KEY + '-tagsz'); } catch (e) { return null; } })();
-const tagOff = () => tagSz != null ? +tagSz : PHONE.matches ? -4 : 0;
-const TAG = px => Math.max(7, px + tagOff());   // 7 px: about the smallest still readable
-function setTagSz(v) {
-  tagSz = v; try { localStorage.setItem(KEY + '-tagsz', v); } catch (e) {}
-  document.querySelectorAll('.tagsz button').forEach(b => b.classList.toggle('on', +b.dataset.tsz === tagOff()));
+// aircraft data tags' text size, in the layers menu: − / + a pixel at a time (the callsign line; the rest a pixel under), remembered;
+// left alone, 7 on phones (where tags crowd) and 11 elsewhere. Tapping the number goes back to that
+const TAG_MIN = 4, TAG_MAX = 18, tagDefault = () => PHONE.matches ? 7 : 11;
+let tagPx = (() => { try { return +localStorage.getItem(KEY + '-tagpx') || null; } catch (e) { return null; } })();
+const tagSize = () => tagPx || tagDefault();
+const TAG = px => Math.max(TAG_MIN, px - 11 + tagSize());
+function setTagPx(v) {
+  tagPx = v == null ? null : Math.min(TAG_MAX, Math.max(TAG_MIN, v));
+  try { tagPx ? localStorage.setItem(KEY + '-tagpx', tagPx) : localStorage.removeItem(KEY + '-tagpx'); } catch (e) {}
+  document.querySelectorAll('.tagsz b').forEach(b => b.textContent = tagSize());
 }
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
               alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
@@ -265,8 +266,8 @@ function makeScope(v) {
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
   lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
-    (k === 'tags' ? `<div class="tagsz"><span>Size</span>${TAG_SIZES.map(([v, a, t]) => `<button data-tsz="${v}" title="${t}"${+v === tagOff() ? ' class="on"' : ''}>${a}</button>`).join('')}</div>` : '')).join('');
-  lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagSz(b.dataset.tsz); });
+    (k === 'tags' ? `<div class="tagsz"><span>Size</span><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Back to the default">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></div>` : '')).join('');
+  lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
