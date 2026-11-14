@@ -8,7 +8,7 @@ behind several sites. Each site is its own repo that plugs in one traffic source
 | [livescope](https://github.com/kyleboas/livescope) | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
 | [infinitescope](https://github.com/kyleboas/infinitescope) | Infinite Flight's live multiplayer servers | https://infinitescope.kyleboas.com |
 
-scope gives every site the page (canvas, no build step), airports and runways, ILS and extended finals worldwide, US procedures, OSM ground
+scope gives every site the page (canvas, no build step), airports and runways, ILS and extended finals worldwide, US procedures (narrowed to the ones in use, read from the ATIS), OSM ground
 maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
 [livescope's README](https://github.com/kyleboas/livescope#readme) for the full feature list.
 
@@ -41,7 +41,9 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     `no_history` (no trails); `hist_s` (seconds of trail the page keeps, default 32); `stale_s` (how long to dead-reckon a report, default 20); `idle_min` (stop
     polling while hidden or after that many minutes without input); `poll_ms`, `world_ms` (page refresh,
     defaults 2000 and 30000); `start` (hash to open on, default `KSFO/52`; `None` = the globe);
-    `metar_label`
+    `metar_label`; `audio`, ICAO → `[[label, stream URL], ...]`, live audio buttons in the airport card
+    (MP3 streams are fed through Media Source Extensions when the server sends CORS headers, so they start
+    in a second or two instead of 10–15 s; anything else plays in a plain `<audio>`)
 - `providers()` (or `providers(airports=None)` to get the shared `core.Airports`), which returns a dict:
   - `traffic` (required): an object whose `get(lat, lon, nm)` returns
     `{ok, t, center:[lat, lon], nm, src, aircraft:[...]}`. Each aircraft is
