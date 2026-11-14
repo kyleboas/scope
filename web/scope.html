@@ -109,7 +109,7 @@
   #tlp .rec { display:grid; grid-template-columns:1fr auto; gap:0 6px; padding:6px 12px; border-bottom:1px solid #2a2a2c; }
   #tlp .rec:last-child { border-bottom:0; }
   #tlp .rec b { color:var(--fg); font-weight:600; } #tlp .rec i { font-style:normal; color:var(--dim); font-size:11px; grid-column:1; }
-  #tlp .rec .on { color:#ff453a; }
+  #tlp .rec .on { color:#ff453a; } #tlp .past { border-bottom:1px solid var(--line); margin-bottom:6px; } #tlp .past select { margin-right:4px; }
   #tlp .rec div { grid-row:1 / span 2; grid-column:2; display:flex; align-items:center; }
   #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:8px; z-index:3; display:flex; align-items:center; gap:4px; width:min(720px, calc(100% - 16px));
            background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); }
@@ -1151,11 +1151,12 @@ function tlPanel(force) {
   const p = $('tlp'); if (p.hidden || !force && p.contains(document.activeElement) && document.activeElement.tagName !== 'BUTTON') return;
   const here = tlHere(), now = Date.now() / 1000, keep = p.querySelector('input') ? p.querySelector('input').value : null;
   const hrs = (() => { try { return +localStorage.getItem(KEY + '-tlh') || 1; } catch (e) { return 1; } })();
-  const nRec = TL.recs.filter(r => r.rec).length, full = TL.max_active && nRec >= TL.max_active, can = !TL.need_key || !!tlKey;
+  const roll = TL.recs.find(r => r.rolling), recs = TL.recs.filter(r => !r.rolling);
+  const nRec = recs.filter(r => r.rec).length, full = TL.max_active && nRec >= TL.max_active, can = !TL.need_key || !!tlKey;
   const what = here.world ? `worldwide traffic (OpenSky, one snapshot every ${TL.world_every >= 600 ? Math.round(TL.world_every / 60) + ' min' : TL.world_every + ' s'})`
     : `the ${here.nm} nm around the middle of this view`;
   const slow = here.world && TL.world_every >= 600 ? `<div class="note">The worldwide picture only updates every ${Math.round(TL.world_every / 60)} min (the server has no working OpenSky API client), so a world timelapse can play once it has two, after ${Math.round(TL.world_every / 60)}–${Math.round(TL.world_every / 30)} min, and an hour holds about ${Math.round(3600 / TL.world_every) + 1} pictures.</div>` : '';
-  p.innerHTML = (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
+  p.innerHTML = tlPastRow(roll) + (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
       (TL.need_key ? ' <button id="tlLock" title="Forget the key in this browser">LOCK</button>' : '') + '</div>' +
     `<div class="new"><input id="tlName" maxlength="40" spellcheck="false" placeholder="name" value="${esc(keep ?? here.name)}">` +
     `<select id="tlH">${TL_HOURS.filter(([h]) => h <= (TL.max_h || 24)).map(([h, t]) => `<option value="${h}"${h === hrs ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
@@ -1163,8 +1164,8 @@ function tlPanel(force) {
     : '<div class="hd">Anyone can watch these. Recording a new one takes the key.</div>' +
     '<div class="new"><input id="tlKeyIn" type="password" autocomplete="current-password" spellcheck="false" placeholder="key"><button class="go" id="tlUnlock">UNLOCK</button></div>') + (can ? slow : '') +
     (tlErr ? `<div class="err">${esc(tlErr)}</div>` : '') +
-    (TL.recs.length ? '' : '<div class="note">No timelapses yet.</div>') +
-    TL.recs.map(r => {
+    (recs.length ? '' : '<div class="note">No timelapses yet.</div>') +
+    recs.map(r => {
       const span = r.first ? tlDur((r.last || r.first) - r.first) : '';
       const ready = r.first && r.last > r.first, snaps = ready && r.n ? ` · ${r.n.toLocaleString()} snapshot${r.n === 1 ? '' : 's'}` : '';
       const st = r.rec ? `<span class="on">● REC</span> ${ready ? span : r.first ? 'first snapshot in, ' + tlNext(r) : 'waiting for the first snapshot'} of ${tlDur(r.until - r.start)}`
@@ -1187,19 +1188,35 @@ function tlPanel(force) {
   };
   }
   p.querySelectorAll('[data-tlplay]').forEach(b => b.onclick = () => { p.hidden = true; tlOpen(b.dataset.tlplay, true); });
+  if ($('tlPastGo')) {
+    $('tlPastH').onchange = e => { try { localStorage.setItem(KEY + '-tlpast', e.target.value); } catch (err) {} };
+    $('tlPastGo').onclick = () => { p.hidden = true; tlOpen(roll.id, false, +$('tlPastH').value); };
+  }
   p.querySelectorAll('[data-tlstop]').forEach(b => b.onclick = async () => { try { await tlAuth('a=stop&id=' + b.dataset.tlstop); } catch (e) {} tlList(); });
 }
-async function tlOpen(id, fly) {
+// the server's always-on world recording: play the last few hours of it, of the globe or of the area in view
+const TL_PAST = [1, 3, 6, 12, 24];
+function tlPastRow(r) {
+  if (!r) return '';
+  const now = Date.now() / 1000, have = r.first ? now - r.first : 0, ready = r.first && r.last > r.first;
+  const h = (() => { try { return +localStorage.getItem(KEY + '-tlpast') || 6; } catch (e) { return 6; } })();
+  return `<div class="rec past"><b>The past</b><div>${ready ? `<select id="tlPastH">${TL_PAST.filter(x => x <= r.keep_h).map(x => `<option value="${x}"${x === h ? ' selected' : ''}>last ${x} h</option>`).join('')}</select>` +
+    `<button id="tlPastGo">PLAY</button>` : ''}</div>` +
+    `<i>The whole world, always recording (the last ${r.keep_h} h are kept). Plays the globe, or the area in view in less detail than live. ` +
+    `${ready ? `Has the last ${tlDur(have)} so far.` : 'Just started; ' + tlNext(r) + '.'}</i></div>`;
+}
+async function tlOpen(id, fly, pastH) {
   if (!TL.recs.some(r => r.id === id)) await tlList();
   const rec = TL.recs.find(r => r.id === id);
   if (!rec || !(rec.last > rec.first)) { tlErr = !rec ? 'That timelapse is gone.' : 'It needs two snapshots to play; ' + (rec.rec ? tlNext(rec) + '.' : 'it only has one.');
     $('tlp').hidden = false; tlPanel(true); return; }
   tlClose(true);
   // at most ~5000 snapshots in memory: long recordings are thinned (the easing covers the gaps)
-  const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - rec.first) / rec.every_s + 1) / (world ? 150 : 5000)));
-  RP = { rec, every, frames: [], t: rec.first, speed: +(localStorage.getItem(KEY + (world ? '-tlwsp' : '-tlsp')) || (world ? 600 : 60)), playing: false, last: performance.now(), ing: 0, loading: true, gen: Math.random() };
+  const from = pastH ? Math.max(rec.first, Date.now() / 1000 - pastH * 3600) : rec.first;
+  const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - from) / rec.every_s + 1) / (world ? 150 : 5000)));
+  RP = { rec, every, from: pastH ? from : 0, pastH, frames: [], t: from, speed: +(localStorage.getItem(KEY + (world ? '-tlwsp' : '-tlsp')) || (world ? 600 : 60)), playing: false, last: performance.now(), ing: 0, loading: true, gen: Math.random() };
   S = null; liveOff.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
-  history.replaceState(null, '', '?tl=' + id + location.hash);
+  history.replaceState(null, '', '?tl=' + id + (pastH ? '&h=' + pastH : '') + location.hash);
   if (!tlSpeeds().includes(RP.speed)) RP.speed = world ? 600 : 60;
   if (fly) { view.lat = rec.lat; view.lon = rec.lon; view.half = world ? R_NM * 1.05 : Math.max(5, rec.nm / 1.25); viewChanged(true); }
   tlBar(); mapKey = '';
@@ -1207,7 +1224,7 @@ async function tlOpen(id, fly) {
   if (RP && RP.frames.length) tlPlay(true);
 }
 async function tlLoad(rp) {             // all of it, page by page, then (while it's still recording) whatever is new
-  const from = () => rp.frames.length ? rp.frames[rp.frames.length - 1][0] + 0.05 : 0;
+  const from = () => rp.frames.length ? rp.frames[rp.frames.length - 1][0] + 0.05 : rp.from;
   try {
     for (;;) {
       const j = await tlApi(`a=frames&id=${rp.rec.id}&from=${from()}&every=${rp.every}`);
@@ -1251,7 +1268,7 @@ function tlBar() {
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
   b.querySelector('.t').innerHTML = tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
   const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
-  b.querySelector('.ld').textContent = `${RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`;
+  b.querySelector('.ld').textContent = `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
 }
 function tlById(f) { if (!f[2]) f[2] = new Map(f[1].map(r => [r[0], r])); return f[2]; }
@@ -1332,7 +1349,7 @@ function tlStep() {
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
   const tlq = new URLSearchParams(location.search).get('tl');
-  if (has('timelapse')) { tlInit(); if (tlq) tlOpen(tlq, !m && !h); }
+  if (has('timelapse')) { tlInit(); if (tlq) { const ph = +new URLSearchParams(location.search).get('h') || 0; tlOpen(tlq, !m && !h && !ph, ph); } }
   poll();
   fetch('/live/lines.json').then(r => r.json()).then(j => { LINES = { coast:prepLines(j.coast), borders:prepLines(j.borders), states:prepLines(j.states) }; mapKey = ''; });
   fetch('/live/ksfo.json').then(r => r.json()).then(j => { KSFO = j; mapKey = ''; });
