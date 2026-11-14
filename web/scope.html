@@ -14,28 +14,38 @@
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--fg); font:12px/1.2 var(--sans); -webkit-font-smoothing:antialiased; overflow:hidden;
          display:grid; grid-template-columns:1fr 330px; grid-template-rows:auto 1fr; height:100vh; height:100dvh; -webkit-user-select:none; user-select:none; }
-  header { grid-column:1/3; display:flex; gap:6px; align-items:center; padding:4px 10px; border-bottom:1px solid var(--line);
-           font:12px var(--mono); color:var(--dim); white-space:nowrap; min-width:0; }
+  /* the header floats over the map: no bar, a dark fade behind it; the map runs to the top edge under it */
+  header { grid-column:1; grid-row:1; position:relative; z-index:6; display:flex; gap:6px; align-items:center; padding:4px 10px 12px;
+           background:linear-gradient(#000d, #0008 60%, #0000); pointer-events:none;
+           font:12px var(--mono); color:var(--dim); white-space:nowrap; min-width:0; text-shadow:0 0 3px #000, 0 0 6px #000; }
+  header > * { pointer-events:auto; }
+  :root { --top:calc(var(--hh, 40px) - 4px); }   /* where things pinned to the map's top go: just under the header */
   #clock { font:600 14px var(--mono); color:var(--fg); margin-right:4px; }
   #status { overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1; }
   #status a { color:var(--dim); }
   #status .bad { color:var(--bad); }
   .srch { position:relative; }
-  #q { width:230px; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 8px; font:12px var(--mono); }
-  #q:focus { outline:none; border-color:#636366; }
-  .altf { display:flex; align-items:center; gap:3px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
-  .altf input { width:6.5ch; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 5px; font:12px var(--mono); text-align:center; }
-  .altf input:focus { outline:none; border-color:#636366; }
-  .altf.on input { border-color:#4fb3ff88; }
+  /* search and altitude filter: bare text fields, a faint fill only while typing */
+  #q, .altf input { background:none; color:var(--fg); border:0; border-radius:4px; font:12px var(--mono); }
+  #q { width:200px; padding:5px 6px; }
+  #q:focus, .altf input:focus { outline:none; background:var(--alt); }
+  #q::placeholder, .altf input::placeholder { color:#5a5a5e; }
+  .altf { display:flex; align-items:center; gap:1px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
+  .altf input { width:4.5ch; padding:5px 2px; text-align:center; }
+  .altf.on, .altf.on input { color:#4fb3ff; }
   #res { position:absolute; left:0; top:calc(100% + 4px); z-index:5; width:340px; max-height:60vh; overflow:auto; background:rgba(28,28,30,.98);
          border-radius:6px; box-shadow:0 8px 24px #0008; display:none; }
   #res div { padding:7px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #res div b { color:var(--fg); margin-right:6px; }
   #res div:hover, #res div.on { background:var(--soft); }
+  #pick { position:fixed; z-index:20; min-width:180px; max-width:320px; padding:3px 0; background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px #0008; }
+  #pick div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pick div b { color:var(--fg); margin-right:8px; font-weight:normal; } #pick div.ac b { color:#6ee36e; }
+  #pick div:hover { background:var(--soft); } #pick [data-pa] + .ac { border-top:1px solid var(--line); } #pick .more { color:var(--dim); cursor:default; }
   button { background:none; border:0; color:var(--dim); font:12px var(--mono); padding:5px 7px; border-radius:4px; cursor:pointer; }
   button:hover { color:var(--fg); background:var(--alt); }
   button.on { color:var(--fg); }
-  #wrap { position:relative; min-height:0; min-width:0; background:#000; overflow:hidden; }
+  #wrap { grid-column:1; grid-row:1 / 3; position:relative; min-height:0; min-width:0; background:#000; overflow:hidden; }
   canvas { width:100%; height:100%; display:block; touch-action:none; }
   /* scope tiles, as on atcscope: one, big + small, or an even split; each with its own view and layers */
   #tiles { position:absolute; inset:0; display:grid; gap:2px; background:#1c1c1c; }
@@ -44,10 +54,10 @@
   #tiles.even { grid-template-columns:1fr 1fr; }
   @media (max-aspect-ratio: 1/1) { #tiles.big { grid-template-columns:1fr; grid-template-rows:2fr 1fr; } #tiles.even { grid-template-columns:1fr; grid-template-rows:1fr 1fr; } }
   .tile { position:relative; min-width:0; min-height:0; background:#000; overflow:hidden; }
-  #tiles:not(.one) ~ .flt { bottom:auto; top:8px; }
+  #tiles:not(.one) ~ .flt { bottom:auto; top:var(--top); }
   .views [data-layout] { display:flex; align-items:center; } .views [data-layout] svg { width:14px; height:14px; }
-  #side { border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-  #card { flex-shrink:0; padding:9px 10px; border-bottom:1px solid var(--line); font:12px/1.55 var(--mono); color:var(--fg2); background:var(--card); display:none; }
+  #side { grid-column:2; grid-row:1 / 3; border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  #card { flex-shrink:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:9px 10px; border-bottom:1px solid var(--line); font:12px/1.55 var(--mono); color:var(--fg2); background:var(--card); display:none; }
   #card b { color:var(--fg); font-size:13px; }
   #card a { color:#7aa2ff; text-decoration:none; }
   #card .x { float:right; padding:0 4px; }
@@ -57,14 +67,7 @@
   #card .pr i { font-style:normal; color:var(--dim); display:block; margin-top:3px; }
   #card .pr span { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; cursor:pointer; color:var(--fg2); }
   #card .pr span.on { border-color:#4fb3ff; color:#4fb3ff; }
-  body.noApt #list { display:none; }
   body.noApt.noCard, body.sideShut:not(.listOpen) { grid-template-columns:1fr; } body.noApt.noCard #side, body.sideShut:not(.listOpen) #side { display:none; }
-  #list { overflow:auto; flex:1; padding:4px 0; font:11px/1.5 var(--mono); color:var(--fg2); }
-  .tr { display:grid; grid-template-columns:1ch 8ch 5ch 6ch 4ch 1fr; gap:6px; padding:2px 10px; cursor:pointer; white-space:nowrap; }
-  .tr:hover { background:var(--alt); } .tr.on { background:var(--soft); color:var(--fg); }
-  .tr.hd { color:var(--dim); cursor:default; position:sticky; top:-4px; background:var(--bg); } .tr.hd:hover { background:var(--bg); }
-  .tr.gnd { color:var(--dim); } .tr.emer { color:var(--bad); }
-  .tr span:last-child { text-align:right; }
   .views { position:absolute; left:8px; bottom:8px; z-index:2; display:flex; }
   .views button { color:#555; font-size:11px; padding:4px 6px; }
   .views button:hover, .views button.on { color:#bbb; background:none; }
@@ -72,7 +75,6 @@
   .flt button { color:#555; font-size:11px; padding:4px 6px; }
   .flt button:hover, .flt button.on { color:#bbb; background:none; }
   .flt.off button { color:#2e2e2e; pointer-events:none; }
-  .tr.dim { color:#3a3a3a; }
   .views [data-layers] { display:flex; align-items:center; } .views [data-layers] svg { width:14px; height:14px; }
   .layers { position:absolute; left:8px; bottom:38px; z-index:3; background:var(--bg); border:1px solid var(--line); border-radius:10px;
             padding:6px 0; font:12px var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; max-height:calc(100% - 50px); overflow:auto; }
@@ -81,10 +83,12 @@
   .atis i { display:block; font-style:normal; color:var(--dim); margin-bottom:2px; }
   .atis i b { color:#e8e8e8; }
   .atis .dim { color:var(--dim); }
-  #gnote { position:absolute; left:50%; transform:translateX(-50%); top:10px; z-index:2; font:11px var(--mono); color:#666; pointer-events:none; white-space:nowrap; }
+  #gnote { position:absolute; left:50%; transform:translateX(-50%); top:calc(var(--top) + 2px); z-index:2; font:11px var(--mono); color:#666; pointer-events:none; white-space:nowrap; }
   .layers label { display:flex; align-items:center; gap:9px; padding:6px 14px; cursor:pointer; white-space:nowrap; }
   .layers label:hover { background:#1c1c1e; }
   .layers input { accent-color:#8e8e93; margin:0; }
+  .layers .tagsz { display:flex; align-items:center; gap:2px; padding:2px 14px 6px 36px; color:var(--dim); }
+  .layers .tagsz span { margin-right:6px; } .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz b { font-weight:normal; color:var(--fg); min-width:2.2em; text-align:center; cursor:pointer; }
   #listBtn { display:none; }
   #srvs { display:flex; gap:0; }
   #srvs button { padding:5px 6px; } #srvs button.on { color:var(--fg); background:var(--alt); }
@@ -97,10 +101,15 @@
   #card .atc { display:grid; grid-template-columns:max-content 1fr max-content; gap:0 10px; margin:5px 0; color:var(--dim); }
   #card .atc span:nth-child(3n+1) { color:#5ac8fa; }
   #card .atc span:nth-child(3n+2) { color:var(--fg); overflow:hidden; text-overflow:ellipsis; }
+  #card .dt { display:grid; grid-template-columns:max-content 1fr; gap:0 10px; margin:6px 0 2px; color:var(--dim); }
+  #card .dt b { font-weight:normal; font-size:inherit; color:var(--fg); overflow-wrap:anywhere; }
+  #card .dt i { grid-column:1 / span 2; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
+  #card .ph { display:block; margin:8px 0 2px; } #card .ph img { display:block; width:100%; max-width:360px; border-radius:6px; }
+  #card .ph i { display:block; font-style:normal; font-size:10px; color:var(--dim); margin-top:2px; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   /* timelapses: the panel (header button) and the playback bar */
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
-  #tlp { position:absolute; right:8px; top:8px; z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - 16px); overflow:auto; background:var(--bg);
+  #tlp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
   #tlp[hidden], #tlbar[hidden] { display:none; }
   #tlp .hd { padding:2px 12px 6px; color:var(--dim); }
@@ -113,16 +122,16 @@
   #tlp .rec b { color:var(--fg); font-weight:600; } #tlp .rec i { font-style:normal; color:var(--dim); font-size:11px; grid-column:1; }
   #tlp .rec .on { color:#ff453a; } #tlp .past { border-bottom:1px solid var(--line); margin-bottom:6px; } #tlp .past select { margin-right:4px; }
   #tlp .rec div { grid-row:1 / span 2; grid-column:2; display:flex; align-items:center; }
-  #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:8px; z-index:3; display:flex; align-items:center; gap:4px; width:min(900px, calc(100% - 16px)); box-sizing:border-box;
+  #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:var(--top); z-index:3; display:flex; align-items:center; gap:4px; width:min(900px, calc(100% - 16px)); box-sizing:border-box;
            background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); }
   #tlbar > * { flex:none; } #tlbar input[type=range] { flex:1 1 100px; min-width:60px; accent-color:#ff9f0a; }
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
   #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags] { color:var(--dim); } #tlbar [data-tl=tags].on { color:#ff9f0a; }
-  body.tl #gnote { top:44px; }
+  body.tl #gnote { top:calc(var(--top) + 36px); }
   /* ATC (header button): the airports with ATC open and their inbound flights */
   #atcBtn.on { color:#5ac8fa; }
-  #atcp { position:absolute; right:8px; top:8px; z-index:4; width:min(360px, calc(100% - 16px)); max-height:calc(100% - 16px); overflow:auto; background:var(--bg);
+  #atcp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(360px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
           border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
   #atcp[hidden] { display:none; }
   #atcp .hd { padding:2px 12px 6px; color:var(--dim); border-bottom:1px solid var(--line); }
@@ -139,8 +148,8 @@
   /* phones and small tablets, either way up: the side panel becomes a drawer (landscape) or a bottom sheet (portrait) */
   @media (max-width: 820px), (max-height: 500px) {
     body { grid-template-columns:1fr; }
-    header { grid-column:1; padding:3px max(8px, env(safe-area-inset-right)) 3px max(8px, env(safe-area-inset-left)); }
-    #q { width:120px; } #srvs button i { display:none; } .altf input { width:5.5ch; } #res { width:min(340px, 90vw); }
+    header { padding:3px max(8px, env(safe-area-inset-right)) 10px max(8px, env(safe-area-inset-left)); }
+    #q { width:120px; } #srvs button i { display:none; } #res { width:min(340px, 90vw); }
     #status { display:none; } #tlBtn span { display:none; } #tlbar .sp button:not(:nth-child(3n)) { display:none; } #tlbar .ld, #tlbar .t i { display:none; }
     #listBtn { display:inline-block; margin-left:auto; } body.noApt #listBtn { display:none; }
     #side { position:fixed; right:0; top:var(--hh, 36px); bottom:0; width:min(330px, 50vw); z-index:3; background:rgba(28,28,30,.97); display:none;
@@ -151,55 +160,55 @@
     .views button { padding:8px 9px; font-size:12px; }
     .layers { left:max(8px, env(safe-area-inset-left)); bottom:calc(max(6px, env(safe-area-inset-bottom)) + 40px); }
     .layers label { padding:9px 16px; font-size:13px; }
+    .layers .tagsz { padding:0 16px 8px 38px; font-size:13px; } .layers .tagsz button { padding:6px 11px; font-size:13px; }
     .flt { right:max(8px, env(safe-area-inset-right)); bottom:max(6px, env(safe-area-inset-bottom)); }
     .flt button { padding:8px 7px; font-size:12px; }
   }
   @media (max-width: 820px) and (max-aspect-ratio: 1/1) {
     #side { top:auto; left:0; width:auto; max-height:min(55dvh, 520px); border-left:0; border-top:1px solid var(--line); border-radius:12px 12px 0 0;
             padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-shadow:0 -8px 24px #0008; }
-    #list { min-height:120px; }
-    #card .fq, #card .pr { max-height:120px; }
+    /* the whole card scrolls as one inside the sheet, so no little scroll boxes inside it */
+    #card .fq, #card .pr, #card .fp { max-height:none; overflow:visible; }
   }
-  /* narrow phones: the header takes two rows (clock, search, List / ALT, servers), and ALL/ARR/DEP sits above the view buttons */
+  /* narrow phones: one header row (clock, search, ALT, buttons; servers wrap below if there are any), and ALL/ARR/DEP sits above the view buttons */
   @media (max-width: 480px) {
-    header { flex-wrap:wrap; row-gap:3px; }
-    header::after { content:""; flex-basis:100%; order:3; }
-    #clock { order:0; font-size:13px; } .srch { order:1; flex:1 1 0; min-width:0; } #q { width:100%; } #listBtn { order:2; }
-    .altf { order:4; } #srvs { order:5; margin-left:auto; }
+    header { flex-wrap:wrap; row-gap:0; gap:4px; }
+    #clock { font-size:12px; margin-right:0; } .srch { flex:1 1 0; min-width:0; } #q { width:100%; }
+    #listBtn { margin-left:0; } header button { padding:5px 5px; } #srvs { order:9; }
     #tiles.one ~ .flt { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 36px); }
     #gnote { max-width:calc(100% - 16px); overflow:hidden; text-overflow:ellipsis; }
-    #tiles:not(.one) ~ #gnote { top:42px; }
+    #tiles:not(.one) ~ #gnote { top:calc(var(--top) + 34px); }
   }
 </style>
 </head>
 <body>
 <header>
   <span id="clock">--:--:--Z</span>
-  <div class="srch"><input id="q" placeholder="Airport: KSFO, LHR, Narita…" autocomplete="off" spellcheck="false"><div id="res"></div></div>
-  <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out without tags.">ALT
-    <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">–<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
+  <div class="srch"><input id="q" placeholder="Search..." title="Search: airport code or name (KSFO, LHR, Narita), or an aircraft by callsign, tail number or hex code (UAL123, N12345, a1b2c3)" autocomplete="off" spellcheck="false"><div id="res"></div></div>
+  <label class="altf" id="altf" title="Altitude filter: hundreds of feet (50 = 5,000 ft), feet (5000) or FL350. Leave a box empty for no limit. Aircraft outside it are greyed out with a short tag (altitude and wake category).">ALT
+    <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">-<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <span id="srvs" title="Server"></span>
   <span id="status"></span>
   <button id="lwBtn" hidden title="Close the LiveATC window (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
-  <button id="listBtn">List</button>
+  <button id="listBtn" title="The airport or aircraft card">Info</button>
 </header>
 <div id="wrap">
   <div id="tiles" class="one"></div>
+  <div id="pick" hidden></div>
   <div id="gnote"></div>
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
-  <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out without tags">
+  <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category)">
     <button data-f="all">ALL</button><button data-f="arr">ARR</button><button data-f="dep">DEP</button><button data-f="both">ARR+DEP</button>
   </div>
 </div>
 <div id="side">
   <div id="card"></div>
-  <div id="list"></div>
 </div>
 <script>
 // The shared scope client (livescope, infinitescope, ...): traffic on a STARS-style scope that zooms out to the globe.
@@ -207,7 +216,7 @@
 // (procs, ground, world, routes, atis); a feature a site doesn't have is skipped.
 const has = f => SITE.features.includes(f);
 const KEY = SITE.name;                 // localStorage prefix
-// optional site settings: no_history (no trails), stale_s (dead reckoning limit), idle_min (stop polling after that
+// optional site settings: no_history (no trails), hist_s (seconds of trail to keep, default 32), stale_s (dead reckoning limit), idle_min (stop polling after that
 // long without input), poll_ms, world_ms, start (hash to open on; null = the globe), metar_label
 const STALE_S = SITE.stale_s || 20, POLL_MS = SITE.poll_ms || 2000, WORLD_MS = SITE.world_ms || 30000;
 const $ = id => document.getElementById(id);
@@ -215,20 +224,33 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;', '<':'&
 const dpr = () => devicePixelRatio || 1;
 const R_NM = 3440.065, D2R = Math.PI / 180;
 const FONT = px => `bold ${px * dpr()}px ui-monospace, Menlo, Consolas, monospace`;
+const PHONE = matchMedia('(max-width: 820px), (max-height: 500px)');
+// aircraft data tags' text size, in the layers menu: − / + a pixel at a time (the callsign line; the rest a pixel under), remembered;
+// left alone, 7 on phones (where tags crowd) and 11 elsewhere. Tapping the number goes back to that
+const TAG_MIN = 4, TAG_MAX = 18, tagDefault = () => PHONE.matches ? 7 : 11;
+let tagPx = (() => { try { return +localStorage.getItem(KEY + '-tagpx') || null; } catch (e) { return null; } })();
+const tagSize = () => tagPx || tagDefault();
+const TAG = px => Math.max(TAG_MIN, px - 11 + tagSize());
+function setTagPx(v) {
+  tagPx = v == null ? null : Math.min(TAG_MAX, Math.max(TAG_MIN, v));
+  try { tagPx ? localStorage.setItem(KEY + '-tagpx', tagPx) : localStorage.removeItem(KEY + '-tagpx'); } catch (e) {}
+  document.querySelectorAll('.tagsz b').forEach(b => b.textContent = tagSize());
+}
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
-              alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a' };
+              alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
+              final:'#2a2a2a', finalTxt:'#4a4a4a' };
 const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approach:['#555', null], sid:['#262626', [8, 6]] };
 const PROC_HOME = { star:['#4a4a4a', [2, 5]], transition:['#4a4a4a', [2, 5]], approach:['#6a6a6a', null], sid:['#3c3c3c', [8, 6]] };
 const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
 const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['nearby', "Nearby airports' procedures"], ['fixes', 'Fixes'],
-                ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['small', 'Small airports and strips'],
-                ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
-                ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
-                ['tags', 'Data tags'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
-const L_DEFAULT = { star:true, approach:true, sid:true, nearby:true, fixes:true, fixnames:true, rings:true, airports:true, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, tags:true, ground:true, world:true, est:true };
-const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
+                ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['aptnames', 'Airport names'], ['small', 'Small airports and strips'],
+                ['runways', 'Runways'], ['finals', 'Extended finals and ILS'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['taxinames', 'Taxiway names'], ['states', 'State and province lines'],
+                ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'], ['fltrails', 'Trails and track lines on filtered-out aircraft'],
+                ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
+const L_DEFAULT = { star:true, approach:true, sid:true, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
+            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, world:true, est:true };
+const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
 // use(s) points cv / ctx / map / view / drawn / L at one of them. Outside drawing and input handlers they
@@ -257,7 +279,9 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
+  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
+    (k === 'tags' ? `<div class="tagsz"><span>Size</span><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Back to the default">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></div>` : '')).join('');
+  lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
@@ -276,9 +300,9 @@ function onCv(type, fn, opts) {
   for (const s of scopes) s.cv.addEventListener(type, e => { use(s); active = s; try { fn(e); } finally { s.drawn = drawn; use(scopes[0]); } }, opts);
 }
 let home = null;                       // the airport picked (range rings): [ident, iata, name, city, country, lat, lon, elev, kind]
-let homeCardShut = false;              // its card closed with ✕: the airport stays picked (rings, list, filters)
+let homeCardShut = false;              // its card closed with ✕: the airport stays picked (rings, filters)
 let S = null, sel = null, hover = null;
-const liveOff = new Map(), hist = new Map();
+const motion = new Map(), hist = new Map();
 let LINES = null, MAJOR = [], KSFO = null;
 const areaAps = new Map();             // ident -> airport with runways, near where you've looked
 const procs = new Map();               // ident -> {p: [[kind, name, transition, pts, missed]], f: {fix: [lat, lon]}} (US, FAA CIFP)
@@ -368,10 +392,7 @@ function drawMap() {
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
   if (S && S.center && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
     const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${Math.round(WORLD.every / 60)} min (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
-  // KSFO: extended finals (from atcscope's KSFO map)
-  if (KSFO && view.half < 200 && gc(view.lat, view.lon, KSFO.arp[0], KSFO.arp[1]) < 400) {
-    if (L.finals) for (const f of KSFO.finals) geoLine(c, f, '#2a2a2a', [10, 6]);
-  }
+  if (L.finals && view.half < 80) drawFinals(c);
   if (view.half < 150) drawProcs(c);
   if (L.taxi && view.half < 4) drawGround(c);
   // range rings around the airport you picked
@@ -385,8 +406,9 @@ function drawMap() {
     if (!close && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
     if (!L.airports && !(home && a[0] === home[0])) continue;
-    const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -40 || y < -40 || x > P0.w + 40 || y > P0.h + 40) continue;
-    const rw = a[9] || [];
+    // runways reach a few nm from the airport's reference point: keep it while they can still be on screen
+    const rw = a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
+    const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -m || y < -m || x > P0.w + m || y > P0.h + m) continue;
     const drawRwy = L.runways && close && rw.length && ppn > 6 * d;
     if (drawRwy) for (const r of rw) {
       const p = proj(r[2], r[3]), q = proj(r[4], r[5]);
@@ -396,7 +418,32 @@ function drawMap() {
     } else if (view.half > 400) { c.strokeStyle = '#3a3a3a'; c.lineWidth = d; c.strokeRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); }
     else { c.strokeStyle = kd === 'L' ? COL.apt : COL.aptDim; c.lineWidth = d; c.strokeRect(x - 2*d, y - 2*d, 4*d, 4*d); }
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
-    if (label && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
+    if (label && (L.aptnames || (home && a[0] === home[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
+  }
+}
+// extended finals, 10 nm with ticks at 5 and 10: along the localizer's course from each runway end that has one
+// (Robin Peel's navaids, 2013), and along the runway on long runways with none on file (new since 2013); KSFO's are
+// atcscope's. The ILS is named at the far end close in (your airport's, or everyone's closer still)
+function drawFinals(c) {
+  const d = dpr(), vn = viewNm() + 12, hid = home && home[0];
+  const ksfo = KSFO && gc(view.lat, view.lon, KSFO.arp[0], KSFO.arp[1]) < 400;
+  if (ksfo) for (const f of KSFO.finals) geoLine(c, f, COL.final, [10, 6]);
+  const aps = [...areaAps.values()]; if (homeInfo && homeInfo[0] === hid && !areaAps.has(hid)) aps.push(homeInfo);
+  c.font = FONT(9);
+  for (const a of aps) {
+    const mine = a[0] === hid;
+    if (!(mine || a[8] === 'L' || a[8] === 'M') || (ksfo && a[0] === 'KSFO')) continue;
+    if (gc(view.lat, view.lon, a[5], a[6]) > vn) continue;
+    for (const r of a[9] || []) for (const [end, t, o, loc] of [[r[0], [r[2], r[3]], [r[4], r[5]], r[7]], [r[1], [r[4], r[5]], [r[2], r[3]], r[8]]]) {
+      let b, s0;
+      if (loc) { b = (loc[3] + 180) % 360; s0 = dest(loc[4], loc[5], b, gc(loc[4], loc[5], t[0], t[1])); }
+      else if (!r[7] && !r[8] && end && (mine || gc(t[0], t[1], o[0], o[1]) > 0.8)) { b = brg(o[0], o[1], t[0], t[1]); s0 = t; }
+      else continue;
+      const s10 = dest(s0[0], s0[1], b, 10); geoLine(c, [s0, s10], COL.final, [10, 6]);
+      for (const n of [5, 10]) { const m = dest(s0[0], s0[1], b, n); geoLine(c, [dest(m[0], m[1], b + 90, 0.3), dest(m[0], m[1], b - 90, 0.3)], COL.final); }
+      if (loc && view.half < (mine ? 20 : 8)) { const [x, y, z] = proj(...dest(s0[0], s0[1], b, 10.6)); if (z > 0) {
+        c.fillStyle = COL.finalTxt; c.textAlign = 'center'; c.fillText(`${loc[0]} ${end} ${loc[2].toFixed(2)}`, x, y + 3*d); c.textAlign = 'left'; } }
+    }
   }
 }
 // SIDs, STARs and approaches: all of them for the airport you picked, faint for its neighbours close in,
@@ -454,6 +501,27 @@ function setGroundNote() {
   const waiting = [...ground.entries()].filter(([, g]) => g === 'pending').map(([id]) => id);
   $('gnote').textContent = waiting.length && eachScope(() => view.half < 4).some(Boolean) ? `loading ${waiting.join(', ')} ground map from OpenStreetMap…` : '';
 }
+// is a spot on an apron (or at a terminal) of a loaded ground map? Each polygon's bounding box is kept for speed
+const polyBox = new WeakMap();
+function inPoly(p, la, lo) {
+  let b = polyBox.get(p);
+  if (!b) { b = [Infinity, -Infinity, Infinity, -Infinity]; for (const [y, x] of p) { b[0] = Math.min(b[0], y); b[1] = Math.max(b[1], y); b[2] = Math.min(b[2], x); b[3] = Math.max(b[3], x); } polyBox.set(p, b); }
+  if (la < b[0] || la > b[1] || lo < b[2] || lo > b[3]) return false;
+  let ins = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const [yi, xi] = p[i], [yj, xj] = p[j];
+    if ((yi > la) !== (yj > la) && lo < (xj - xi) * (la - yi) / (yj - yi) + xi) ins = !ins;
+  }
+  return ins;
+}
+function onApron(la, lo) {
+  for (const g of ground.values()) {
+    if (typeof g !== 'object') continue;
+    for (const p of g.ap) if (inPoly(p, la, lo)) return true;
+    for (const [, p] of g.tm) if (inPoly(p, la, lo)) return true;
+  }
+  return false;
+}
 function polyFill(c, g, col) {
   c.beginPath(); let n = 0;
   for (const [la, lo] of g) { const [x, y, z] = proj(la, lo); if (z < 0) return; n++ ? c.lineTo(x, y) : c.moveTo(x, y); }
@@ -470,7 +538,7 @@ function drawGround(c) {
     for (const [, p] of g.tl) geoLine(c, p, '#262626', null, tl / d);
     for (const [, p] of g.tw) geoLine(c, p, '#363636', null, tw / d);
     for (const p of g.hp) geoLine(c, p, '#7a6528', null, Math.max(1.5, 4 / 1852 * ppn / d));
-    if (view.half < 1.6) {                // taxiway letters, once per letter per ~400 m
+    if (L.taxinames && view.half < 1.6) { // taxiway letters, once per letter per ~400 m
       c.font = FONT(view.half < 0.8 ? 10 : 9); c.fillStyle = '#7a7a7a'; c.textAlign = 'center'; const placed = [];
       for (const [ref, p] of g.tw) { if (!ref || ref.length > 6) continue;
         const m = p[Math.floor(p.length / 2)], [x, y, z] = proj(m[0], m[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
@@ -486,66 +554,118 @@ function drawGround(c) {
 }
 
 // ------------------------------------------------------------------ aircraft
-function deadReckon(a) {               // the last report, carried along its track at its ground speed (STALE_S, 20 s by default)
-  const dt = Math.max(0, Math.min(STALE_S, Date.now() / 1000 - a.ts));
-  return a.gs > 2 && dt > 0 ? dest(a.lat, a.lon, a.hdg, a.gs / 3600 * dt) : [a.lat, a.lon];
+// Where each aircraft is drawn between reports (Infinite Flight's come up to 15 s apart): carried on from its last
+// report at its ground speed, still turning at the rate it turned between its last two reports (easing off over
+// TURN_TAU s, so a turn that has ended doesn't spin on). A new report doesn't jump or kink the path: over about the gap
+// between reports, the drawn aircraft blends from the path it was on onto the new one, its speed and direction unbroken.
+const TURN_TAU = 8, MAX_TURN = 4;      // s, °/s
+function track(r, rate, t) {           // [lat, lon, track] of report r, t (epoch s) carried on for at most STALE_S
+  const dt = Math.max(0, Math.min(STALE_S, t - r.ts));
+  if (!(r.gs > 2) || !dt) return [r.lat, r.lon, r.hdg];
+  if (!rate) return [...dest(r.lat, r.lon, r.hdg, r.gs / 3600 * dt), r.hdg];
+  const turned = s => rate * TURN_TAU * (1 - Math.exp(-s / TURN_TAU)), n = Math.min(16, Math.ceil(dt)), step = dt / n, v = r.gs / 3600 * step;
+  let no = 0, ea = 0;                  // nm north and east (flat over these few miles), stepped along the curve
+  for (let i = 0; i < n; i++) { const h = (r.hdg + turned((i + .5) * step)) * D2R; no += Math.cos(h) * v; ea += Math.sin(h) * v; }
+  const lat = r.lat + no / 60;
+  return [lat, ((r.lon + ea / (60 * Math.cos((r.lat + lat) / 2 * D2R))) + 540) % 360 - 180, (r.hdg + turned(dt) + 360) % 360];
 }
-const GLIDE_MS = 1500;                 // a new report: ease from where it was drawn onto the new track
-function pos(a) {
-  const q = deadReckon(a), o = liveOff.get(a.id); if (!o) return q;
-  let f = Math.min(1, (performance.now() - o[2]) / GLIDE_MS); f = f * f * (3 - 2 * f);
-  return [q[0] + o[0] * (1 - f), q[1] + o[1] * (1 - f)];
+function deadReckon(a, t = Date.now() / 1000) { const m = motion.get(a.id); return track(a, m ? m.rate : 0, t); }
+function pos(a, t = Date.now() / 1000) {   // [lat, lon, track] as drawn now
+  const q = deadReckon(a, t), m = motion.get(a.id); if (!m || !m.from) return q;
+  let f = (t - m.t0) / m.T; if (f >= 1) { m.from = null; return q; }
+  f = Math.max(0, f); f = f * f * (3 - 2 * f);
+  const p = track(m.from, m.fromRate, t), dlo = ((q[1] - p[1] + 540) % 360) - 180, dh = ((q[2] - p[2] + 540) % 360) - 180;
+  return [p[0] + (q[0] - p[0]) * f, ((p[1] + dlo * f) + 540) % 360 - 180, (p[2] + dh * f + 360) % 360];
+}
+function newReport(o, a) {             // a replaces o (same aircraft, a later report): its turn rate and the blend onto it
+  const t = Date.now() / 1000, gap = a.ts - o.ts, m = motion.get(a.id), was = pos(o, t);
+  const rate = !a.ground && !o.ground && a.gs > 30 && gap > 0 && gap <= 30
+    ? Math.max(-MAX_TURN, Math.min(MAX_TURN, (((a.hdg - o.hdg + 540) % 360) - 180) / gap)) : 0;
+  const nm = { rate, from: null, fromRate: 0, t0: t, T: Math.max(2, Math.min(10, gap * .8)) };
+  motion.set(a.id, nm);
+  const q = deadReckon(a, t); if (gc(was[0], was[1], q[0], q[1]) > 3) return;   // too far off: jump
+  nm.from = { lat: was[0], lon: was[1], hdg: was[2], gs: o.gs, ts: t };
+  nm.fromRate = m ? m.rate * Math.exp(-Math.max(0, t - o.ts) / TURN_TAU) : 0;
 }
 const a3 = v => String(Math.max(0, Math.round(v / 100))).padStart(3, '0');
+// wake category (FAA consolidated wake turbulence, A heaviest … I lightest) from the ICAO type, for the short tags
+const CWT = {};
+for (const [k, l] of Object.entries({
+  A: 'A388 A124 A225',
+  B: 'A332 A333 A337 A338 A339 A342 A343 A345 A346 A359 A35K B744 B748 B74F B772 B773 B77L B77W B778 B779 B788 B789 B78X AN22 C5M',
+  C: 'A306 A30B A310 B762 B763 B764 MD11 DC10 KC10 C17 IL76 K35R C135 E3TF E3CF',
+  D: 'A400 B703 B712 C130 C30J',
+  E: 'B752 B753',
+  F: 'A318 A319 A320 A321 A19N A20N A21N B731 B732 B733 B734 B735 B736 B737 B738 B739 B37M B38M B39M B3XM BCS1 BCS3 MD81 MD82 MD83 MD87 MD88 MD90 B721 B722 C2 P8',
+  G: 'CRJ1 CRJ2 CRJ7 CRJ9 CRJX E135 E145 E35L E170 E75L E75S E190 E195 E290 E295 DH8A DH8B DH8C DH8D AT43 AT45 AT72 AT75 AT76 SF34 SB20 F70 F100 RJ85 RJ1H GLF4 GLF5 GLF6 G280 GLEX GL5T GL7T GA6C GA7C GA8C F2TH F900 FA7X FA8X CL60 C750 C68A',
+  H: 'CL30 CL35 C560 C56X C650 C680 C700 LJ45 LJ60 LJ75 H25B E55P E545 E550 GALX ASTR B350 PC12 C208 PC24 BE40',
+  I: 'C150 C152 C162 C170 C172 C175 C177 C180 C182 C185 C206 C210 C310 C340 C414 C421 C510 C525 C25A C25B C25C C25M E50P SF50 PA18 PA22 PA24 PA28 P28A P28B P28R PA32 PA34 PA44 PA46 P46T SR20 SR22 S22T BE20 BE33 BE35 BE36 BE55 BE58 BE9L DA40 DA42 DA62 DV20 M20P M20T TBM7 TBM8 TBM9 AA5 RV7 RV8 RV10 EC35 EC45 R22 R44 R66 AS50 B06 B407 H60 S76',
+})) for (const t of l.split(' ')) CWT[t] = k;
 function drawAircraft() {
   const d = dpr(), ppn = pxPerNm(), far = view.half > 300 || worldShown(), now = performance.now();
   drawn = [];
   if (!S) return;
   for (const a of S.aircraft) {
     if (a.ground && !L.ground && a.id !== sel) continue;
-    const [la, lo] = pos(a), [px, py, z] = proj(la, lo);
+    const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
     const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer;
     drawn.push({ a, px, py });
-    if (!matches(a) && !isSel && !isHov && !emer) {     // filtered out: a grey dot, no tag, no trail
-      ctx.fillStyle = '#3a3a3a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill(); continue;
-    }
-    if (L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
+    const out = !matches(a) && !isSel && !isHov && !emer;   // filtered out: a grey dot and a short tag (altitude and wake category),
+    const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
+    if (lines && L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
       const [hx, hy, hz] = proj(q[0], q[1]); if (hz < 0) continue;
       ctx.globalAlpha = 0.25 + i * 0.12; ctx.fillStyle = COL.hist; ctx.beginPath(); ctx.arc(hx, hy, (a.ground ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    if (L.ptl && !a.ground && a.gs > 30 && ppn * a.gs / 60 > 4 * d) {      // one minute ahead
-      const [ea, eo] = dest(la, lo, a.hdg, a.gs / 60), [ex, ey] = proj(ea, eo);
+    if (lines && L.ptl && !a.ground && a.gs > 30 && ppn * a.gs / 60 > 4 * d) {      // one minute ahead
+      const [ea, eo] = dest(la, lo, trk, a.gs / 60), [ex, ey] = proj(ea, eo);
       ctx.strokeStyle = COL.ptl; ctx.globalAlpha = .5; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    if (out) {
+      ctx.fillStyle = '#5a5a5a'; ctx.beginPath(); ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7); ctx.fill();
+      if (L.tags && !far && !a.ground) shortTag(px, py, a3(a.alt) + (CWT[a.type] ? '  ' + CWT[a.type] : ''), COL.dbDim);
+      continue;
     }
     const blend = far && worldShown() && !isSel && !isHov && !emer;   // zoomed out with the worldwide dots: look like them
     ctx.fillStyle = emer ? COL.alert : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
-    if (isSel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = d; ctx.strokeRect(px - 8*d, py - 8*d, 16*d, 16*d); }
     if ((far || !L.tags) && !isSel && !isHov && !emer) continue;
     if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer) continue;
+    if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
     const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
-    const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = a.ground ? 10 : 11, lh = (fs + 2) * d;
+    const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
     ctx.fillText(a.cs + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
-    const l2 = a.ground ? (a.gs > 2 ? 'TAXI ' + a.gs : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
+    const l2 = a.ground ? (a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
     if (l2) ctx.fillText(l2, bx, ly - 2*d + lh);
     if (isSel || isHov) { ctx.fillText([a.type || '----', a.sq, a.route && a.route[3]].filter(Boolean).join(' '), bx, ly - 2*d + 2*lh); if (a.reg || a.user) ctx.fillText(a.reg || a.user, bx, ly - 2*d + 3*lh); }
   }
+}
+function shortTag(x, y, txt, col) {     // a short leader to the right, then the text level with the dot
+  const d = dpr(); ctx.strokeStyle = ctx.fillStyle = col; ctx.lineWidth = d;
+  ctx.beginPath(); ctx.moveTo(x + 4*d, y); ctx.lineTo(x + 10*d, y); ctx.stroke();
+  ctx.font = FONT(TAG(10)); ctx.fillText(txt, x + 13*d, y + 3.5*d - (10 - TAG(10)) * .35 * d);
 }
 function hitAircraft(mx, my, r) {
   let best = null, bd = r * dpr();
   for (const e of drawn) { const dd = Math.hypot(e.px - mx, e.py - my); if (dd < bd) { bd = dd; best = e; } }
   return best;
 }
-function hitAirport(mx, my) {
-  const list = view.half < 80 ? [...areaAps.values()] : MAJOR, d = dpr(); let best = null, bd = 14 * d;
-  for (const a of list) { if (view.half >= 80 && (view.half > 400 ? a[8] !== 'L' : !'LM'.includes(a[8]))) continue;
-    const [x, y, z] = proj(a[5], a[6]); if (z < 0) continue; const dd = Math.hypot(x - mx, y - my); if (dd < bd) { bd = dd; best = a; } }
-  return best;
+function hitAircraftAll(mx, my, r) {  // every aircraft within r px, nearest first
+  const R = r * dpr();
+  return drawn.map(e => [Math.hypot(e.px - mx, e.py - my), e]).filter(x => x[0] < R).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+}
+function hitAirports(mx, my, r) {      // every airport drawn within r px, nearest first
+  const list = view.half < 80 ? [...areaAps.values()] : MAJOR, R = r * dpr(), out = [];
+  for (const a of list) { const kd = a[8], mine = home && a[0] === home[0];
+    if (view.half >= 80 && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
+    if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
+    if (!L.airports && !mine) continue;
+    const [x, y, z] = proj(a[5], a[6]); if (z < 0) continue; const dd = Math.hypot(x - mx, y - my); if (dd < R) out.push([dd, a]); }
+  return out.sort((p, q) => p[0] - q[0]).map(x => x[1]);
 }
 
 // ------------------------------------------------------------------ the whole world, zoomed out
@@ -584,14 +704,14 @@ function drawWorld() {
     for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + rad[k], y); ctx.arc(x, y, rad[k], 0, 7); }
     ctx.fill();
   }
-  ctx.lineWidth = d;
-  for (const [k, c] of [[4, '#333'], [3, COL.dbDim]]) {   // estimated positions: hollow rings
+  ctx.lineWidth = 0.7 * d;
+  for (const [k, c] of [[4, '#333'], [3, COL.dbDim]]) {   // estimated positions: hollow rings, about a dot's size
     ctx.strokeStyle = c; ctx.beginPath();
-    for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 2*d, y); ctx.arc(x, y, 2 * d, 0, 7); }
+    for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 1.3*d, y); ctx.arc(x, y, 1.3 * d, 0, 7); }
     ctx.stroke();
   }
   if (L.tags && view.half <= 300) {              // zoomed in (playing back the past): tag the dots like live traffic
-    ctx.font = FONT(11); let n = 0;
+    ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d;
     for (const w of worldPts) {
       if (w.k !== 0 && w.k !== 3) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
@@ -599,7 +719,14 @@ function drawWorld() {
       const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
-      ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly + 11*d);
+      ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + wl);
+    }
+    n = 0;                                       // outside the altitude filter: a short tag, the altitude
+    for (const w of worldPts) {
+      if (w.k !== 1 && w.k !== 4) continue;
+      const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      if (++n > 400) break;
+      shortTag(x, y, a3(w.r[5] * 100), w.est ? '#2c5a2c' : COL.dbDim);
     }
   }
   if (worldHover) {                              // its tag: callsign, altitude and ground speed, as of the snapshot
@@ -607,13 +734,13 @@ function drawWorld() {
     const [hex, , , , gs, alt, , cs, gnd] = worldHover.r, lx = x + 10*d, ly = y - 12*d;
     if (worldHover.est) {
       const r = worldHover.r, ago = Math.round((Date.now() / 1000 - r[9]) / 60);
-      ctx.fillStyle = COL.dbDim; ctx.font = FONT(10);
-      ctx.fillText(`estimated${r[8] ? ' → ' + r[8] : ''} · last seen ${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago`, lx + 3*d, ly + 24*d);
+      ctx.fillStyle = COL.dbDim; ctx.font = FONT(TAG(10));
+      ctx.fillText(`estimated${r[8] ? ' → ' + r[8] : ''} · last seen ${ago < 90 ? ago + ' min' : (ago / 60).toFixed(1) + ' h'} ago`, lx + 3*d, ly - 2*d + 2 * (TAG(11) + 2) * d);
     }
     ctx.strokeStyle = COL.db; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.beginPath(); ctx.arc(x, y, 2.4 * d, 0, 7); ctx.fillStyle = COL.db; ctx.fill();
-    ctx.font = FONT(11); ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
-    ctx.fillText(gnd === 1 ? 'GND' : a3(alt * 100) + ' ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly + 11*d);
+    ctx.font = FONT(TAG(11)); ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
+    ctx.fillText(gnd === 1 ? 'GND' : a3(alt * 100) + ' ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + (TAG(11) + 2) * d);
   }
 }
 function hitWorld(mx, my) {
@@ -630,6 +757,61 @@ async function loadFlight() {
   flAsked = Date.now(); const id = sel;
   try { const j = await (await fetch(`/api/live/flight?${srvQ()}id=${encodeURIComponent(id)}`)).json();
     if (sel === id) { FL = { ...j, id, t: Date.now() }; renderCard(); } } catch (e) {}
+}
+// ------------------------------------------------------------------ everything the feed says about the selected aircraft (livescope)
+// /api/live/aircraft: the feed's whole record (speeds, wind, autopilot, signal, accuracy), the aircraft database's
+// owner and year, the type's name, the country its address was issued to and a photo from planespotters.net
+let AD = null, adAsked = 0;            // {id, got (when we got it), hex, t (feed time), src, ac, db, country, typeinfo, photo}
+async function loadDetail() {
+  const a = has('aircraft') && !RP && sel && S && S.aircraft.find(o => o.id === sel);
+  if (!a || !a.hex || (AD && AD.id === sel && Date.now() - AD.got < 3000) || Date.now() - adAsked < 2500) return;
+  adAsked = Date.now(); const id = sel;
+  try { const j = await (await fetch('/api/live/aircraft?hex=' + encodeURIComponent(a.hex))).json();
+    if (sel === id) { AD = { ...j, id, got: Date.now() }; renderCard(); } } catch (e) {}
+}
+const photos = new Map();              // hex -> the photo's element (kept, so the card's redraws don't reload it)
+function photoEl(hex, p) {
+  if (!p || !p.src || !/^https:\/\//.test(p.src)) return null;
+  if (!photos.has(hex)) { const el = document.createElement('a'); el.className = 'ph'; el.target = '_blank'; el.rel = 'noopener';
+    if (/^https:\/\//.test(p.link)) el.href = p.link;
+    el.innerHTML = `<img src="${esc(p.src)}" alt=""><i>© ${esc(p.by || 'unknown')} · planespotters.net</i>`; photos.set(hex, el); }
+  return photos.get(hex);
+}
+const CATS = { A1:'light, under 15,500 lb', A2:'small, 15,500–75,000 lb', A3:'large, 75,000–300,000 lb', A4:'high vortex large (757)', A5:'heavy, over 300,000 lb',
+  A6:'high performance', A7:'rotorcraft', B1:'glider', B2:'lighter than air', B3:'parachutist', B4:'ultralight', B6:'drone', B7:'space vehicle',
+  C1:'emergency vehicle', C2:'service vehicle', C3:'obstacle', C4:'obstacle cluster', C5:'line obstacle' };
+const SRCS = { adsb_icao:'ADS-B', adsb_icao_nt:'ADS-B (non-transponder)', adsr_icao:'ADS-R', tisb_icao:'TIS-B', adsc:'ADS-C', mlat:'MLAT',
+  mode_s:'Mode S', adsb_other:'ADS-B (anonymous address)', adsr_other:'ADS-R (anonymous address)', tisb_other:'TIS-B', tisb_trackfile:'TIS-B track', mode_ac:'Mode A/C', other:'other' };
+const NACP = ['unknown', '< 10 nm', '< 4 nm', '< 2 nm', '< 1 nm', '< 0.5 nm', '< 0.3 nm', '< 0.1 nm', '< 0.05 nm', '< 30 m', '< 10 m', '< 3 m'];
+const NACV = ['unknown', '< 10 m/s', '< 3 m/s', '< 1 m/s', '< 0.3 m/s'];
+function detailCard(a) {
+  const d = AD && AD.id === a.id && AD.ok ? AD : null, x = (d && d.ac) || {}, db = (d && d.db) || {}, ti = (d && d.typeinfo) || {};
+  const num = v => typeof v === 'number', ft = v => num(v) ? Math.round(v).toLocaleString() + ' ft' : v === 'ground' ? 'ground' : '';
+  const fpm = v => num(v) ? (v > 0 ? '+' : '') + Math.round(v).toLocaleString() + ' fpm' : '', deg = v => num(v) ? v.toFixed(1) + '°' : '';
+  const kt = v => num(v) ? Math.round(v) + ' kt' : '', ago = v => !num(v) ? '' : v < 60 ? v.toFixed(1) + ' s ago' : Math.round(v / 60) + ' min ago';
+  const flags = [[1, 'military'], [2, 'interesting'], [4, 'PIA (privacy address)'], [8, 'LADD (limited display)']].filter(([b]) => x.dbFlags & b).map(f => f[1]).join(', ');
+  const late = d ? Math.max(0, Date.now() / 1000 - d.t) : null;
+  const sec = (title, rows) => { rows = rows.filter(r => r[1] !== '' && r[1] != null);
+    return rows.length ? `<i>${title}</i>` + rows.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('') : ''; };
+  const h = sec('Aircraft', [['Hex', (a.hex || '').toUpperCase()], ['Registration', a.reg], ['Country', d && d.country ? d.country[0] : ''],
+      ['Type', [a.type, db.desc || ti.desc].filter(Boolean).join(' · ')], ['Engines', ti.engines], ['Wake', ti.wake],
+      ['Category', x.category ? x.category + (CATS[x.category] ? ' · ' + CATS[x.category] : '') : ''], ['Owner/operator', db.ownOp], ['Year built', db.year], ['Flags', flags]]) +
+    sec('Altitude', [['Barometric', ft(x.alt_baro)], ['Geometric (GPS)', ft(x.alt_geom)], ['Baro rate', fpm(x.baro_rate)], ['Geom rate', fpm(x.geom_rate)]]) +
+    sec('Speed', [['Ground speed', kt(x.gs)], ['Indicated', kt(x.ias)], ['True', kt(x.tas)], ['Mach', num(x.mach) ? x.mach.toFixed(3) : '']]) +
+    sec('Direction', [['Track', deg(x.track)], ['True heading', deg(x.true_heading)], ['Magnetic heading', deg(x.mag_heading)],
+      ['Track rate', num(x.track_rate) ? x.track_rate.toFixed(2) + '°/s' : ''], ['Roll', num(x.roll) ? x.roll.toFixed(1) + '°' + (x.roll > 0.5 ? ' right' : x.roll < -0.5 ? ' left' : '') : '']]) +
+    sec('Weather', [['Wind', num(x.ws) ? `${String(Math.round(x.wd ?? 0)).padStart(3, '0')}° at ${Math.round(x.ws)} kt` : ''], ['Outside air', num(x.oat) ? x.oat + ' °C' : ''], ['Total air', num(x.tat) ? x.tat + ' °C' : '']]) +
+    sec('Autopilot', [['Selected altitude', ft(x.nav_altitude_mcp)], ['FMS altitude', ft(x.nav_altitude_fms)], ['Selected heading', deg(x.nav_heading)],
+      ['Modes', (x.nav_modes || []).join(', ')], ['QNH', num(x.nav_qnh) ? x.nav_qnh.toFixed(1) + ' hPa' : '']]) +
+    sec('Signal', [['Source', x.type ? (SRCS[x.type] || x.type) + (d.src ? ' · ' + d.src : '') : ''], ['Last message', late == null ? '' : ago(late)],
+      ['Last position', num(x.seen_pos) && late != null ? ago(late - (x.seen || 0) + x.seen_pos) : ''],
+      ['Messages', num(x.messages) ? x.messages.toLocaleString() : ''], ['RSSI', num(x.rssi) ? x.rssi.toFixed(1) + ' dBFS' : ''],
+      ['MLAT fields', (x.mlat || []).join(', ')], ['TIS-B fields', (x.tisb || []).join(', ')]]) +
+    sec('Accuracy', [['ADS-B version', num(x.version) ? 'v' + x.version : ''], ['NACp', num(x.nac_p) ? `${x.nac_p} (${NACP[x.nac_p] || '?'})` : ''],
+      ['NACv', num(x.nac_v) ? `${x.nac_v} (${NACV[x.nac_v] || '?'})` : ''], ['NIC', num(x.nic) ? String(x.nic) : ''], ['NIC baro', num(x.nic_baro) ? String(x.nic_baro) : ''],
+      ['Rc', num(x.rc) ? x.rc.toLocaleString() + ' m' : ''], ['SIL', num(x.sil) ? x.sil + (x.sil_type ? ' ' + x.sil_type.replace('per', 'per ') : '') : ''],
+      ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
+  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`);
 }
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
@@ -750,12 +932,19 @@ function endPointer(e) {
   const dg = drag; drag = null;
   if (dg.moved || e.type === 'pointercancel') return;
   if (dg.hadMeasure) { measure = null; return; }     // a click first clears the ruler
-  const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, e.pointerType === 'touch' ? 26 : 16);
-  if (h) { select(h.a.id); return; }
-  const ap = hitAirport(mx, my);
-  if (ap && home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
-  if (ap) { setHome(ap, false); return; }
+  // a tap that could mean more than one thing opens a small menu listing them, airports on top; airports
+  // are a wider target until their runways are drawn to scale, and then only count where no aircraft is
+  const [mx, my] = canvasXY(e), touch = e.pointerType === 'touch', near = view.half < 10;
+  const acs = hitAircraftAll(mx, my, touch ? 26 : 16).map(x => x.a);
+  const aps = near && acs.length ? [] : hitAirports(mx, my, near ? 14 : touch ? 30 : 22);
+  if (aps.length + acs.length > 1) { pickMenu(e.clientX, e.clientY, aps, acs); return; }
+  if (aps.length) { pickAirport(aps[0]); return; }
+  if (acs.length) { select(acs[0].id); return; }
   select(null);
+}
+function pickAirport(ap) {
+  if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
+  setHome(ap, false);
 }
 onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
 onCv('pointerleave', () => { hover = null; worldHover = null; });
@@ -765,8 +954,27 @@ onCv('wheel', e => {
   const [mx, my] = canvasXY(e); zoomAt(mx, my, Math.exp(Math.max(-0.25, Math.min(0.25, px * (e.ctrlKey ? 0.004 : 0.0012)))));
 }, { passive:false });
 }
+// the menu for a tap on several things at once : airports, then aircraft nearest first
+function pickMenu(x, y, aps, acs) {
+  const m = $('pick'), A = aps.slice(0, 6), C = acs.slice(0, 10 - A.length);
+  m.innerHTML = A.map((a, i) => `<div data-pa="${i}"><b>${esc(a[0])}</b>${esc(a[2] || '')}</div>`).join('') +
+    C.map((a, i) => `<div data-pc="${i}" class="ac"><b>${esc(a.cs || a.id)}</b>${esc([a.type, a.ground ? 'GND' : a3(a.alt)].filter(Boolean).join(' '))}</div>`).join('') +
+    (acs.length > C.length ? `<div class="more">+${acs.length - C.length} more: zoom in</div>` : '');
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x + 6, innerWidth - r.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(y + 6, innerHeight - r.height - 4)) + 'px';
+  m.onpointerover = ev => { const t = ev.target.closest('[data-pc]'); hover = t ? C[+t.dataset.pc].id : null; };
+  m.onpointerleave = () => { hover = null; };
+  m.onclick = ev => { const t = ev.target.closest('[data-pa],[data-pc]'); if (!t) return; pickClose();
+    if (t.dataset.pa) pickAirport(A[+t.dataset.pa]); else select(C[+t.dataset.pc].id); };
+}
+function pickClose() { const m = $('pick'); if (!m.hidden) { m.hidden = true; hover = null; } }
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#pick')) pickClose(); }, true);
+window.addEventListener('wheel', pickClose, { passive:true });
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape' && !$('pick').hidden) { pickClose(); return; }
   if (e.key === 'Escape') { if (measure) measure = null; else select(null); }
   const zs = active && active.el.offsetWidth ? active : scopes[0];
   if (e.key === '+' || e.key === '=') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1 / 1.4); use(scopes[0]); }
@@ -774,7 +982,7 @@ window.addEventListener('keydown', e => {
   if (e.key === '/') { e.preventDefault(); $('q').focus(); }
   if (RP && e.key === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); tlPlay(!RP.playing); }
 });
-$('listBtn').onclick = () => { document.body.classList.toggle('listOpen'); autoOpen = false; };
+$('listBtn').onclick = () => { if (document.body.classList.toggle('listOpen') && homeCardShut) { homeCardShut = false; renderCard(); } autoOpen = false; };
 
 // ------------------------------------------------------------------ selection, airports, URL
 const small = matchMedia('(max-width: 820px), (max-height: 500px)');
@@ -784,7 +992,7 @@ function select(id) {
   const b = document.body;
   if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
   if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
-  sel = id; renderCard(); renderList(); loadFlight();
+  sel = id; renderCard(); loadFlight(); loadDetail();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
@@ -796,11 +1004,11 @@ function setHome(a, fly, half) {
   if (scopes[1]) Object.assign(scopes[1].view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 });
   renderCard(); viewChanged(true);
 }
-// the traffic list belongs to the airport you picked: no airport, no list (and no side panel unless an aircraft is selected)
+// the side panel holds the airport card (or the selected aircraft's): nothing picked, no side panel
 function updateSide() {
   const b = document.body, was = b.className;
   b.classList.toggle('noApt', !home); b.classList.toggle('noCard', $('card').style.display === 'none');
-  b.classList.toggle('sideShut', !!home && homeCardShut && !sel);   // the airport card closed with ✕: no side panel (the List button still opens it on phones)
+  b.classList.toggle('sideShut', !!home && homeCardShut && !sel);   // the airport card closed with ✕: no side panel (the Info button reopens it on phones)
   if (!home && !sel) b.classList.remove('listOpen');
   if (b.className !== was) resize();
 }
@@ -815,10 +1023,9 @@ function renderCard1() {
       (a.user || a.vo ? `${esc(a.user || 'unlinked account')}${a.vo ? ' ' + dim(esc(a.vo)) : ''}<br>` : '') +
       `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
       `${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
-      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')} ${dim('filed' + (plan ? (plan.ifr ? ' IFR' : ' VFR') : ''))}<br>` : dim('no flight plan filed') + '<br>') +
+      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')}<br>` : dim('no flight plan filed') + '<br>') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}`) + '<br>' : '') +
-      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '') +
-      (FL && FL.id === a.id && FL.track ? dim('flown route in blue, plan dashed') : FL && FL.id === a.id && plan ? dim('plan dashed' + (srv === 'casual' ? ' · flown routes are kept only on Expert and Training' : '')) : '');
+      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
@@ -826,7 +1033,9 @@ function renderCard1() {
       `squawk ${esc(a.sq || '----')}${a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : ''} · ${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
       (routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeFits(a, routeOf(a)) ? 'scheduled route' : "scheduled route, but it doesn't fit where it is"}</span><br>` : '') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
-      (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '');
+      (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '') +
+      (a.hex && has('aircraft') ? ` · <a href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(a.hex)}" target="_blank" rel="noopener">ADS-B Exchange ↗</a>` +
+        (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? '' : detailCard(a)) : '');
   } else if (home && !homeCardShut && has('atc')) {
     // controllers on duty here (and Centers within 400 nm), then the ATIS block
     const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < 400);
@@ -837,14 +1046,17 @@ function renderCard1() {
         : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard();
   } else if (home && !homeCardShut) {
     // its radio frequencies (OurAirports), its live audio feeds (SITE.audio) and a link to listen on LiveATC.net
-    const fq = (homeInfo && homeInfo[0] === home[0] && homeInfo[10]) || [];
+    const info = homeInfo && homeInfo[0] === home[0] ? homeInfo : null, fq = (info && info[10]) || [];
+    const ils = info ? info[9].flatMap(r => [[r[0], r[7]], [r[1], r[8]]]).filter(([, l]) => l).sort((p, q) => p[0].localeCompare(q[0], 'en', { numeric:true })) : [];
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
-      (fq.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}</div>` : '') +
+      (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
+        `${ils.map(([e, l]) => `<span>${esc(l[0] + ' ' + e)}</span><span>${l[2].toFixed(2)}</span><span>${esc(l[1])} · ${Math.round(l[3])}° true${l[6] ? ` · glideslope ${l[6]}°` : ''}</span>`).join('')}</div>` : '') +
       radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a small window beside the scope; it follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC window' : 'Show in the LiveATC window') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard();
     if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
@@ -993,19 +1205,55 @@ $('q').addEventListener('keydown', e => {
   if (e.key === 'Escape') { $('q').blur(); $('res').style.display = 'none'; }
 });
 $('q').addEventListener('blur', () => setTimeout(() => $('res').style.display = 'none', 200));
+// aircraft match on callsign, tail number, hex code or flight id: the live feed's, then the worldwide snapshot's (callsign and hex only)
+const norm = v => String(v || '').toUpperCase().replace(/[\s-]/g, '');
+function acMatches(q) {
+  const n = norm(q), out = [], seen = new Set(); if (n.length < 2) return out;
+  const rank = vs => { let r = 9; for (const v of vs) { const x = norm(v); if (!x) continue; if (x === n) return 0; if (x.startsWith(n)) r = Math.min(r, 1); else if (x.includes(n)) r = Math.min(r, 2); } return r; };
+  for (const a of S ? S.aircraft : []) {
+    const r = rank([a.cs, a.reg, a.hex, a.id]); if (r > 2) continue;
+    const [lat, lon] = pos(a); seen.add(a.id); out.push({ ac: true, r, id: a.id, cs: a.cs, reg: a.reg, type: a.type, alt: a.alt, ground: a.ground, lat, lon });
+  }
+  if (WORLD && WORLD.ok) for (const w of WORLD.ac) {
+    if (seen.has(w[0])) continue;
+    const r = rank([w[7], w[0]]); if (r > 2) continue;
+    const dt = Math.min(1200, Math.max(0, Date.now() / 1000 - w[6])), [lat, lon] = !w[8] && w[4] > 30 ? dest(w[1], w[2], w[3], w[4] / 3600 * dt) : [w[1], w[2]];
+    seen.add(w[0]); out.push({ ac: true, r, id: w[0], cs: w[7], alt: w[5] * 100, ground: !!w[8], lat, lon });
+  }
+  return out.sort((x, y) => x.r - y.r || String(x.cs).localeCompare(String(y.cs))).slice(0, 12);
+}
+let searchWorldT = 0;
 async function search() {
   const q = $('q').value.trim(); if (!q) { $('res').style.display = 'none'; return; }
-  try { sRes = await (await fetch('/api/live/search?q=' + encodeURIComponent(q))).json(); } catch (e) { sRes = []; }
+  // the worldwide snapshot only loads zoomed out: fetch it for a search too (at most once a minute)
+  const wantWorld = has('world') && !RP && (!WORLD || Date.now() / 1000 - WORLD.t > 120) && Date.now() - searchWorldT > 60000;
+  if (wantWorld) searchWorldT = Date.now();
+  const [aps] = await Promise.all([
+    fetch('/api/live/search?q=' + encodeURIComponent(q)).then(r => r.json()).catch(() => []),
+    wantWorld ? fetch(`/api/live/world?${srvQ()}`).then(r => r.json()).then(j => { if (j.ok) { WORLD = j; worldPtsT = 0; } }).catch(() => {}) : null]);
+  if ($('q').value.trim() !== q) return;          // typed on meanwhile: that search shows instead
+  const acs = acMatches(q), exact = aps.filter(a => norm(a[0]) === norm(q) || norm(a[1]) === norm(q));
+  // an exact airport code first, then aircraft (the closest matches first), then the other airports
+  sRes = [...exact, ...acs.filter(a => a.r === 0), ...acs.filter(a => a.r > 0).slice(0, exact.length || aps.length ? 6 : 12), ...aps.filter(a => !exact.includes(a))];
   sIdx = 0; showRes();
 }
 function showRes() {
   const box = $('res');
-  if (!sRes.length) { box.innerHTML = '<div style="cursor:default">No airport found</div>'; box.style.display = 'block'; return; }
-  box.innerHTML = sRes.map((a, i) => `<div data-i="${i}" class="${i === sIdx ? 'on' : ''}"><b>${esc(a[0])}</b>${a[1] ? esc(a[1]) + ' · ' : ''}${esc(a[2])}${a[3] ? ', ' + esc(a[3]) : ''} ${esc(a[4])}</div>`).join('');
+  if (!sRes.length) { box.innerHTML = '<div style="cursor:default">Nothing found</div>'; box.style.display = 'block'; return; }
+  box.innerHTML = sRes.map((a, i) => `<div data-i="${i}" class="${i === sIdx ? 'on' : ''}">` + (a.ac
+    ? `<b>${esc(a.cs || a.reg || String(a.id).toUpperCase())}</b>${[a.reg && a.reg !== a.cs ? a.reg : '', a.type, a.ground ? 'ground' : 'FL' + a3(a.alt)].filter(Boolean).map(esc).join(' · ')}`
+    : `<b>${esc(a[0])}</b>${a[1] ? esc(a[1]) + ' · ' : ''}${esc(a[2])}${a[3] ? ', ' + esc(a[3]) : ''} ${esc(a[4])}`) + '</div>').join('');
   box.style.display = 'block';
   box.querySelectorAll('[data-i]').forEach(el => el.onmousedown = e => { e.preventDefault(); pick(sRes[+el.dataset.i]); });
 }
-function pick(a) { $('q').value = ''; $('q').blur(); $('res').style.display = 'none'; setHome(a, true, a[8] === 'S' || a[8] === 'W' ? 10 : 40); }
+function pick(a) {
+  $('q').value = ''; $('q').blur(); $('res').style.display = 'none';
+  if (!a.ac) return setHome(a, true, a[8] === 'S' || a[8] === 'W' ? 10 : 40);
+  // an aircraft: centre on it and select it (once the live feed there has it, if it isn't in this one)
+  view.lat = a.lat; view.lon = a.lon; if (view.half > 60) view.half = 40;
+  if (S && S.aircraft.some(o => o.id === a.id)) { wantSel = null; select(a.id); } else wantSel = a.id;
+  viewChanged(true);
+}
 
 // ------------------------------------------------------------------ data
 let pollT = 0, polling = false, lastAreaKey = '';
@@ -1028,25 +1276,21 @@ async function poll() {
   else try {
     const s = await (await fetch(`/api/live?${srvQ()}lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&nm=${nm.toFixed(0)}`)).json();
     if (RP) throw 0;                               // a timelapse started while this was on its way
-    if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; liveOff.clear(); }
-    const now = performance.now();
+    if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; motion.clear(); }
     if (S && s.t !== S.t) {
       const old = new Map(S.aircraft.map(a => [a.id, a]));
-      for (const a of s.aircraft) {
-        const o = old.get(a.id); if (!o || o.ts === a.ts) continue;
-        const was = pos(o), q = deadReckon(a), dla = was[0] - q[0], dlo = ((was[1] - q[1] + 540) % 360) - 180;
-        if (gc(was[0], was[1], q[0], q[1]) < 3) liveOff.set(a.id, [dla, dlo, now]); else liveOff.delete(a.id);
-      }
+      for (const a of s.aircraft) { const o = old.get(a.id); if (o && o.ts !== a.ts) newReport(o, a); }
+      if (motion.size > s.aircraft.length + 500) { const ids = new Set(s.aircraft.map(a => a.id)); for (const id of motion.keys()) if (!ids.has(id)) motion.delete(id); }
     }
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight();
+    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
-    const r = Math.min(150, viewNm() * 1.2), step = r < 30 ? 0.1 : 0.5, key = [Math.round(view.lat / step), Math.round(view.lon / step), Math.round(r / 10)].join();
+    const r = Math.min(150, Math.max(5, viewNm() * 1.2)), step = r < 30 ? 0.1 : 0.5, key = [Math.round(view.lat / step), Math.round(view.lon / step), Math.round(r / 10)].join();
     if (key === s.areaKey) return null; s.areaKey = key; return [view.lat, view.lon, r, view.half < 30 ? Math.min(60, viewNm() * 1.2) : 0]; });
   for (const q of areas) { if (!q) continue; const [la, lo, r, pr] = q;
     try { const aps = await (await fetch(`/api/live/area?lat=${la.toFixed(3)}&lon=${lo.toFixed(3)}&nm=${r.toFixed(0)}`)).json();
@@ -1080,6 +1324,12 @@ let flowNeighbours = [];               // the other big airports near the picked
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
 const routes = new Map(), routeAsked = new Map();
+function groundTag(a) {               // taxiing: type, and where it's going (departures) or ARR (just landed), as on ASDE-X
+  const r = routeOf(a), fits = r && routeFits(a, r);
+  const atDest = fits && r[1] != null && r[4] != null && gc(a.lat, a.lon, r[4], r[5]) < gc(a.lat, a.lon, r[1], r[2]);
+  const end = !fits ? '' : atDest ? 'ARR' : r[3];
+  return [a.type, end].filter(Boolean).join(' ');
+}
 function routeOf(a) { return a.route || routes.get(a.cs.toUpperCase()); }     // a.route: the site's own (infinitescope: the filed plan)
 function routeFits(a, r) {
   if (r && r === a.route) return true;
@@ -1101,7 +1351,7 @@ async function loadRoutes() {
   const near = home ? [...S.aircraft].sort((x, y) => gc(x.lat, x.lon, home[5], home[6]) - gc(y.lat, y.lon, home[5], home[6])) : S.aircraft;
   for (const a of near) {
     const cs = a.cs.toUpperCase();
-    if (a.ground || routes.has(cs) || !/^[A-Z0-9]{2,8}$/.test(cs) || cs === a.hex.toUpperCase()) continue;
+    if ((a.ground && a.gs <= 2) || routes.has(cs) || !/^[A-Z0-9]{2,8}$/.test(cs) || cs === a.hex.toUpperCase()) continue;
     if (now - (routeAsked.get(cs) || 0) < 8000) continue;
     if (a.id !== sel && !(home && gc(a.lat, a.lon, home[5], home[6]) < 220)) continue;
     want.push(cs); if (want.length >= 80) break;
@@ -1111,7 +1361,7 @@ async function loadRoutes() {
   try { const j = await (await fetch('/api/live/routes?cs=' + want.join(','))).json();
     for (const [cs, r] of Object.entries(j)) { routes.set(cs, r); routeAsked.delete(cs); }
     if (routes.size > 20000) routes.clear(); if (routeAsked.size > 20000) routeAsked.clear();
-    updateFlow(); renderList(); if (sel) renderCard();
+    updateFlow(); if (sel) renderCard();
   } catch (e) {}
 }
 function guessFlow(a) {
@@ -1151,7 +1401,7 @@ function setAltFilter() {
   altLo = parseAlt($('altLo').value); altHi = parseAlt($('altHi').value);
   $('altf').classList.toggle('on', altLo != null || altHi != null);
   try { localStorage.setItem(KEY + '-alt', JSON.stringify([$('altLo').value, $('altHi').value])); } catch (e) {}
-  worldPtsT = 0; if (S) renderList();
+  worldPtsT = 0;
 }
 try { const [lo, hi] = JSON.parse(localStorage.getItem(KEY + '-alt') || '["",""]'); $('altLo').value = lo || ''; $('altHi').value = hi || ''; } catch (e) {}
 for (const id of ['altLo', 'altHi']) { $(id).addEventListener('input', setAltFilter); $(id).addEventListener('keydown', e => { if (e.key === 'Escape') { $(id).value = ''; setAltFilter(); $(id).blur(); } }); }
@@ -1167,37 +1417,30 @@ function renderFlt() {
   box.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === flt));
 }
 document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
-  flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt(); renderList();
+  flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt();
 });
 
+// trails: where each aircraft was drawn, every 4 s (on the clock, so a slow feed's dead-reckoned track still gets dots),
+// kept in this page only and never older than hist_s seconds (pruned 4 s early, as samples are 4 s apart)
 let lastHistT = 0;
+const HIST_S = SITE.hist_s || 32;
+function sampleHist() {
+  if (SITE.no_history || !S) return;
+  const t = RP ? S.t : Date.now() / 1000;
+  if (t - lastHistT < 4 && t >= lastHistT) return;
+  lastHistT = t; const ids = new Set();
+  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + 4 && q[2] <= t); h.push([...pos(a).slice(0, 2), t]); hist.set(a.id, h); }
+  for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
+}
 function ingest() {
   updateFlow();
-  if (!SITE.no_history && (S.t - lastHistT >= 4 || S.t < lastHistT)) {
-    lastHistT = S.t; const ids = new Set();
-    for (const a of S.aircraft) { ids.add(a.id); const h = hist.get(a.id) || []; h.push(pos(a)); if (h.length > 8) h.shift(); hist.set(a.id, h); }
-    for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
-  }
+  sampleHist();
   if (wantSel && S.aircraft.some(a => a.id === wantSel)) { const id = wantSel; wantSel = null; select(id); }
   // the header says nothing while the feed is fine; only its errors show there
   $('status').innerHTML = S.ok ? '' : `<span class="bad">${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
-  renderList(); if (sel) renderCard();
+  if (sel) renderCard();
 }
-function renderList() {
-  if (!S) return;
-  const box = $('list'), keep = box.scrollTop;
-  const fl = a => a.ground ? 'GND' : a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString();
-  const rows = S.aircraft.map(a => [a, gc(view.lat, view.lon, a.lat, a.lon), !matches(a)])
-    .sort((x, y) => x[2] - y[2] || x[0].ground - y[0].ground || x[1] - y[1]).slice(0, 250);
-  const tag = a => { const f = home && flowOf(a); return f === 'arr' ? '↘' : f === 'dep' ? '↗' : ''; };
-  box.innerHTML = `<div class="tr hd"><span></span><span>CALLSIGN</span><span>TYPE</span><span>ALT</span><span>GS</span><span>DIST</span></div>` +
-    rows.map(([a, dd, off]) => `<div class="tr${off ? ' dim' : a.ground ? ' gnd' : ''}${a.emer ? ' emer' : ''}${a.id === sel ? ' on' : ''}" data-id="${esc(a.id)}">` +
-      `<span>${tag(a)}</span><span>${esc(a.cs)}</span><span>${esc(a.type)}</span><span>${fl(a)}</span><span>${a.gs}</span><span>${dd < 10 ? dd.toFixed(1) : Math.round(dd)} nm</span></div>`).join('');
-  box.scrollTop = keep;
-}
-$('list').onclick = e => { const r = e.target.closest('.tr[data-id]'); if (!r) return; select(r.dataset.id);
-  const a = S.aircraft.find(o => o.id === sel); if (a) { const [la, lo] = pos(a); view.lat = la; view.lon = lo; if (view.half > 300) view.half = 60; viewChanged(); } };
-setInterval(() => { if (!RP) $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; if (sel) renderCard(); }, 1000);
+setInterval(() => { if (!RP) { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; sampleHist(); } if (sel) renderCard(); }, 1000);
 
 // ------------------------------------------------------------------ servers (infinitescope: Casual / Training / Expert)
 const ERRS = { 'no API key':'no API key on the server yet', 'not approved yet':'API client waiting for approval', busy:'over the API rate limit, retrying', 'rate limited':'rate limited, retrying' };
@@ -1214,8 +1457,8 @@ function renderServers() {
 }
 $('srvs').onclick = e => { const b = e.target.closest('[data-srv]'); if (!b || b.dataset.srv === srv) return;
   srv = b.dataset.srv; try { localStorage.setItem(KEY + '.srv', srv); } catch (err) {}
-  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); liveOff.clear();
-  renderServers(); renderCard(); renderList(); mapKey = ''; schedule(0); };
+  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); motion.clear();
+  renderServers(); renderCard(); mapKey = ''; schedule(0); };
 // controllers on duty, every minute: by airport ICAO ('' for Center)
 let atcBy = new Map(), atcT = 0, atcGen = 0;
 // the ATC dropdown: airports with ATC open (not Center), most inbound flights (by flight plan) first; click one for its inbounds
@@ -1389,7 +1632,7 @@ async function tlOpen(id, fly, pastH) {
   const from = pastH ? Math.max(rec.first, Date.now() / 1000 - pastH * 3600) : rec.first;
   const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - from) / rec.every_s + 1) / (world ? 150 : 5000)));
   RP = { rec, every, from: pastH ? from : 0, pastH, frames: [], t: from, speed: +(localStorage.getItem(KEY + (world ? '-tlwsp' : '-tlsp')) || (world ? 600 : 60)), playing: false, last: performance.now(), ing: 0, loading: true, gen: Math.random() };
-  S = null; liveOff.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
+  S = null; motion.clear(); hist.clear(); WORLD = null; worldPts = []; document.body.classList.add('tl'); $('tlBtn').classList.add('on');
   history.replaceState(null, '', '?tl=' + id + (pastH ? '&h=' + pastH : '') + location.hash);
   if (!tlSpeeds().includes(RP.speed)) RP.speed = world ? 600 : 60;
   if (fly) { view.lat = rec.lat; view.lon = rec.lon; view.half = world ? R_NM * 1.05 : Math.max(5, rec.nm / 1.25); viewChanged(true); }
@@ -1413,7 +1656,7 @@ async function tlLoad(rp) {             // all of it, page by page, then (while 
 }
 function tlClose(quiet) {
   if (!RP) return;
-  RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; liveOff.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
+  RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; motion.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
   $('tlbar').hidden = true; history.replaceState(null, '', location.pathname + location.hash);
   if (!quiet) { worldFetchT = 0; schedule(0); }
 }
@@ -1433,7 +1676,7 @@ function tlBar() {
     const r = b.querySelector('input');
     r.addEventListener('pointerdown', () => { RP && (RP.drag = true); });
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
-    r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); liveOff.clear(); RP.ing = 0; });
+    r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); motion.clear(); RP.ing = 0; });
     b.querySelector('[data-tl=play]').onclick = () => tlPlay(!RP.playing);
     b.querySelector('[data-tl=x]').onclick = () => tlClose();
     b.querySelector('[data-tl=tags]').onclick = () => {     // the layers' "Data tags", in every scope
@@ -1502,7 +1745,7 @@ function tlWorldAt(t) {
 function tlLoop() {
   const F = RP.frames;
   if (RP.pastH) { const cut = Date.now() / 1000 - RP.pastH * 3600, i = F.findIndex(f => f[0] >= cut); if (i > 0 && F.length - i >= 2) F.splice(0, i); }   // the past stays the last n hours
-  RP.t = F[0][0]; hist.clear(); liveOff.clear(); RP.ing = 0;
+  RP.t = F[0][0]; hist.clear(); motion.clear(); RP.ing = 0;
 }
 function tlStep() {
   const now = performance.now(), F = RP.frames, el = Math.min(250, now - RP.last); RP.last = now;

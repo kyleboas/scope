@@ -1,6 +1,6 @@
-"""The shared scope core: geometry, airports and runways (OurAirports), US procedures (FAA CIFP) and
-airport ground maps (OpenStreetMap). Every site (livescope, infinitescope, ...) uses these; a site's own
-traffic code lives in its own repo.
+"""The shared scope core: geometry, airports and runways (OurAirports) with their ILS (Robin Peel's navaids), US
+procedures (FAA CIFP) and airport ground maps (OpenStreetMap). Every site (livescope, infinitescope, ...) uses these;
+a site's own traffic code lives in its own repo.
 """
 import gzip
 import json
@@ -35,11 +35,19 @@ def gc_dest(lat, lon, brg, nm):
 
 
 class Airports:
-    """[ident, iata, name, city, country, lat, lon, elev, kind L/M/S/W, runways[[le, he, lat1, lon1, lat2, lon2, width_ft]],
-    frequencies[[type, description, mhz]]]"""
+    """[ident, iata, name, city, country, lat, lon, elev, kind L/M/S/W, runways[[le, he, lat1, lon1, lat2, lon2, width_ft,
+    le_loc, he_loc]], frequencies[[type, description, mhz]]]. A runway end's localizer (livedata/ils.json, from
+    tools/build_ils.py) is [kind ILS/LOC/LDA/SDF/IGS, ident, mhz, course true, lat, lon, glideslope deg or 0], or None."""
     def __init__(self):
         path = os.path.join(HERE, "livedata", "airports.json")
         self.all = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else []
+        path = os.path.join(HERE, "livedata", "ils.json")
+        ils = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+        for a in self.all:
+            ends = ils.get(a[0])
+            if ends:
+                for r in a[9]:
+                    r[7:] = [ends.get(r[0]), ends.get(r[1])]
         self.major = [a[:9] for a in self.all if a[8] in "LM"]
         self.by_id = {a[0].upper(): a for a in self.all}
 
