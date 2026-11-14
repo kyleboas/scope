@@ -221,9 +221,9 @@ const LAYERS = [['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], 
                 ['fixnames', 'Fix names'], ['rings', 'Range rings'], ['airports', 'Airports'], ['small', 'Small airports and strips'],
                 ['runways', 'Runways'], ['finals', 'Extended finals (KSFO)'], ['taxi', 'Ground maps (taxiways, aprons, gates)'], ['states', 'State and province lines'],
                 ['borders', 'Borders'], ['coast', 'Coastlines'], ['plan', "Selected flight's plan and flown route"], ['trails', 'History trails'], ['ptl', 'One-minute track lines'],
-                ['tags', 'Data tags'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
+                ['tags', 'Data tags'], ['aprontags', 'Data tags on aircraft on aprons'], ['ground', 'Ground traffic'], ['world', 'Worldwide traffic when zoomed out'], ['est', 'Estimated positions over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, nearby:true, fixes:true, fixnames:true, rings:true, airports:true, small:true, runways:true,
-            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, tags:true, ground:true, world:true, est:true };
+            finals:true, taxi:true, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, tags:true, aprontags:true, ground:true, world:true, est:true };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.4, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -253,7 +253,7 @@ function makeScope(v) {
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   try { Object.assign(s.L, JSON.parse(localStorage.getItem(lkey) || '{}')); } catch (e) {}
   const lp = el.querySelector('.layers');
-  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
+  lp.innerHTML = LAYERS.filter(([k]) => (has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags')).map(([k, t]) => `<label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>`).join('');
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; worldPtsT = 0; loadWorld(); loadGround();
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
@@ -450,6 +450,27 @@ function setGroundNote() {
   const waiting = [...ground.entries()].filter(([, g]) => g === 'pending').map(([id]) => id);
   $('gnote').textContent = waiting.length && eachScope(() => view.half < 4).some(Boolean) ? `loading ${waiting.join(', ')} ground map from OpenStreetMap…` : '';
 }
+// is a spot on an apron (or at a terminal) of a loaded ground map? Each polygon's bounding box is kept for speed
+const polyBox = new WeakMap();
+function inPoly(p, la, lo) {
+  let b = polyBox.get(p);
+  if (!b) { b = [Infinity, -Infinity, Infinity, -Infinity]; for (const [y, x] of p) { b[0] = Math.min(b[0], y); b[1] = Math.max(b[1], y); b[2] = Math.min(b[2], x); b[3] = Math.max(b[3], x); } polyBox.set(p, b); }
+  if (la < b[0] || la > b[1] || lo < b[2] || lo > b[3]) return false;
+  let ins = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const [yi, xi] = p[i], [yj, xj] = p[j];
+    if ((yi > la) !== (yj > la) && lo < (xj - xi) * (la - yi) / (yj - yi) + xi) ins = !ins;
+  }
+  return ins;
+}
+function onApron(la, lo) {
+  for (const g of ground.values()) {
+    if (typeof g !== 'object') continue;
+    for (const p of g.ap) if (inPoly(p, la, lo)) return true;
+    for (const [, p] of g.tm) if (inPoly(p, la, lo)) return true;
+  }
+  return false;
+}
 function polyFill(c, g, col) {
   c.beginPath(); let n = 0;
   for (const [la, lo] of g) { const [x, y, z] = proj(la, lo); if (z < 0) return; n++ ? c.lineTo(x, y) : c.moveTo(x, y); }
@@ -534,6 +555,7 @@ function drawAircraft() {
     if (isSel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = d; ctx.strokeRect(px - 8*d, py - 8*d, 16*d, 16*d); }
     if (far && !isSel && !isHov && !emer) continue;
     if (a.ground && (view.half > 1.5 || !L.tags) && !isSel && !isHov && !emer) continue;
+    if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
     if (!L.tags && !isSel && !isHov && !emer) {        // tags hidden: a short one, altitude and wake category, beside the dot
       ctx.strokeStyle = ctx.fillStyle = COL.db; ctx.lineWidth = d;
       ctx.beginPath(); ctx.moveTo(px + 4*d, py); ctx.lineTo(px + 10*d, py); ctx.stroke();
