@@ -1154,7 +1154,7 @@ function tlPanel(force) {
   const nRec = TL.recs.filter(r => r.rec).length, full = TL.max_active && nRec >= TL.max_active, can = !TL.need_key || !!tlKey;
   const what = here.world ? `worldwide traffic (OpenSky, one snapshot every ${TL.world_every >= 600 ? Math.round(TL.world_every / 60) + ' min' : TL.world_every + ' s'})`
     : `the ${here.nm} nm around the middle of this view`;
-  const slow = here.world && TL.world_every >= 600 ? `<div class="note">The worldwide picture only updates every ${Math.round(TL.world_every / 60)} min (the server has no OpenSky API client), so a world timelapse can play once it has two, after ${Math.round(TL.world_every / 60)}–${Math.round(TL.world_every / 30)} min, and an hour holds about ${Math.round(3600 / TL.world_every) + 1} pictures.</div>` : '';
+  const slow = here.world && TL.world_every >= 600 ? `<div class="note">The worldwide picture only updates every ${Math.round(TL.world_every / 60)} min (the server has no working OpenSky API client), so a world timelapse can play once it has two, after ${Math.round(TL.world_every / 60)}–${Math.round(TL.world_every / 30)} min, and an hour holds about ${Math.round(3600 / TL.world_every) + 1} pictures.</div>` : '';
   p.innerHTML = (can ? `<div class="hd">Record ${what}, on the server. It keeps recording with this page closed. Zoom ${here.world ? 'in for an area' : 'out to the globe for the whole world'}.` +
       (TL.need_key ? ' <button id="tlLock" title="Forget the key in this browser">LOCK</button>' : '') + '</div>' +
     `<div class="new"><input id="tlName" maxlength="40" spellcheck="false" placeholder="name" value="${esc(keep ?? here.name)}">` +
@@ -1309,7 +1309,7 @@ function tlStep() {
   if (RP.playing && !RP.drag) { RP.t += el / 1000 * RP.speed; if (RP.t >= end) { RP.t = end; if (!RP.rec.rec && !RP.loading) tlPlay(false); } }
   RP.t = Math.max(F[0][0], Math.min(end, RP.t));
   if (RP.rec.kind === 'world') {
-    if (now - (RP.wb || 0) > 120) { RP.wb = now; const [ac, est] = tlWorldAt(RP.t); WORLD = { ok: true, t: RP.t, every: RP.rec.every_s, ac, est }; worldPtsT = 0; }
+    { const [ac, est] = tlWorldAt(RP.t); WORLD = { ok: true, t: RP.t, every: RP.rec.every_s, ac, est }; worldPtsT = 0; }   // every frame (well under a ms), so the dots glide
     if (now - RP.ing > 400) { RP.ing = now; tlBar(); $('clock').textContent = tlTime(RP.t).slice(6);
       $('status').textContent = `timelapse ${RP.rec.name} · ${WORLD.ac.filter(r => !r[8]).length.toLocaleString()} airborne worldwide` + (L.est && WORLD.est.length ? `, ${WORLD.est.length.toLocaleString()} estimated over the oceans` : '') + ' · OpenSky'; }
     return;
