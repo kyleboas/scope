@@ -53,7 +53,7 @@
   #tiles:not(.one) ~ .flt { bottom:auto; top:var(--top); }
   .views [data-layout] { display:flex; align-items:center; } .views [data-layout] svg { width:14px; height:14px; }
   #side { grid-column:2; grid-row:1 / 3; border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-  #card { flex-shrink:0; padding:9px 10px; border-bottom:1px solid var(--line); font:12px/1.55 var(--mono); color:var(--fg2); background:var(--card); display:none; }
+  #card { flex-shrink:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:9px 10px; border-bottom:1px solid var(--line); font:12px/1.55 var(--mono); color:var(--fg2); background:var(--card); display:none; }
   #card b { color:var(--fg); font-size:13px; }
   #card a { color:#7aa2ff; text-decoration:none; }
   #card .x { float:right; padding:0 4px; }
@@ -162,7 +162,8 @@
     #side { top:auto; left:0; width:auto; max-height:min(55dvh, 520px); border-left:0; border-top:1px solid var(--line); border-radius:12px 12px 0 0;
             padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-shadow:0 -8px 24px #0008; }
     #list { min-height:120px; }
-    #card .fq, #card .pr { max-height:120px; }
+    /* the whole card scrolls as one inside the sheet, so no little scroll boxes inside it */
+    #card .fq, #card .pr, #card .fp { max-height:none; overflow:visible; }
   }
   /* narrow phones: one header row (clock, search, ALT, buttons; servers wrap below if there are any), and ALL/ARR/DEP sits above the view buttons */
   @media (max-width: 480px) {
