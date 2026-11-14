@@ -211,12 +211,12 @@ const dpr = () => devicePixelRatio || 1;
 const R_NM = 3440.065, D2R = Math.PI / 180;
 const FONT = px => `bold ${px * dpr()}px ui-monospace, Menlo, Consolas, monospace`;
 const PHONE = matchMedia('(max-width: 820px), (max-height: 500px)');
-// aircraft data tags' text size, in the layers menu: small / medium / large (two px apart), remembered;
+// aircraft data tags' text size, in the layers menu: small / medium / large (7, 11 and 13 px for the callsign line), remembered;
 // left alone, small on phones (where tags crowd) and medium elsewhere
-const TAG_SIZES = [['-2', 'S', 'Small'], ['0', 'M', 'Medium'], ['2', 'L', 'Large']];
+const TAG_SIZES = [['-4', 'S', 'Small'], ['0', 'M', 'Medium'], ['2', 'L', 'Large']];
 let tagSz = (() => { try { return localStorage.getItem(KEY + '-tagsz'); } catch (e) { return null; } })();
-const tagOff = () => tagSz != null ? +tagSz : PHONE.matches ? -2 : 0;
-const TAG = px => px + tagOff();
+const tagOff = () => tagSz != null ? +tagSz : PHONE.matches ? -4 : 0;
+const TAG = px => Math.max(7, px + tagOff());   // 7 px: about the smallest still readable
 function setTagSz(v) {
   tagSz = v; try { localStorage.setItem(KEY + '-tagsz', v); } catch (e) {}
   document.querySelectorAll('.tagsz button').forEach(b => b.classList.toggle('on', +b.dataset.tsz === tagOff()));
