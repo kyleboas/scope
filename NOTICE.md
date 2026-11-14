@@ -17,4 +17,7 @@ feeds are in that site's NOTICE):
   (ICAO Doc 8643) as compiled by tar1090-db (<https://github.com/wiedehopf/tar1090-db>), and the ICAO 24-bit address blocks by
   country (ICAO Annex 10 Vol III) as listed by tar1090 (<https://github.com/wiedehopf/tar1090>).
 - **ATIS** is from atis.info (FAA D-ATIS); **METARs** from aviationweather.gov.
+- **Map backgrounds** (the MAP button: street map and satellite) are Esri's tile services, loaded by the browser at run time:
+  the Dark Gray Canvas (Esri, HERE, Garmin, © OpenStreetMap contributors) and World Imagery (Esri, Maxar, Earthstar Geographics).
+  They are credited on the map while shown.
 - **Icons** are from Tabler Icons (MIT).

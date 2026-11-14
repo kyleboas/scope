@@ -9,7 +9,7 @@ behind several sites. Each site is its own repo that plugs in one traffic source
 | [infinitescope](https://github.com/kyleboas/infinitescope) | Infinite Flight's live multiplayer servers | https://infinitescope.kyleboas.com |
 
 scope gives every site the page (canvas, no build step), airports and runways, ILS and extended finals worldwide, US procedures (narrowed to the ones in use, read from the ATIS), OSM ground
-maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
+maps, a street map or satellite background (MAP), ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
 [livescope's README](https://github.com/kyleboas/livescope#readme) for the full feature list.
 
 ## Run

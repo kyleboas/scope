@@ -264,7 +264,7 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans']];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true };
+            finals:true, taxi:true, taxinames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'' };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -287,7 +287,7 @@ function makeScope(v) {
   const el = document.createElement('div'), n = scopes.length; el.className = 'tile';
   el.innerHTML = `<canvas></canvas><div class="layers" hidden></div><div class="views">${n ? '' : '<button data-layout></button>'}` +
     `<button data-layers title="Layers" aria-label="Layers">${ico('layers')}</button>` +
-    '<button data-v="0.8">GND</button><button data-v="3">FLD</button><button data-v="40">APP</button><button data-v="250">CTR</button><button data-v="globe">GLOBE</button></div>';
+    '<button data-bm title="Map background: the scope (black), a street map or satellite imagery (click to change)"></button><button data-v="0.8">GND</button><button data-v="3">FLD</button><button data-v="40">APP</button><button data-v="250">CTR</button><button data-v="globe">GLOBE</button></div>';
   $('tiles').appendChild(el);
   const c = el.querySelector('canvas'), m = document.createElement('canvas');
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
@@ -306,6 +306,10 @@ function makeScope(v) {
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
   if (!n) el.querySelector('[data-layout]').onclick = () => setLayout(LAYOUTS[(LAYOUTS.indexOf($('tiles').className) + 1) % LAYOUTS.length]);
+  const bm = el.querySelector('[data-bm]'), bmShow = () => { bm.textContent = s.L.basemap === 'sat' ? 'SAT' : 'MAP'; bm.classList.toggle('on', !!s.L.basemap); };
+  bmShow();
+  bm.onclick = () => { s.L.basemap = BM_ORDER[(BM_ORDER.indexOf(s.L.basemap || '') + 1) % BM_ORDER.length]; s.key = ''; bmShow();
+    try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
   el.querySelectorAll('.views [data-v]').forEach(b => b.onclick = () => {
     use(s); const v = b.dataset.v; view.half = v === 'globe' ? R_NM * 1.05 : +v;
     if (v !== 'globe' && home && gc(view.lat, view.lon, home[5], home[6]) < 600) { view.lat = home[5]; view.lon = home[6]; }
@@ -394,9 +398,95 @@ function drawLines(c, lines, color, w) {
   }
   c.stroke();
 }
+// ------------------------------------------------------------------ map background: street map or satellite tiles (the MAP button)
+// Web Mercator tiles warped onto the globe: each tile cut into a grid of cells, each cell drawn as two triangles with an affine
+// transform. A tile still loading is stood in for by a loaded ancestor's matching corner, so zooming never flashes black.
+const BM_ORDER = ['', 'map', 'sat'];
+// Esri's (no key needed): the dark grey canvas with its labels on top, and world imagery darkened so the scope stays readable
+const esri = s => (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/${z}/${y}/${x}`;
+const BASEMAPS = {
+  map: { urls:[esri('Canvas/World_Dark_Gray_Base'), esri('Canvas/World_Dark_Gray_Reference')], max:16, credit:'Esri, HERE, Garmin, © OpenStreetMap contributors' },
+  sat: { urls:[esri('World_Imagery')], max:19, dim:.35, credit:'Imagery © Esri, Maxar, Earthstar Geographics' } };
+const tileCache = new Map();           // 'style/z/x/y' -> Image (complete once loaded; .bad when it failed)
+let tilesWaiting = 0;
+function tileImg(st, li, z, x, y, load) {
+  const k = `${st}${li}/${z}/${x}/${y}`; let im = tileCache.get(k);
+  if (im) { tileCache.delete(k); tileCache.set(k, im); return im; }   // most recently used last
+  if (!load || tilesWaiting > 48) return null;
+  im = new Image(); tilesWaiting++;
+  im.onload = () => { tilesWaiting--; im.ok = true; mapKey = ''; };
+  im.onerror = () => { tilesWaiting--; im.bad = true; setTimeout(() => tileCache.get(k) === im && tileCache.delete(k), 30000); };
+  im.src = BASEMAPS[st].urls[li](z, x, y); tileCache.set(k, im);
+  if (tileCache.size > 600) for (const [kk, v] of tileCache) { if (tileCache.size <= 500) break; if (v.ok || v.bad) tileCache.delete(kk); }
+  return im;
+}
+const t2lon = (x, z) => x / 2 ** z * 360 - 180;
+const t2lat = (y, z) => { const n = Math.PI - 2 * Math.PI * y / 2 ** z; return Math.atan(Math.sinh(n)) / D2R; };
+// one image triangle (u, v in image pixels) onto screen points, slightly enlarged so neighbouring cells don't leave hairlines
+function drawTri(c, im, a, b, e, ua, ub, ue) {
+  const cx = (a[0] + b[0] + e[0]) / 3, cy = (a[1] + b[1] + e[1]) / 3, g = p => { const dx = p[0] - cx, dy = p[1] - cy, l = Math.hypot(dx, dy) || 1; return [p[0] + dx / l * .7, p[1] + dy / l * .7]; };
+  const A = g(a), B = g(b), E = g(e);
+  const du1 = ub[0] - ua[0], dv1 = ub[1] - ua[1], du2 = ue[0] - ua[0], dv2 = ue[1] - ua[1], det = du1 * dv2 - du2 * dv1; if (!det) return;
+  const dx1 = b[0] - a[0], dy1 = b[1] - a[1], dx2 = e[0] - a[0], dy2 = e[1] - a[1];
+  const m11 = (dx1 * dv2 - dx2 * dv1) / det, m12 = (dy1 * dv2 - dy2 * dv1) / det, m21 = (dx2 * du1 - dx1 * du2) / det, m22 = (dy2 * du1 - dy1 * du2) / det;
+  c.save(); c.beginPath(); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); c.lineTo(E[0], E[1]); c.closePath(); c.clip();
+  c.setTransform(m11, m12, m21, m22, a[0] - m11 * ua[0] - m21 * ua[1], a[1] - m12 * ua[0] - m22 * ua[1]);
+  c.drawImage(im, 0, 0); c.restore();
+}
+function drawBasemap(c) {
+  const st = L.basemap, B = BASEMAPS[st]; if (!B) return;
+  const d = dpr(), w = P0.w, h = P0.h;
+  // the zoom whose tile pixels are about screen pixels, at the centre's latitude
+  const mpp = 2 * view.half * 1852 / Math.min(w, h) * d, tpx = 256;   // per CSS pixel, so labels stay legible on retina
+  const z = Math.max(1, Math.min(B.max, Math.round(Math.log2(40075016.7 * Math.max(.05, Math.cos(view.lat * D2R)) / tpx / mpp)))), n = 2 ** z;
+  // the tiles in view: from points round the screen's edge (and the globe's, zoomed out), longitudes unwrapped about the centre
+  let la1 = 90, la2 = -90, lo1 = 1e9, lo2 = -1e9;
+  const take = g => { if (!g) return; la1 = Math.min(la1, g[0]); la2 = Math.max(la2, g[0]); const lo = view.lon + (((g[1] - view.lon) + 540) % 360 - 180); lo1 = Math.min(lo1, lo); lo2 = Math.max(lo2, lo); };
+  for (let i = 0; i <= 16; i++) { take(unproj(w * i / 16, 0)); take(unproj(w * i / 16, h)); take(unproj(0, h * i / 16)); take(unproj(w, h * i / 16)); }
+  take([view.lat, view.lon]);
+  if (P0.k < Math.hypot(w, h) / 2) { for (let b = 0; b < 360; b += 10) take(dest(view.lat, view.lon, b, R_NM * Math.PI / 2 * .999)); }
+  const onScr = q => q[2] > 0 && q[0] >= 0 && q[0] <= w && q[1] >= 0 && q[1] <= h, np = onScr(proj(90, 0)), sp = onScr(proj(-90, 0));   // a pole in view: every longitude
+  if (np) la2 = 90; if (sp) la1 = -90; if (np || sp || lo2 - lo1 > 360) { lo1 = view.lon - 180; lo2 = view.lon + 180; }
+  const ty = la => Math.floor((1 - Math.log(Math.tan(Math.PI / 4 + Math.max(-85.05, Math.min(85.05, la)) * D2R / 2)) / Math.PI) / 2 * n);
+  const x1 = Math.floor((lo1 + 180) / 360 * n), x2 = Math.floor((lo2 + 180) / 360 * n), y1 = Math.max(0, ty(la2)), y2 = Math.min(n - 1, ty(la1));
+  if ((x2 - x1 + 1) * (y2 - y1 + 1) > 400) return;
+  const cells = z >= 9 ? 1 : z >= 6 ? 2 : z >= 4 ? 4 : 8;
+  // nearest tiles first, so they load first
+  const list = [];
+  for (let ty_ = y1; ty_ <= y2; ty_++) for (let tx = x1; tx <= x2; tx++) list.push([tx, ty_]);
+  const cx = (view.lon + 180) / 360 * n, cy = ty(view.lat) + .5;
+  list.sort((p, q) => Math.hypot(p[0] + .5 - cx, p[1] + .5 - cy) - Math.hypot(q[0] + .5 - cx, q[1] + .5 - cy));
+  for (let li = 0; li < B.urls.length; li++) for (const [tx, ty_] of list) {
+    const x = ((tx % n) + n) % n;
+    // the tile itself, else its nearest loaded ancestor and where this tile sits in it
+    let im = tileImg(st, li, z, x, ty_, true), zz = z, ax = x, ay = ty_;
+    while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(st, li, zz, ax, ay, false); }
+    if (!(im && im.ok)) continue;
+    const f = 2 ** (z - zz), S0 = im.naturalWidth / f, u0 = (x - ax * f) * S0, v0 = (ty_ - ay * f) * S0;
+    const grid = [];
+    for (let j = 0; j <= cells; j++) { const row = [], la = t2lat(ty_ + j / cells, z);
+      for (let i = 0; i <= cells; i++) row.push(proj(la, t2lon(tx + i / cells, z))); grid.push(row); }
+    for (let j = 0; j < cells; j++) for (let i = 0; i < cells; i++) {
+      const p = grid[j][i], q = grid[j][i + 1], r = grid[j + 1][i + 1], s = grid[j + 1][i];
+      if (p[2] < 0 || q[2] < 0 || r[2] < 0 || s[2] < 0) continue;
+      const mnx = Math.min(p[0], q[0], r[0], s[0]), mxx = Math.max(p[0], q[0], r[0], s[0]), mny = Math.min(p[1], q[1], r[1], s[1]), mxy = Math.max(p[1], q[1], r[1], s[1]);
+      if (mxx < 0 || mnx > w || mxy < 0 || mny > h) continue;
+      const U = k => u0 + S0 * k / cells, V = k => v0 + S0 * k / cells;
+      drawTri(c, im, p, q, r, [U(i), V(j)], [U(i + 1), V(j)], [U(i + 1), V(j + 1)]);
+      drawTri(c, im, p, r, s, [U(i), V(j)], [U(i + 1), V(j + 1)], [U(i), V(j + 1)]);
+    }
+  }
+  if (B.dim) { c.fillStyle = `rgba(0,0,0,${B.dim})`; c.fillRect(0, 0, w, h); }
+}
+function basemapCredit(c) {
+  const B = BASEMAPS[L.basemap]; if (!B) return; const d = dpr();
+  c.font = `${10 * d}px ui-monospace, Menlo, monospace`; c.textAlign = 'right'; c.fillStyle = '#9a9a9a'; c.shadowColor = '#000'; c.shadowBlur = 3 * d;
+  c.fillText(B.credit, P0.w - 8 * d, P0.h - (PHONE.matches ? 52 : 40) * d); c.textAlign = 'left'; c.shadowBlur = 0;
+}
 function drawMap() {
   const c = mctx, d = dpr();
   c.fillStyle = '#000'; c.fillRect(0, 0, map.width, map.height);
+  drawBasemap(c);
   const ppn = pxPerNm();
   if (view.half > 400) {              // the globe's edge and a 15° graticule
     c.strokeStyle = '#222'; c.lineWidth = d; c.beginPath(); c.arc(P0.w / 2, P0.h / 2, P0.k, 0, 7); c.stroke();
@@ -439,6 +529,7 @@ function drawMap() {
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
     if (label && (L.aptnames || (home && a[0] === home[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
   }
+  basemapCredit(c);
 }
 // extended finals, 10 nm with ticks at 5 and 10: along the localizer's course from each runway end that has one
 // (Robin Peel's navaids, 2013), and along the runway on long runways with none on file (new since 2013); KSFO's are
