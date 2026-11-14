@@ -8,8 +8,8 @@ behind several sites. Each site is its own repo that plugs in one traffic source
 | [livescope](https://github.com/kyleboas/livescope) | real world, from public ADS-B feeds | https://livescope.kyleboas.com |
 | [infinitescope](https://github.com/kyleboas/infinitescope) | Infinite Flight's live multiplayer servers | https://infinitescope.kyleboas.com |
 
-scope gives every site the page (canvas, no build step), airports and runways, ILS and extended finals worldwide, US procedures (narrowed to the ones in use, read from the ATIS), OSM ground
-maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
+scope gives every site the page (canvas, no build step), airports and runways, ILS and extended finals worldwide, US procedures (narrowed to the ones in use, read from the ATIS), FAA airport
+diagrams laid on the map and the rest of the FAA's charts (SIDs, STARs, approaches, minimums; US), OSM ground maps, ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
 [livescope's README](https://github.com/kyleboas/livescope#readme) for the full feature list.
 
 ## Run
@@ -26,7 +26,8 @@ Then open http://localhost:8799. `/` and `/live` serve the page; the API is unde
 runs as its own process (its own port and hostname); they can all share one scope checkout.
 
 Environment: `SCOPE_GROUND_DIR` moves the ground-map cache (default `livedata/ground/` in this checkout),
-for example when the server runs as a user that can't write here.
+for example when the server runs as a user that can't write here. The FAA airport diagram cache goes in its `diagrams/`
+(or `SCOPE_DIAGRAM_DIR`; default `livedata/diagrams/`).
 
 ## Writing a site
 
@@ -77,12 +78,19 @@ Anything every site can use belongs in scope (`scope/` or `web/scope.html`), not
   navaids, GPL, cycle 2013.10; see the script for the download), matched to the runways in `livedata/airports.json`.
   The page draws a 10 nm final along each localizer, and along the runway itself on long runways that have none on file.
 - `web/geo/ksfo.json` holds KSFO's extended finals, from the atcscope project.
+- FAA airport diagrams aren't stored: `/api/live/diagram?id=` fetches the current d-TPP cycle's PDF from aeronav.faa.gov (the
+  cycle's index is read once a cycle) and caches it. The page draws it with pdf.js (from jsDelivr, loaded only when a diagram
+  is wanted) and places it from the chart itself: its runway bars matched to the runways on file, then its latitude and
+  longitude lines snapped to their half minutes. A diagram it can't place (about one in ten) isn't drawn. The overlay is off
+  until turned on ('Diagram on map' in the airport card, or the layer).
+- `/api/live/charts?id=` lists the airport's charts in the current cycle (from the same index); the card links each PDF on
+  aeronav.faa.gov. Only the diagram goes on the map: SID and STAR charts aren't to scale.
 
 ## Layout
 
 ```
 server.py        HTTP server for one site: the page (with the site's settings), map files, /api/live*
-scope/core.py    geometry, airports (OurAirports) and their ILS, procedures (FAA CIFP), ground maps (OSM)
+scope/core.py    geometry, airports (OurAirports) and their ILS, procedures (FAA CIFP), ground maps (OSM), FAA airport diagrams
 scope/weather.py D-ATIS (atis.info) and METARs (aviationweather.gov)
 web/scope.html   the shared client (canvas, no build step)
 web/geo/         coastlines/borders/states (Natural Earth) and KSFO finals

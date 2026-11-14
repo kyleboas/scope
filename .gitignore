@@ -3,3 +3,4 @@ __pycache__/
 livedata/ground/
 .DS_Store
 livedata/timelapse/
+livedata/diagrams/
