@@ -1625,7 +1625,7 @@ function select(id) {
 let homeInfo = null;
 function setHome(a, fly, half) {
   home = a; homeCardShut = false; select(null); try { localStorage.setItem(KEY + '-home', a[0]); } catch (e) {} procSel = null; flowMem.clear();
-  flowNeighbours = MAJOR.filter(o => o[0] !== a[0] && gc(a[5], a[6], o[5], o[6]) < 120); if (S) updateFlow(); renderFlt();
+  if (S) updateFlow(); renderFlt();
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
   if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = half || 40; }
@@ -1649,7 +1649,7 @@ function renderCard1() {
   if (a && has('flight')) {
     const [la, lo] = pos(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)}${a.away ? ' ' + dim(esc(a.state || 'pilot away')) : ''}<br>` +
-      (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}`) + '<br>' : '') +
+      (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}`) + '<br>' : '') +
       flightCard(a, la, lo) +
       (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
@@ -1660,7 +1660,7 @@ function renderCard1() {
       (FL && FL.id === a.id && FL.dep ? `${esc(FL.dep)} → ${esc(FL.arr || '????')} <span style="color:var(--dim)">filed flight plan</span><br>` +
         (FL.route ? `<div class="fp">${esc(FL.route)}</div>` : '')
       : routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeOf(a)[6] === 'filed' ? 'filed flight plan' : 'scheduled route'}${routeFits(a, routeOf(a)) ? '' : ", but it doesn't fit where it is"}</span><br>` : '') +
-      (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}</span><br>` : '') +
+      (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}</span><br>` : '') +
       (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '') +
       (a.hex && has('aircraft') ? ` · <a href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(a.hex)}" target="_blank" rel="noopener">ADS-B Exchange ↗</a>` +
         (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? (RP.fh ? fhCard(a) : '') : detailCard(a)) : '');
@@ -2077,27 +2077,14 @@ async function poll() {
   schedule(POLL_MS);
 }
 // ------------------------------------------------------------------ arrivals / departures of the picked airport
-// ADS-B carries no flight plan and callsign route databases are often stale, so this guesses from the
-// geometry: heading for the field below a generous descent profile = arrival, heading away climbing = departure.
-// A guess is kept for 2 minutes so a downwind or a vector away from the field doesn't drop it.
+// only from a route that fits (the site's filed plan, or the callsign's route): nothing is guessed from the track.
+// One is kept for 2 minutes so a route lookup that comes and goes doesn't drop it.
 let flt = localStorage.getItem(KEY + '.flt') || 'all';
 const flowMem = new Map();             // id -> ['arr' | 'dep' | 'gnd', Date.now() when last seen as that]
 function brg(lat1, lon1, lat2, lon2) {
   const p1 = lat1 * D2R, p2 = lat2 * D2R, dl = (lon2 - lon1) * D2R;
   return (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / D2R + 360) % 360;
 }
-const angOff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
-// fit of one aircraft to one airport: distance if it looks like arriving there / departing from there, else null
-function fitArr(a, ap) {
-  const d = gc(a.lat, a.lon, ap[5], ap[6]), agl = a.alt - (ap[7] || 0), off = angOff(a.hdg, brg(a.lat, a.lon, ap[5], ap[6]));
-  if (d < 10 && agl < 3500 && !(a.vs > 300 && off > 90)) return d;            // in the pattern or on final
-  return d < 160 && off < 45 && agl < d * 330 + 4000 && (a.vs < -300 || agl < 12000 || d < 30) ? d + off / 15 : null;
-}
-function fitDep(a, ap) {
-  const d = gc(a.lat, a.lon, ap[5], ap[6]), agl = a.alt - (ap[7] || 0), off = angOff(a.hdg, brg(a.lat, a.lon, ap[5], ap[6]));
-  return d < 100 && off > 90 && a.vs > 300 && agl < d * 550 + 4000 ? d : null;
-}
-let flowNeighbours = [];               // the other big airports near the picked one: traffic that fits them better isn't ours
 // scheduled routes by callsign (adsbdb.com via the server); crowd-sourced, so one is only believed when the
 // aircraft is roughly between its two airports and isn't descending away from where it left / climbing near where it's going
 // a callsign the server found no route for is asked again after 2 min and one with only a scheduled route after 10 (the FAA's filed
@@ -2146,12 +2133,7 @@ async function loadRoutes() {
 }
 function guessFlow(a) {
   if (a.ground) return gc(a.lat, a.lon, home[5], home[6]) < 4 ? 'gnd' : '';
-  const rf = routeFlow(a); if (rf) return rf;
-  for (const [kind, fit] of [['arr', fitArr], ['dep', fitDep]]) {
-    const mine = fit(a, home); if (mine === null) continue;
-    if (!flowNeighbours.some(ap => { const f = fit(a, ap); return f !== null && f < mine; })) return kind;
-  }
-  return '';
+  return routeFlow(a);
 }
 function updateFlow() {
   const now = Date.now();
