@@ -1142,10 +1142,6 @@ function drawBoats() {
       const a = h * D2R, s = Math.sin(a), c = Math.cos(a), P = (f, w) => [x + s * f * r + c * w * r, y - c * f * r + s * w * r];
       ctx.beginPath(); for (const [i, q] of [[1, 0], [.3, .45], [-.8, .45], [-.8, -.45], [.3, -.45]].entries()) { const [px, py] = P(...q); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
       ctx.closePath(); moving ? ctx.fill() : ctx.stroke();
-      if (moving && view.half <= 20) {            // where it'll be in five minutes
-        const [ea, eo] = dest(la, lo, b[4] >= 0 ? b[4] : h, b[3] / 12), [ex, ey] = proj(ea, eo);
-        if (Math.hypot(ex - x, ey - y) > r * 1.5) { ctx.globalAlpha = .5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1; }
-      }
     }
     if (tags && !hi && b[7]) { ctx.font = FONT(TAG(9)); ctx.fillText(b[7], x + 8 * d, y + 3 * d); }
   }
