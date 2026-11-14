@@ -111,13 +111,29 @@
   #tlp .rec b { color:var(--fg); font-weight:600; } #tlp .rec i { font-style:normal; color:var(--dim); font-size:11px; grid-column:1; }
   #tlp .rec .on { color:#ff453a; } #tlp .past { border-bottom:1px solid var(--line); margin-bottom:6px; } #tlp .past select { margin-right:4px; }
   #tlp .rec div { grid-row:1 / span 2; grid-column:2; display:flex; align-items:center; }
-  #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:8px; z-index:3; display:flex; align-items:center; gap:4px; width:min(720px, calc(100% - 16px));
+  #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:8px; z-index:3; display:flex; align-items:center; gap:4px; width:min(900px, calc(100% - 16px)); box-sizing:border-box;
            background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); }
-  #tlbar input[type=range] { flex:1; min-width:60px; accent-color:#ff9f0a; }
+  #tlbar > * { flex:none; } #tlbar input[type=range] { flex:1 1 100px; min-width:60px; accent-color:#ff9f0a; }
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
-  #tlbar .ld { color:var(--dim); white-space:nowrap; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags] { color:var(--dim); } #tlbar [data-tl=tags].on { color:#ff9f0a; }
+  #tlbar .ld { color:var(--dim); white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; } #tlbar .t i { font-style:normal; } #tlbar [data-tl=x] { white-space:nowrap; } #tlbar [data-tl=tags] { color:var(--dim); } #tlbar [data-tl=tags].on { color:#ff9f0a; }
   body.tl #gnote { top:44px; }
+  /* ATC (header button): the airports with ATC open and their inbound flights */
+  #atcBtn.on { color:#5ac8fa; }
+  #atcp { position:absolute; right:8px; top:8px; z-index:4; width:min(360px, calc(100% - 16px)); max-height:calc(100% - 16px); overflow:auto; background:var(--bg);
+          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
+  #atcp[hidden] { display:none; }
+  #atcp .hd { padding:2px 12px 6px; color:var(--dim); border-bottom:1px solid var(--line); }
+  #atcp .ap { display:grid; grid-template-columns:1fr auto; gap:0 8px; padding:6px 12px; border-bottom:1px solid #2a2a2c; cursor:pointer; }
+  #atcp .ap:hover { background:var(--alt); }
+  #atcp .ap b { color:var(--fg); font-weight:600; } #atcp .ap .n { color:var(--fg); text-align:right; } #atcp .ap .n i { font-style:normal; color:var(--dim); }
+  #atcp .ap .nm { color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+  #atcp .ap .f { grid-column:1 / span 2; color:#5ac8fa; font-size:11px; }
+  #atcp .ap .go { grid-column:1 / span 2; justify-self:start; color:#5ac8fa; padding:2px 0; margin-top:2px; }
+  #atcp .inb { display:grid; grid-template-columns:auto 1fr auto auto; gap:0 10px; padding:2px 12px 8px 20px; border-bottom:1px solid #2a2a2c; }
+  #atcp .inb span { cursor:pointer; } #atcp .inb .cs { color:var(--fg); } #atcp .inb .d { color:var(--dim); }
+  #atcp .inb .none { grid-column:1 / span 4; color:var(--dim); cursor:default; }
+  #atcp .err { color:var(--dim); padding:8px 12px 0; }
   /* phones and small tablets, either way up: the side panel becomes a drawer (landscape) or a bottom sheet (portrait) */
   @media (max-width: 820px), (max-height: 500px) {
     body { grid-template-columns:1fr; }
@@ -162,6 +178,7 @@
     <input id="altLo" inputmode="numeric" placeholder="min" autocomplete="off" spellcheck="false">–<input id="altHi" inputmode="numeric" placeholder="max" autocomplete="off" spellcheck="false"></label>
   <span id="srvs" title="Server"></span>
   <span id="status"></span>
+  <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
   <button id="listBtn">List</button>
 </header>
@@ -169,6 +186,7 @@
   <div id="tiles" class="one"></div>
   <div id="gnote"></div>
   <div id="tlp" hidden></div>
+  <div id="atcp" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
   <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out without tags">
@@ -1063,16 +1081,9 @@ function ingest() {
     for (const a of S.aircraft) { ids.add(a.id); const h = hist.get(a.id) || []; h.push(pos(a)); if (h.length > 8) h.shift(); hist.set(a.id, h); }
     for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
   }
-  const air = S.aircraft.filter(a => a.air).length;
-  const link = (url, name) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
-  let st = S.src ? link((SITE.src_links || {})[S.src], S.src) : '', tip = `${air} airborne and ${S.aircraft.length - air} on the ground within ${S.nm || '–'} nm` + (S.src ? `, from ${S.src}` : '');
-  if (!S.ok) st += `${st ? ' · ' : ''}<span class="bad">${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
-  if (worldShown() && WORLD) {
-    const n = WORLD.ac.filter(r => !r[8]).length.toLocaleString(), age = Math.max(0, Math.round((Date.now() / 1000 - WORLD.t) / 60));
-    st += `${st ? ' · ' : ''}${n} worldwide (${link(SITE.world_link[0], SITE.world_link[1])}${age >= 2 ? `, ${age} min ago` : ''})`;
-    tip += ` · ${n} airborne worldwide from ${SITE.world_link[1]}, ${age} min old`;
-  }
-  $('status').innerHTML = st; $('status').title = tip;
+  if (wantSel && S.aircraft.some(a => a.id === wantSel)) { const id = wantSel; wantSel = null; select(id); }
+  // the header says nothing while the feed is fine; only its errors show there
+  $('status').innerHTML = S.ok ? '' : `<span class="bad">${esc(ERRS[S.err] || S.err || 'feed down, retrying')}</span>`;
   renderList(); if (sel) renderCard();
 }
 function renderList() {
@@ -1106,15 +1117,60 @@ function renderServers() {
 }
 $('srvs').onclick = e => { const b = e.target.closest('[data-srv]'); if (!b || b.dataset.srv === srv) return;
   srv = b.dataset.srv; try { localStorage.setItem(KEY + '.srv', srv); } catch (err) {}
-  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; flowMem.clear(); liveOff.clear();
+  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); liveOff.clear();
   renderServers(); renderCard(); renderList(); mapKey = ''; schedule(0); };
 // controllers on duty, every minute: by airport ICAO ('' for Center)
 let atcBy = new Map(), atcT = 0, atcGen = 0;
+// the ATC dropdown: airports with ATC open (not Center), most inbound flights (by flight plan) first; click one for its inbounds
+let ATC_APS = null, atcOpenAp = null, wantSel = null;   // wantSel: an inbound picked from the list, selected once the feed has it
+const ATC_ABBR = { Ground: 'GND', Tower: 'TWR', Unicom: 'UNICOM', Clearance: 'CLR', Approach: 'APP', Departure: 'DEP', ATIS: 'ATIS' };
+function atcInit() {
+  const b = $('atcBtn'); b.hidden = false;
+  b.onclick = () => { const p = $('atcp'); p.hidden = !p.hidden; b.classList.toggle('on', !p.hidden);
+    if (!p.hidden) { $('tlp').hidden = true; atcPanel(); if (!ATC_APS || Date.now() - atcT > 30000) { atcT = 0; loadAtc(); } } };
+  document.addEventListener('pointerdown', e => { const p = $('atcp');
+    if (!p.hidden && !p.contains(e.target) && !e.target.closest('#atcBtn')) { p.hidden = true; b.classList.remove('on'); } });
+  $('atcp').onclick = e => {
+    const go = e.target.closest('[data-go]'), ac = e.target.closest('[data-ac]'), row = e.target.closest('[data-ap]');
+    const o = ATC_APS && ATC_APS.find(x => x.icao === (go || ac || row || {}).dataset?.[go ? 'go' : ac ? 'apt' : 'ap']);
+    if (!o) return;
+    if ((go || ac) && small.matches) { $('atcp').hidden = true; $('atcBtn').classList.remove('on'); }   // phones: out of the way of the map
+    if (go) { if (o.ap) setHome(o.ap, true, 40); return; }
+    if (ac) {
+      const r = o.inbound.find(x => x.id === ac.dataset.ac); if (!r) return;
+      if (o.ap && (!home || home[0] !== o.ap[0])) setHome(o.ap, false);
+      view.lat = r.lat; view.lon = r.lon; if (view.half > 120) view.half = 60;
+      wantSel = r.id; viewChanged(true); return;
+    }
+    atcOpenAp = atcOpenAp === o.icao ? null : o.icao; atcPanel();
+  };
+}
+function atcPanel() {
+  const p = $('atcp'); if (p.hidden) return;
+  const keep = p.scrollTop, aps = ATC_APS;
+  if (!aps) { p.innerHTML = '<div class="err">Loading…</div>'; return; }
+  const fl = r => r.ground ? 'GND' : r.alt >= 18000 ? 'FL' + Math.round(r.alt / 100) : r.alt.toLocaleString();
+  p.innerHTML = `<div class="hd">ATC on ${esc(srvName())} · ${aps.length} airport${aps.length === 1 ? '' : 's'}</div>` +
+    (aps.length ? '' : '<div class="err">No airports have ATC open right now.</div>') +
+    aps.map(o => {
+      const open = atcOpenAp === o.icao, n = o.inbound.length;
+      return `<div class="ap" data-ap="${esc(o.icao)}"><b>${esc(o.icao)}</b><span class="n">${n} <i>inbound</i></span>` +
+        `<span class="nm">${esc(o.ap ? o.ap[2] : '')}</span><span></span>` +
+        `<span class="f">${o.atc.map(t => esc(ATC_ABBR[t] || t)).join(' · ')}</span>` +
+        (open && o.ap ? `<button class="go" data-go="${esc(o.icao)}">Go to ${esc(o.icao)} →</button>` : '') + '</div>' +
+        (open ? `<div class="inb">${n ? o.inbound.map(r => `<span class="cs" data-ac="${esc(r.id)}" data-apt="${esc(o.icao)}">${esc(r.cs)}</span>` +
+          `<span class="d" data-ac="${esc(r.id)}" data-apt="${esc(o.icao)}">${esc(r.type || '')}</span>` +
+          `<span data-ac="${esc(r.id)}" data-apt="${esc(o.icao)}">${fl(r)}</span>` +
+          `<span class="d" data-ac="${esc(r.id)}" data-apt="${esc(o.icao)}">${r.nm != null ? r.nm + ' nm' : ''}</span>`).join('')
+          : '<span class="none">No inbound flights with a flight plan here.</span>'}</div>` : '');
+    }).join('');
+  p.scrollTop = keep;
+}
 async function loadAtc() {
   if (!has('atc') || Date.now() - atcT < 60000) return; atcT = Date.now();
   try { const j = await (await fetch(`/api/live/atc?${srvQ()}`)).json(); if (!j.ok) { atcT = Date.now() - 45000; return; }
     const m = new Map(); for (const f of j.atc) { const k = f.type === 'Center' ? '' : f.icao; if (!m.has(k)) m.set(k, []); m.get(k).push(f); }
-    atcBy = m; atcGen++; mapKey = ''; if (home && !sel) renderCard();
+    atcBy = m; atcGen++; mapKey = ''; ATC_APS = j.airports || []; atcPanel(); if (home && !sel) renderCard();
   } catch (e) { atcT = Date.now() - 45000; }
 }
 // SITE.idle_min: stop downloading after that long without input (infinitescope: Infinite Flight's API rules), until there is some
@@ -1294,7 +1350,7 @@ function tlBar() {
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
   b.querySelector('.t').innerHTML = tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
   const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
-  b.querySelector('.ld').textContent = `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`;
+  b.querySelector('.ld').textContent = `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`; b.querySelector('.ld').title = b.querySelector('.ld').textContent;
   b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === RP.speed));
   b.querySelector('[data-tl=tags]').classList.toggle('on', !!L.tags);
 }
@@ -1384,6 +1440,7 @@ function tlStep() {
   else if (h || (SITE.start !== null && !new URLSearchParams(location.search).get('tl'))) want = (h || SITE.start || 'KSFO/52').split('/');
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
+  if (has('atc')) atcInit();
   const tlq = new URLSearchParams(location.search).get('tl');
   if (has('timelapse')) { tlInit(); if (tlq) { const ph = +new URLSearchParams(location.search).get('h') || 0; tlOpen(tlq, !m && !h && !ph, ph); } }
   poll();
