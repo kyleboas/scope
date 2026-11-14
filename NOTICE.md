@@ -13,5 +13,8 @@ feeds are in that site's NOTICE):
 - **Ground maps** (taxiways, aprons, terminals, gates, holding positions) are © OpenStreetMap contributors and available under
   the Open Database License (ODbL) 1.0: <https://www.openstreetmap.org/copyright>. They are fetched at run time through the
   Overpass API and cached in `livedata/ground/`; that cache is under the ODbL.
+- **Aircraft types and address countries** (`livedata/aircraft.json`, from `tools/build_aircraft.py`): ICAO type designators
+  (ICAO Doc 8643) as compiled by tar1090-db (<https://github.com/wiedehopf/tar1090-db>), and the ICAO 24-bit address blocks by
+  country (ICAO Annex 10 Vol III) as listed by tar1090 (<https://github.com/wiedehopf/tar1090>).
 - **ATIS** is from atis.info (FAA D-ATIS); **METARs** from aviationweather.gov.
 - **Icons** are from Tabler Icons (MIT).

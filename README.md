@@ -51,7 +51,10 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     livescope's `adsb.py` World).
   - `routes` (optional): `get([callsigns])` returns `{cs: [from, lat, lon, to, lat, lon]}` for the callsigns it knows.
   - `atis` (optional): `get(ident)` returns `{atis:[{type, code, text, time}], metar:{raw, cat} | None}`.
-  - `features` (optional): extra page features: `servers` (a server picker; then `traffic`, `world` and
+  - `features` (optional): extra page features: `aircraft` (the aircraft card shows everything about the selected
+    aircraft from an `aircraft` endpoint: `?hex=` returns `{ok, hex, t, src, ac: the feed's readsb record, db:{desc, ownOp,
+    year}, country:[name, ISO], typeinfo:{desc, engines, kind, wake}, photo:{src, link, by}}`; `scope.aircraft.Lookup` gives
+    the country and type), `servers` (a server picker; then `traffic`, `world` and
     `atis` get a `server=` keyword, from the page's `srv`), `atc`, `flight` and `timelapse` (a header
     button and a playback bar for recordings served by a `timelapse` endpoint; see livescope's `timelapse.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the

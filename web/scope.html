@@ -95,6 +95,11 @@
   #card .atc { display:grid; grid-template-columns:max-content 1fr max-content; gap:0 10px; margin:5px 0; color:var(--dim); }
   #card .atc span:nth-child(3n+1) { color:#5ac8fa; }
   #card .atc span:nth-child(3n+2) { color:var(--fg); overflow:hidden; text-overflow:ellipsis; }
+  #card .dt { display:grid; grid-template-columns:max-content 1fr; gap:0 10px; margin:6px 0 2px; color:var(--dim); }
+  #card .dt b { font-weight:normal; font-size:inherit; color:var(--fg); overflow-wrap:anywhere; }
+  #card .dt i { grid-column:1 / span 2; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
+  #card .ph { display:block; margin:8px 0 2px; } #card .ph img { display:block; width:100%; max-width:360px; border-radius:6px; }
+  #card .ph i { display:block; font-style:normal; font-size:10px; color:var(--dim); margin-top:2px; }
   #card .fp { margin:5px 0; max-height:120px; overflow:auto; color:var(--dim); white-space:normal; word-break:break-word; }
   /* timelapses: the panel (header button) and the playback bar */
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
@@ -736,6 +741,61 @@ async function loadFlight() {
   try { const j = await (await fetch(`/api/live/flight?${srvQ()}id=${encodeURIComponent(id)}`)).json();
     if (sel === id) { FL = { ...j, id, t: Date.now() }; renderCard(); } } catch (e) {}
 }
+// ------------------------------------------------------------------ everything the feed says about the selected aircraft (livescope)
+// /api/live/aircraft: the feed's whole record (speeds, wind, autopilot, signal, accuracy), the aircraft database's
+// owner and year, the type's name, the country its address was issued to and a photo from planespotters.net
+let AD = null, adAsked = 0;            // {id, got (when we got it), hex, t (feed time), src, ac, db, country, typeinfo, photo}
+async function loadDetail() {
+  const a = has('aircraft') && !RP && sel && S && S.aircraft.find(o => o.id === sel);
+  if (!a || !a.hex || (AD && AD.id === sel && Date.now() - AD.got < 3000) || Date.now() - adAsked < 2500) return;
+  adAsked = Date.now(); const id = sel;
+  try { const j = await (await fetch('/api/live/aircraft?hex=' + encodeURIComponent(a.hex))).json();
+    if (sel === id) { AD = { ...j, id, got: Date.now() }; renderCard(); } } catch (e) {}
+}
+const photos = new Map();              // hex -> the photo's element (kept, so the card's redraws don't reload it)
+function photoEl(hex, p) {
+  if (!p || !p.src || !/^https:\/\//.test(p.src)) return null;
+  if (!photos.has(hex)) { const el = document.createElement('a'); el.className = 'ph'; el.target = '_blank'; el.rel = 'noopener';
+    if (/^https:\/\//.test(p.link)) el.href = p.link;
+    el.innerHTML = `<img src="${esc(p.src)}" alt=""><i>© ${esc(p.by || 'unknown')} · planespotters.net</i>`; photos.set(hex, el); }
+  return photos.get(hex);
+}
+const CATS = { A1:'light, under 15,500 lb', A2:'small, 15,500–75,000 lb', A3:'large, 75,000–300,000 lb', A4:'high vortex large (757)', A5:'heavy, over 300,000 lb',
+  A6:'high performance', A7:'rotorcraft', B1:'glider', B2:'lighter than air', B3:'parachutist', B4:'ultralight', B6:'drone', B7:'space vehicle',
+  C1:'emergency vehicle', C2:'service vehicle', C3:'obstacle', C4:'obstacle cluster', C5:'line obstacle' };
+const SRCS = { adsb_icao:'ADS-B', adsb_icao_nt:'ADS-B (non-transponder)', adsr_icao:'ADS-R', tisb_icao:'TIS-B', adsc:'ADS-C', mlat:'MLAT',
+  mode_s:'Mode S', adsb_other:'ADS-B (anonymous address)', adsr_other:'ADS-R (anonymous address)', tisb_other:'TIS-B', tisb_trackfile:'TIS-B track', mode_ac:'Mode A/C', other:'other' };
+const NACP = ['unknown', '< 10 nm', '< 4 nm', '< 2 nm', '< 1 nm', '< 0.5 nm', '< 0.3 nm', '< 0.1 nm', '< 0.05 nm', '< 30 m', '< 10 m', '< 3 m'];
+const NACV = ['unknown', '< 10 m/s', '< 3 m/s', '< 1 m/s', '< 0.3 m/s'];
+function detailCard(a) {
+  const d = AD && AD.id === a.id && AD.ok ? AD : null, x = (d && d.ac) || {}, db = (d && d.db) || {}, ti = (d && d.typeinfo) || {};
+  const num = v => typeof v === 'number', ft = v => num(v) ? Math.round(v).toLocaleString() + ' ft' : v === 'ground' ? 'ground' : '';
+  const fpm = v => num(v) ? (v > 0 ? '+' : '') + Math.round(v).toLocaleString() + ' fpm' : '', deg = v => num(v) ? v.toFixed(1) + '°' : '';
+  const kt = v => num(v) ? Math.round(v) + ' kt' : '', ago = v => !num(v) ? '' : v < 60 ? v.toFixed(1) + ' s ago' : Math.round(v / 60) + ' min ago';
+  const flags = [[1, 'military'], [2, 'interesting'], [4, 'PIA (privacy address)'], [8, 'LADD (limited display)']].filter(([b]) => x.dbFlags & b).map(f => f[1]).join(', ');
+  const late = d ? Math.max(0, Date.now() / 1000 - d.t) : null;
+  const sec = (title, rows) => { rows = rows.filter(r => r[1] !== '' && r[1] != null);
+    return rows.length ? `<i>${title}</i>` + rows.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('') : ''; };
+  const h = sec('Aircraft', [['Hex', (a.hex || '').toUpperCase()], ['Registration', a.reg], ['Country', d && d.country ? d.country[0] : ''],
+      ['Type', [a.type, db.desc || ti.desc].filter(Boolean).join(' · ')], ['Engines', ti.engines], ['Wake', ti.wake],
+      ['Category', x.category ? x.category + (CATS[x.category] ? ' · ' + CATS[x.category] : '') : ''], ['Owner/operator', db.ownOp], ['Year built', db.year], ['Flags', flags]]) +
+    sec('Altitude', [['Barometric', ft(x.alt_baro)], ['Geometric (GPS)', ft(x.alt_geom)], ['Baro rate', fpm(x.baro_rate)], ['Geom rate', fpm(x.geom_rate)]]) +
+    sec('Speed', [['Ground speed', kt(x.gs)], ['Indicated', kt(x.ias)], ['True', kt(x.tas)], ['Mach', num(x.mach) ? x.mach.toFixed(3) : '']]) +
+    sec('Direction', [['Track', deg(x.track)], ['True heading', deg(x.true_heading)], ['Magnetic heading', deg(x.mag_heading)],
+      ['Track rate', num(x.track_rate) ? x.track_rate.toFixed(2) + '°/s' : ''], ['Roll', num(x.roll) ? x.roll.toFixed(1) + '°' + (x.roll > 0.5 ? ' right' : x.roll < -0.5 ? ' left' : '') : '']]) +
+    sec('Weather', [['Wind', num(x.ws) ? `${String(Math.round(x.wd ?? 0)).padStart(3, '0')}° at ${Math.round(x.ws)} kt` : ''], ['Outside air', num(x.oat) ? x.oat + ' °C' : ''], ['Total air', num(x.tat) ? x.tat + ' °C' : '']]) +
+    sec('Autopilot', [['Selected altitude', ft(x.nav_altitude_mcp)], ['FMS altitude', ft(x.nav_altitude_fms)], ['Selected heading', deg(x.nav_heading)],
+      ['Modes', (x.nav_modes || []).join(', ')], ['QNH', num(x.nav_qnh) ? x.nav_qnh.toFixed(1) + ' hPa' : '']]) +
+    sec('Signal', [['Source', x.type ? (SRCS[x.type] || x.type) + (d.src ? ' · ' + d.src : '') : ''], ['Last message', late == null ? '' : ago(late)],
+      ['Last position', num(x.seen_pos) && late != null ? ago(late - (x.seen || 0) + x.seen_pos) : ''],
+      ['Messages', num(x.messages) ? x.messages.toLocaleString() : ''], ['RSSI', num(x.rssi) ? x.rssi.toFixed(1) + ' dBFS' : ''],
+      ['MLAT fields', (x.mlat || []).join(', ')], ['TIS-B fields', (x.tisb || []).join(', ')]]) +
+    sec('Accuracy', [['ADS-B version', num(x.version) ? 'v' + x.version : ''], ['NACp', num(x.nac_p) ? `${x.nac_p} (${NACP[x.nac_p] || '?'})` : ''],
+      ['NACv', num(x.nac_v) ? `${x.nac_v} (${NACV[x.nac_v] || '?'})` : ''], ['NIC', num(x.nic) ? String(x.nic) : ''], ['NIC baro', num(x.nic_baro) ? String(x.nic_baro) : ''],
+      ['Rc', num(x.rc) ? x.rc.toLocaleString() + ' m' : ''], ['SIL', num(x.sil) ? x.sil + (x.sil_type ? ' ' + x.sil_type.replace('per', 'per ') : '') : ''],
+      ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
+  return `<div class="ph0"></div>` + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`);
+}
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
   const d = dpr();
@@ -889,7 +949,7 @@ function select(id) {
   const b = document.body;
   if (id && small.matches && !b.classList.contains('listOpen')) { b.classList.add('listOpen'); autoOpen = true; }
   if (!id && autoOpen) { b.classList.remove('listOpen'); autoOpen = false; }
-  sel = id; renderCard(); loadFlight();
+  sel = id; renderCard(); loadFlight(); loadDetail();
 }
 let homeInfo = null;
 function setHome(a, fly, half) {
@@ -930,7 +990,9 @@ function renderCard1() {
       `squawk ${esc(a.sq || '----')}${a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : ''} · ${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
       (routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeFits(a, routeOf(a)) ? 'scheduled route' : "scheduled route, but it doesn't fit where it is"}</span><br>` : '') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? `<span style="color:var(--dim)">${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}</span><br>` : '') +
-      (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '');
+      (a.hex && SITE.hex_link ? `<a href="${esc(SITE.hex_link[0].replace('{hex}', encodeURIComponent(a.hex)))}" target="_blank" rel="noopener">${esc(SITE.hex_link[1].replace('{HEX}', a.hex.toUpperCase()))}</a>` : '') +
+      (a.hex && has('aircraft') ? ` · <a href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(a.hex)}" target="_blank" rel="noopener">ADS-B Exchange ↗</a>` +
+        (a.reg ? ` · <a href="https://www.flightaware.com/resources/registration/${encodeURIComponent(a.reg)}" target="_blank" rel="noopener">FlightAware ↗</a>` : '') + (RP ? '' : detailCard(a)) : '');
   } else if (home && !homeCardShut && has('atc')) {
     // controllers on duty here (and Centers within 400 nm), then the ATIS block
     const fs = atcBy.get(home[0]) || [], ctr = (atcBy.get('') || []).filter(f => f.lat != null && gc(f.lat, f.lon, home[5], home[6]) < 400);
@@ -950,6 +1012,7 @@ function renderCard1() {
       `<a href="https://www.liveatc.net/search/?icao=${encodeURIComponent(home[0])}" target="_blank" rel="noopener">Listen on LiveATC.net ↗</a>` + atisCard() + procCard();
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
     procSel = procSel && procSel.join('|') === k.join('|') ? null : k; mapKey = ''; renderCard();
@@ -1051,7 +1114,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight();
+    ingest(); loadRoutes(); loadWorld(); loadGround(); setGroundNote(); loadAtc(); loadFlight(); loadDetail();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
