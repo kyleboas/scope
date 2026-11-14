@@ -130,8 +130,6 @@
   #card .dt b { font-weight:normal; font-size:inherit; color:var(--fg); overflow-wrap:anywhere; }
   #card .dt i { grid-column:1 / span 2; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
   #card .ph { display:block; margin:8px 0 2px; } #card .ph img { display:block; width:100%; max-width:360px; border-radius:6px; }
-  #card .pa { display:flex; gap:8px; align-items:center; margin:8px 0 2px; color:var(--fg); } #card .pa img { width:48px; height:48px; border-radius:50%; }
-  #card .pa i { font-style:normal; font-size:10px; color:var(--dim); }
   #card .ph i { display:block; font-style:normal; font-size:10px; color:var(--dim); margin-top:2px; }
   #card .acs { margin:6px 0 2px; color:var(--dim); } #card .acs > i { display:block; font-style:normal; color:var(--fg2); margin-top:7px; padding-bottom:1px; border-bottom:1px solid var(--line); }
   #card .acx { max-height:280px; overflow:auto; } #card .acm { margin:5px 0; } #card .acm span { display:block; font-size:10px; }
@@ -1301,7 +1299,7 @@ function wxClose() { const m = $('wxpop'); if (!m.hidden) { m.hidden = true; wxS
 // ------------------------------------------------------------------ the selected flight's filed plan and flown route
 // (infinitescope: /api/live/flight; a site with the 'fplan' feature, livescope: /api/live/fplan by callsign, real
 // flight plans, {dep, arr, route, plan:{pts, line}} or {} when it has none)
-let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]], line:[[lat, lon]]}, track:[[lat, lon, alt]], pilot (infinitescope: pilotCard)}
+let FL = null;                          // {id, t, plan:{ifr, pts:[[name, lat, lon, alt, proc]], line:[[lat, lon]]}, track:[[lat, lon, alt, gs, t]], log (infinitescope: flightCard)}
 let flAsked = 0;
 async function loadFlight() {
   const byCs = !has('flight') && has('fplan');
@@ -1389,19 +1387,45 @@ function detailCard(a) {
       ['GVA', num(x.gva) ? String(x.gva) : ''], ['SDA', num(x.sda) ? String(x.sda) : ''], ['Alert', x.alert ? 'yes' : ''], ['SPI (ident)', x.spi ? 'yes' : '']]);
   return `<div class="ph0"></div>` + fhCard(a) + (h ? `<div class="dt">${h}</div>` : AD && AD.id === a.id && !AD.ok ? '' : `<div class="dt"><i>loading…</i></div>`) + acarsCard(a);
 }
-// the selected flight's pilot (infinitescope): their Infinite Flight stats and forum avatar, in /api/live/flight's pilot
-function pilotCard(a) {
-  if (!FL || FL.id !== a.id) return `<div class="dt"><i>loading pilot…</i></div>`;
-  const p = FL.pilot; if (!p) return '';
-  const n = v => Math.round(v || 0).toLocaleString(), who = p.user || a.user;
-  const rows = [['Grade', p.grade ? String(p.grade) : ''], ['XP', n(p.xp)], ['Flight time', `${n(Math.floor(p.min / 60))} h ${p.min % 60} min`],
-    ['Online flights', n(p.flights)], ['Landings', n(p.landings)],
-    ['Violations', p.viol.some(Boolean) ? `${n(p.viol[0])} level 1 · ${n(p.viol[1])} level 2 · ${n(p.viol[2])} level 3` : 'none'],
-    ['ATC', p.atcRank ? `${p.atcRank} · ${n(p.atcOps)} operations` : p.atcOps ? n(p.atcOps) + ' operations' : ''],
-    ['Roles', p.roles.join(', ')], ['User hash', p.hash]].filter(r => r[1]);
-  const prof = who ? 'https://community.infiniteflight.com/u/' + encodeURIComponent(who) : '';
-  return (p.avatar && prof ? `<a class="pa" href="${esc(prof)}" target="_blank" rel="noopener"><img src="${esc(p.avatar)}" alt=""><span>${esc(who)}<br><i>Infinite Flight Community ↗</i></span></a>` : '') +
-    `<div class="dt"><i>Pilot</i>` + rows.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('') + `</div>`;
+// the selected flight's aircraft and flight (infinitescope): the flight list's entry plus /api/live/flight's plan, flown
+// track (Expert and Training) and logbook entry; distances along the filed plan from where the aircraft is now
+function flightCard(a, la, lo) {
+  const f = FL && FL.id === a.id ? FL : null, plan = f && f.plan, pts = (plan && plan.pts) || [], r = routeOf(a), lg = f && f.log;
+  const num = v => typeof v === 'number' && isFinite(v), nm = v => Math.round(v).toLocaleString() + ' nm';
+  const altS = v => v >= 18000 ? 'FL' + Math.round(v / 100) : Math.round(v).toLocaleString() + ' ft', deg = v => String(Math.round(v) % 360).padStart(3, '0') + '°';
+  const hm = m => (m = Math.round(m)) >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`, zt = t => new Date(t * 1000).toISOString().slice(11, 16) + 'Z';
+  const ap = id => { const x = id && (areaAps.get(id) || MAJOR.find(o => o[0] === id)); return x ? `${id} · ${x[1]}` : id || ''; };
+  // where it is on the plan: the leg it's flying is the one it's nearest to; the next fix is that leg's end
+  let next = -1, toGo = null;
+  if (pts.length > 1) {
+    let best = 1e9;
+    for (let i = 1; i < pts.length; i++) { const p = pts[i - 1], q = pts[i], leg = gc(p[1], p[2], q[1], q[2]) || 1e-6;
+      const off = gc(la, lo, p[1], p[2]) + gc(la, lo, q[1], q[2]) - leg; if (off < best) { best = off; next = i; } }
+    toGo = gc(la, lo, pts[next][1], pts[next][2]);
+    for (let i = next + 1; i < pts.length; i++) toGo += gc(pts[i - 1][1], pts[i - 1][2], pts[i][1], pts[i][2]);
+  } else if (r && r[4] != null) toGo = gc(la, lo, r[4], r[5]);
+  const eta = toGo != null && !a.ground && a.gs > 50 ? toGo / a.gs * 60 : null;
+  const tr = (f && f.track) || [], t0 = tr.length && tr[0][4];
+  let flown = 0; for (let i = 1; i < tr.length; i++) flown += gc(tr[i - 1][0], tr[i - 1][1], tr[i][0], tr[i][1]);
+  const top = tr.length ? Math.max(...tr.map(p => p[2])) : null, kinds = k => ((plan && plan.procs) || []).filter(p => p[1] === k).map(p => p[0]).join(', ');
+  const sec = (title, rows) => { rows = rows.filter(x => x[1] !== '' && x[1] != null);
+    return rows.length ? `<i>${title}</i>` + rows.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('') : ''; };
+  const ld = lg && lg.landing;
+  const h = sec('Aircraft', [['Aircraft', a.acName], ['Livery', a.livery], ['Type', a.type], ['Pilot', [a.user || 'unlinked account', a.vo].filter(Boolean).join(' · ')]]) +
+    sec('Now', [['Altitude', a.ground ? 'on the ground' : altS(a.alt)], ['Vertical speed', a.vs && !a.ground ? (a.vs > 0 ? '+' : '') + a.vs.toLocaleString() + ' fpm' : ''],
+      ['Ground speed', a.gs + ' kt'], ['Track', deg(a.hdg)], ['Heading', num(a.head) ? deg(a.head) : ''], ['Position', `${la.toFixed(3)}, ${lo.toFixed(3)}`]]) +
+    sec('Flight', [['From', ap(r && r[0])], ['To', ap(r && r[3])], ['Flight plan', plan ? (plan.ifr ? 'IFR' : 'VFR') + (pts.length ? ` · ${pts.length} fixes` : '') : f ? 'none filed' : 'loading…'],
+      ['SID', kinds('SID')], ['STAR', kinds('STAR')], ['Approach', kinds('approach')], ['Oceanic track', kinds('track')],
+      ['Cruise (planned)', plan && plan.cruise ? altS(plan.cruise) : ''],
+      ['Next fix', next >= 0 ? `${pts[next][0]} · ${nm(gc(la, lo, pts[next][1], pts[next][2]))}${pts[next][3] > 0 ? ' · at ' + altS(pts[next][3]) : ''}` : ''],
+      ['To go', toGo != null ? nm(toGo) + (next >= 0 ? ' along the plan' : ' direct') : ''], ['ETA', eta != null ? `${zt(Date.now() / 1000 + eta * 60)} · in ${hm(eta)}` : ''],
+      ['Flown', tr.length > 1 ? `${nm(flown)}${t0 ? ' since ' + zt(t0) : ''}` : ''], ['Highest so far', top ? altS(top) : '']]) +
+    (lg ? sec('Logbook', [['Flight time', num(lg.min) ? hm(lg.min) + (num(lg.night) && lg.night > 0.5 ? ` (${hm(lg.night)} at night)` : '') : ''],
+      ['Landings', num(lg.landings) ? String(lg.landings) : ''], ['Fuel used', num(lg.fuel) ? Math.round(lg.fuel).toLocaleString() + ' kg' : ''], ['XP', num(lg.xp) ? lg.xp.toLocaleString() : ''],
+      ['Last landing', ld && num(ld.vs) ? [Math.round(ld.vs * 196.85) + ' fpm', num(ld.g) ? ld.g.toFixed(2) + ' g' : '', num(ld.ias) ? Math.round(ld.ias) + ' kt' : '',
+        num(ld.cl) ? ld.cl.toFixed(1) + ' m off centreline' : ''].filter(Boolean).join(' · ') : ''],
+      ['Violations', lg.viol.length ? lg.viol.map(v => `level ${v[0]} ${v[1]}`).join(', ') : 'none']]) : '');
+  return `<div class="dt">${h}</div>`;
 }
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
@@ -1535,6 +1559,8 @@ function endPointer(e) {
   if (aps.length) { pickAirport(aps[0]); return; }
   if (acs.length) { select(acs[0].id); return; }
   const bt = hitBoat(mx, my, touch ? 22 : 12); if (bt) { boatSel = bt.b[0]; return; }
+  // zoomed out, the dots are the worldwide picture (no live feed): one zooms in on it and selects it once the feed has it
+  const w = worldPts.length && worldShown() ? hitWorld(mx, my) : null; if (w) { pick({ ac: true, id: w.r[0], lat: w.p[0], lon: w.p[1] }); return; }
   select(null);
   const wx = hitWx(mx, my, touch ? 20 : 10); if (wx.length) wxOpen(e.clientX, e.clientY, wx);
 }
@@ -1620,17 +1646,11 @@ function renderCard1() {
   const card = $('card'), a = S && sel && S.aircraft.find(o => o.id === sel);
   const acx = card.querySelector('.acx'), acTop = acx ? acx.scrollTop : 0;   // the ACARS list keeps its scroll through redraws
   if (a && has('flight')) {
-    const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
-    const r = routeOf(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
+    const [la, lo] = pos(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)}${a.away ? ' ' + dim(esc(a.state || 'pilot away')) : ''}<br>` +
-      dim(esc(a.acName) + (a.livery ? ' · ' + esc(a.livery) : '')) + '<br>' +
-      (a.user || a.vo ? `${esc(a.user || 'unlinked account')}${a.vo ? ' ' + dim(esc(a.vo)) : ''}<br>` : '') +
-      `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
-      `${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
-      (r ? `${esc(r[0] || '????')} → ${esc(r[3] || '????')}<br>` : dim('no flight plan filed') + '<br>') +
       (home && flowOf(a) && flowOf(a) !== 'gnd' ? dim(`${routeFlow(a) === flowOf(a) ? '' : 'looks like '}${flowOf(a) === 'arr' ? 'an arrival to' : 'a departure from'} ${esc(home[0])}${routeFlow(a) === flowOf(a) ? '' : ' (guessed from its track)'}`) + '<br>' : '') +
-      (plan && plan.text ? `<div class="fp">${esc(plan.text)}${plan.alt ? ' ' + dim('at ' + esc(plan.alt)) : ''}</div>` : plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '') +
-      pilotCard(a);
+      flightCard(a, la, lo) +
+      (plan && plan.pts.length ? `<div class="fp">${plan.pts.map(p => esc(p[0])).join(' ')}</div>` : '');
   } else if (a) {
     const [la, lo] = pos(a), alt = a.ground ? 'on the ground' : (a.alt >= 18000 ? 'FL' + Math.round(a.alt / 100) : a.alt.toLocaleString() + ' ft');
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` +
