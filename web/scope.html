@@ -95,6 +95,9 @@
   .flt button { color:#555; font-size:11px; padding:4px 6px; }
   .flt button:hover, .flt button.on { color:#bbb; background:none; }
   .flt.off button { color:#2e2e2e; pointer-events:none; }
+  .flt button[data-h] { margin-left:6px; }
+  .flt button[data-h].hid { color:#555; text-decoration:line-through; }
+  .flt.all button[data-h] { color:#2e2e2e; pointer-events:none; }
   .views [data-layers] { display:flex; align-items:center; } .views [data-layers] svg { width:14px; height:14px; }
   .layers { position:absolute; left:8px; bottom:38px; z-index:3; background:var(--bg); border:1px solid var(--line); border-radius:10px;
             padding:6px 0; font:12px var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; max-height:calc(100% - var(--top) - 46px); overflow:auto; }
@@ -244,8 +247,8 @@
   <div id="atcp" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
-  <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category)">
-    <button data-f="all">ALL</button><button data-f="arr">ARR</button><button data-f="dep">DEP</button><button data-f="both">ARR+DEP</button>
+  <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category), or hidden with OTHERS">
+    <button data-f="all">ALL</button><button data-f="arr">ARR</button><button data-f="dep">DEP</button><button data-f="both">ARR+DEP</button><button data-h title="With ARR / DEP on: show the other aircraft greyed out, or hide them so only its arrivals and departures are on the scope">OTHERS</button>
   </div>
 </div>
 <div id="side">
@@ -984,8 +987,9 @@ function drawAircraft() {
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
     const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer;
-    drawn.push({ a, px, py });
     const out = !matches(a) && !isSel && !isHov && !emer;   // filtered out: a grey dot and a short tag (altitude and wake category),
+    if (out && fOn && fltHide) continue;                     // ARR / DEP filter with the others hidden: not drawn at all
+    drawn.push({ a, px, py });
     const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
     if (lines && L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of (hist.get(a.id) || []).slice(-6, -1).entries()) {
       const [hx, hy, hz] = proj(q[0], q[1]); if (hz < 0) continue;
@@ -1070,11 +1074,14 @@ function drawWorld() {
       const dt = Math.min(1200, Math.max(0, t - ts)), p = !gnd && gs > 30 ? dest(la, lo, trk, gs / 3600 * dt) : [la, lo];
       if (inLive && gc(p[0], p[1], inLive[0], inLive[1]) < inLive[2]) continue;
       const fo = fOn && !fltWant(flowCs.get(String(r[7] || '').trim().toUpperCase()));   // ARR / DEP filter: the rest are grey
+      if (fo && fltHide) continue;                                                      // (or hidden)
       worldPts.push({ p, r, k: fo ? 1 : gnd ? 2 : altOk(alt * 100, false) ? 0 : 1 });   // 0 shown, 1 outside the altitude (or ARR / DEP) filter, 2 on the ground
     }
     if (L.est) for (const r of WORLD.est || []) {  // estimated: out of every receiver's range (oceans), carried on by the server
       const [, la, lo, trk, gs, alt, ts] = r, dt = Math.min(1200, Math.max(0, t - ts)), p = dest(la, lo, trk, gs / 3600 * dt);
-      worldPts.push({ p, r, k: altOk(alt * 100, false) && !(fOn && !fltWant(flowCs.get(String(r[7] || '').trim().toUpperCase()))) ? 3 : 4, est: true });
+      const fo = fOn && !fltWant(flowCs.get(String(r[7] || '').trim().toUpperCase()));
+      if (fo && fltHide) continue;
+      worldPts.push({ p, r, k: altOk(alt * 100, false) && !fo ? 3 : 4, est: true });
     }
   }
   const d = dpr(), rad = [1.3 * d, 1.1 * d, 1 * d], col = [COL.dbDim, '#3a3a3a', '#5a5f66'];
@@ -2117,6 +2124,7 @@ async function poll() {
 // only from a route that fits (the site's filed plan, or the callsign's route): nothing is guessed from the track.
 // One is kept for 2 minutes so a route lookup that comes and goes doesn't drop it.
 let flt = localStorage.getItem(KEY + '.flt') || 'all';
+let fltHide = localStorage.getItem(KEY + '.flthide') === '1';   // ARR / DEP filter on: hide the other aircraft instead of greying them
 const flowMem = new Map();             // id -> ['arr' | 'dep' | 'gnd', Date.now() when last seen as that, callsign]
 const flowCs = new Map();              // callsign -> 'arr' | 'dep', so the worldwide dots (zoomed out) can be told apart too
 const fltOn = () => flt !== 'all' && !!home;
@@ -2226,7 +2234,12 @@ function matches(a) {               // does it pass the altitude and ARR / DEP f
 function renderFlt() {
   const box = $('flt'); box.classList.toggle('off', !home);
   box.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === flt));
+  box.classList.toggle('all', flt === 'all');
+  box.querySelector('[data-h]').classList.toggle('hid', fltHide);
 }
+document.querySelector('#flt [data-h]').onclick = () => {
+  fltHide = !fltHide; localStorage.setItem(KEY + '.flthide', fltHide ? '1' : '0'); renderFlt(); worldPtsT = 0;
+};
 document.querySelectorAll('#flt [data-f]').forEach(b => b.onclick = () => {
   flt = b.dataset.f; localStorage.setItem(KEY + '.flt', flt); renderFlt(); worldPtsT = 0;
 });
