@@ -1343,12 +1343,13 @@ function acarsCard(a) {
       : `<span>Nothing heard from it in the last ${d.since_h} h.</span>`) +
     `<em>Data provided by <a href="https://app.airframes.io/" target="_blank" rel="noopener">Airframes.io</a> and its community of feeders${d.stale ? ' · not updated just now' : ''}</em></div>`;
 }
-const photos = new Map();              // hex -> the photo's element (kept, so the card's redraws don't reload it)
+const photos = new Map();              // hex (infinitescope: model and livery) -> the photo's element (kept, so the card's redraws don't reload it)
+// p: {src, link, by} from planespotters.net, or a site's own with credit (where it's from), license and what (what it shows)
 function photoEl(hex, p) {
   if (!p || !p.src || !/^https:\/\//.test(p.src)) return null;
   if (!photos.has(hex)) { const el = document.createElement('a'); el.className = 'ph'; el.target = '_blank'; el.rel = 'noopener';
     if (/^https:\/\//.test(p.link)) el.href = p.link;
-    el.innerHTML = `<img src="${esc(p.src)}" alt=""><i>© ${esc(p.by || 'unknown')} · planespotters.net</i>`; photos.set(hex, el); }
+    el.innerHTML = `<img src="${esc(p.src)}" alt=""><i>${p.what ? esc(p.what) + '<br>' : ''}© ${esc(p.by || 'unknown')}${p.license ? ' · ' + esc(p.license) : ''} · ${esc(p.credit || 'planespotters.net')}</i>`; photos.set(hex, el); }
   return photos.get(hex);
 }
 const CATS = { A1:'light, under 15,500 lb', A2:'small, 15,500–75,000 lb', A3:'large, 75,000–300,000 lb', A4:'high vortex large (757)', A5:'heavy, over 300,000 lb',
@@ -1426,7 +1427,7 @@ function flightCard(a, la, lo) {
       ['Last landing', ld && num(ld.vs) ? [Math.round(ld.vs * 196.85) + ' fpm', num(ld.g) ? ld.g.toFixed(2) + ' g' : '', num(ld.ias) ? Math.round(ld.ias) + ' kt' : '',
         num(ld.cl) ? ld.cl.toFixed(1) + ' m off centreline' : ''].filter(Boolean).join(' · ') : ''],
       ['Violations', lg.viol.length ? lg.viol.map(v => `level ${v[0]} ${v[1]}`).join(', ') : 'none']]) : '');
-  return `<div class="dt">${h}</div>`;
+  return `<div class="ph0"></div><div class="dt">${h}</div>`;
 }
 function drawFlight() {
   if (!FL || FL.id !== sel || !L.plan) return;
@@ -1685,7 +1686,8 @@ function renderCard1() {
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (acTop && card.querySelector('.acx')) card.querySelector('.acx').scrollTop = acTop;
-  const ph = card.querySelector('.ph0'), pe = ph && a && AD && AD.id === a.id && photoEl(a.hex, AD.photo); if (pe) ph.replaceWith(pe);
+  const ph = card.querySelector('.ph0'), pe = ph && a && (has('flight') ? FL && FL.id === a.id && photoEl(a.acName + '|' + a.livery, FL.photo)
+    : AD && AD.id === a.id && photoEl(a.hex, AD.photo)); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
