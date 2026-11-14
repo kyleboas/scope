@@ -344,7 +344,7 @@ function drawMap() {
   }
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
   if (S && S.center && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
-    const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${Math.round(WORLD.every / 60)} min (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre`, x, y - 6*d); c.textAlign = 'left'; } }
+    const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${Math.round(WORLD.every / 60)} min (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
   // KSFO: extended finals (from atcscope's KSFO map)
   if (KSFO && view.half < 200 && gc(view.lat, view.lon, KSFO.arp[0], KSFO.arp[1]) < 400) {
     if (L.finals) for (const f of KSFO.finals) geoLine(c, f, '#2a2a2a', [10, 6]);
@@ -528,13 +528,13 @@ function hitAirport(mx, my) {
 // ------------------------------------------------------------------ the whole world, zoomed out
 // OpenSky's snapshot of every airborne aircraft (every 15 min, or 90 s with an API client on the server):
 // dots only, carried along their track since the snapshot, outside the circle the live feed covers
-let WORLD = null, worldPts = [], worldPtsT = 0, worldFetchT = 0;
+let WORLD = null, WORLD_ERR = '', worldPts = [], worldPtsT = 0, worldFetchT = 0;
 function worldShown() { return L.world && (RP ? RP.rec.kind === 'world' : viewNm() > MAX_LIVE_NM * 1.05); }
 async function loadWorld() {
   if (!has('world') || RP) return;
   if (!eachScope(worldShown).some(Boolean) || Date.now() - worldFetchT < WORLD_MS) return;
   worldFetchT = Date.now();
-  try { const j = await (await fetch(`/api/live/world?${srvQ()}`)).json(); if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
+  try { const j = await (await fetch(`/api/live/world?${srvQ()}`)).json(); WORLD_ERR = j.err || ''; if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
 }
 let worldHover = null;                 // the worldwide dot under the mouse: {r: record, p: [lat, lon]}
 function drawWorld() {
