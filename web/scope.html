@@ -160,6 +160,16 @@
   #tlp .rec div { grid-row:1 / span 2; grid-column:2; display:flex; align-items:center; }
   #tlbar { position:absolute; left:50%; transform:translateX(-50%); top:var(--top); z-index:3; display:flex; align-items:center; gap:4px; width:min(900px, calc(100% - 16px)); box-sizing:border-box;
            background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); }
+  /* SITE.tl_bar "strip": a player's strip along the bottom, no slider; skip buttons instead */
+  #tlbar .du, #tlbar [data-tl=back], #tlbar [data-tl=fwd] { display:none; }
+  #tlbar.strip { top:auto; bottom:0; left:0; right:0; width:auto; transform:none; border-radius:0; border-width:1px 0 0; background:rgba(14,14,16,.96);
+                 padding:4px 10px max(4px, env(safe-area-inset-bottom)); gap:6px; font-size:12px; }
+  #tlbar.strip input[type=range], #tlbar.strip .ld { display:none; }
+  #tlbar.strip [data-tl=back], #tlbar.strip [data-tl=fwd] { display:inline-block; color:var(--fg2); padding:6px 6px; }
+  #tlbar.strip [data-tl=play] { font-size:15px; width:2.4ch; padding:4px 2px; }
+  #tlbar.strip .t { margin-left:6px; } #tlbar.strip .du { display:inline; color:var(--dim); margin-right:auto; }
+  #tlbar.strip .sp button { padding:6px 5px; font-size:12px; }
+  body.tlStrip .views, body.tlStrip .flt { bottom:46px; } body.tlStrip .layers { bottom:84px; }
   #tlbar > * { flex:none; } #tlbar input[type=range] { flex:1 1 100px; min-width:60px; accent-color:#ff9f0a; }
   #tlbar .t { color:var(--fg); white-space:nowrap; } #tlbar .sp { display:flex; } #tlbar .sp button { padding:4px 4px; font-size:11px; }
   #tlbar .sp button.on { color:#ff9f0a; } #tlbar [data-tl=play] { width:3ch; color:var(--fg); }
@@ -234,6 +244,7 @@
     #clock { font-size:12px; margin-right:0; } .srch { flex:1 1 0; min-width:0; } #q { width:100%; }
     header button { padding:5px 5px; } #srvs { order:9; }
     #tiles.one ~ .flt { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 36px); }
+    body.tlStrip #tiles.one ~ .flt { bottom:82px; } #tlbar.strip .du { display:none; } #tlbar.strip .t { margin-right:auto; }
     #gnote { max-width:calc(100% - 16px); overflow:hidden; text-overflow:ellipsis; }
     #tiles:not(.one) ~ #gnote { top:calc(var(--top) + 34px); }
   }
@@ -1686,6 +1697,7 @@ window.addEventListener('keydown', e => {
   if (e.key === '-' || e.key === '_') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1.4); use(scopes[0]); }
   if (e.key === '/') { e.preventDefault(); $('q').focus(); }
   if (RP && e.key === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); tlPlay(!RP.playing); }
+  if (RP && SITE.tl_bar === 'strip' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); tlSkip(e.key === 'ArrowLeft' ? -10 : 10); }
 });
 // Info: phones open or close the panel; wider screens show the airport's card (in place of an aircraft's) or close it
 $('listBtn').onclick = () => {
@@ -2555,7 +2567,7 @@ async function tlLoad(rp) {             // all of it, page by page, then (while 
 }
 function tlClose(quiet) {
   if (!RP) return;
-  RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; motion.clear(); hist.clear(); document.body.classList.remove('tl'); $('tlBtn').classList.remove('on');
+  RP = null; S = null; WORLD = null; worldPts = []; worldFetchT = 0; motion.clear(); hist.clear(); document.body.classList.remove('tl', 'tlStrip'); $('tlBtn').classList.remove('on');
   if (RADIO) radioClose();
   $('tlbar').hidden = true; $('fhprof').hidden = true; history.replaceState(null, '', location.pathname + location.hash);
   if (!quiet) { worldFetchT = 0; schedule(0); }
@@ -2565,13 +2577,19 @@ function tlPlay(on) {
   const F = RP.frames; if (on && F.length && RP.t >= F[F.length - 1][0]) RP.t = F[0][0];   // from the start again
   RP.playing = on; RP.last = performance.now(); tlBar();
 }
+function tlSkip(s) {                      // the strip's « 10s / 10s » (and ← →): replay seconds, as on any player
+  if (!RP || !RP.frames.length) return;
+  const F = RP.frames; RP.t = Math.max(F[0][0], Math.min(F[F.length - 1][0], RP.t + s)); hist.clear(); motion.clear(); RP.ing = 0;
+  if (RADIO) RADIO.followT = null;
+  tlStep(); if (RADIO) radioStep();
+}
 function tlBar() {
   const b = $('tlbar'); if (!RP) { b.hidden = true; return; }
   const F = RP.frames, t0 = F.length ? F[0][0] : RP.rec.first, t1 = F.length ? F[F.length - 1][0] : RP.rec.last;
   if (b.hidden || b.dataset.id !== RP.rec.id + RP.gen) {
     b.hidden = false; b.dataset.id = RP.rec.id + RP.gen;
-    b.innerHTML = `<button data-tl="play" title="Play / pause (space)"></button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
-      `<span class="t"></span><span class="ld"></span><span class="sp${RP.rec.speeds ? ' own' : ''}">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
+    b.innerHTML = `<button data-tl="back" title="Back 10 s (←)">« 10s</button><button data-tl="play" title="Play / pause (space)"></button><button data-tl="fwd" title="Forward 10 s (→)">10s »</button><input type="range" min="0" max="1" step="any" aria-label="Time">` +
+      `<span class="t"></span><span class="du"></span><span class="ld"></span><span class="sp${RP.rec.speeds ? ' own' : ''}">${tlSpeeds().map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
       (RP.fh ? '<button data-tl="follow" title="Keep the aircraft in the middle (dragging the map stops it)">FOLLOW</button>' +
         '<button data-tl="traffic" title="Show the other aircraft that were within 60 nm of it">TRAFFIC</button><button data-tl="prof" title="Altitude and speed through the flight">PROFILE</button>' : '') +
       `<button data-tl="tags" title="Show or hide the data tags">TAGS</button>` +
@@ -2581,6 +2599,8 @@ function tlBar() {
     r.addEventListener('pointerup', () => { RP && (RP.drag = false); });
     r.addEventListener('input', () => { if (!RP) return; RP.t = +r.value; hist.clear(); motion.clear(); RP.ing = 0; });
     b.querySelector('[data-tl=play]').onclick = () => tlPlay(!RP.playing);
+    b.querySelector('[data-tl=back]').onclick = () => tlSkip(-10);
+    b.querySelector('[data-tl=fwd]').onclick = () => tlSkip(10);
     const x = b.querySelector('[data-tl=x]'); if (x) x.onclick = () => tlClose();
     b.querySelector('[data-tl=tags]').onclick = () => {     // the layers' "Data tags", in every scope
       const on = !L.tags;
@@ -2598,7 +2618,9 @@ function tlBar() {
     }
   }
   const r = b.querySelector('input'); r.min = t0; r.max = Math.max(t1, t0 + 1); if (!RP.drag) r.value = RP.t;
+  const strip = SITE.tl_bar === 'strip'; b.classList.toggle('strip', strip); document.body.classList.toggle('tlStrip', strip);
   b.querySelector('[data-tl=play]').textContent = RP.playing ? '❚❚' : '▶';
+  if (strip) b.querySelector('.du').textContent = '/ ' + (RP.rec.clock === 'elapsed' ? tlClock(Math.max(t1, RP.rec.last)) : tlTime(t1).slice(6));
   b.querySelector('.t').innerHTML = RP.rec.clock === 'elapsed' ? tlClock(RP.t) : tlTime(RP.t).replace(/^(\S+ )/, '<i>$1</i>');
   const atEnd = RP.rec.rec && !RP.loading && RP.t >= t1 - 0.5;
   b.querySelector('.ld').textContent = RP.fh ? `${RP.rec.name} · ${tlDur(t1 - t0)}` : `${RP.pastH ? 'The past ' + RP.pastH + ' h' : RP.rec.name} · ${RP.loading ? 'loading ' + tlDur(t1 - t0) + '…' : tlDur(t1 - t0)}${RP.rec.rec ? ' · ● REC' + (atEnd ? ', ' + tlNext(RP.rec) : '') : ''}`; b.querySelector('.ld').title = b.querySelector('.ld').textContent;
