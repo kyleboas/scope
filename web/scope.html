@@ -287,7 +287,7 @@
   <span id="status"></span>
   <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
-  <button id="lsBtn" hidden title="Listen to LiveATC (or any radio) and turn the tag of the aircraft on the frequency white">LISTEN</button>
+  <button id="lsBtn" hidden title="Listen to LiveATC (or any radio) and turn the tag of the aircraft on the frequency white while its pilot talks, light blue while the controller talks to it">LISTEN</button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
   <button id="playBtn"></button>
@@ -1240,7 +1240,7 @@ function drawAircraft() {
     }
     const keep = fOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
     const blend = far && worldShown() && !isSel && !isHov && !emer && !keep && !talk;   // zoomed out with the worldwide dots: look like them
-    ctx.fillStyle = emer ? COL.alert : talk ? COL.sel : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
+    ctx.fillStyle = emer ? COL.alert : talk ? lsTalkCol(a.cs) : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     if (a.ps && !blend && !far) {        // a.ps [letter, colour]: the STARS position symbol (the controlling position) instead of the dot
       ctx.font = FONT(TAG(a.ground ? 9 : 11)); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.ps[0], px, py + .5*d);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -1249,7 +1249,7 @@ function drawAircraft() {
     if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer && !talk) continue;
     if (a.ground && !L.aprontags && !isSel && !isHov && !emer && !talk && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
-    const col = emer ? COL.alert : isSel || talk ? COL.sel : COL.db;
+    const col = emer ? COL.alert : talk && !isSel ? lsTalkCol(a.cs) : isSel ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     const l3 = !a.ground && a.l3 ? a.l3 : '';                // a.l3: the site's third line (sim replays: assigned heading and altitude)
     if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep || talk)) continue;
@@ -3303,8 +3303,10 @@ function lsCCRender() {
   const h = rows.join(''); if (box.innerHTML !== h) box.innerHTML = h;
 }
 setInterval(() => LS && lsCCRender(), 1000);
-const lsHeard = new Map();                 // cs -> when its tag stops being white (performance.now() ms)
-const lsOn = cs => (lsHeard.get(cs) || 0) > performance.now();
+const lsHeard = new Map();                 // cs -> {t: when its tag stops being lit (performance.now() ms), atc: the controller talking to it}
+const lsOn = cs => { const h = lsHeard.get(cs); return !!h && h.t > performance.now(); };
+const LS_ATC_COL = '#8ec9ff';               // the tag while the controller talks to it; white while the pilot talks
+const lsTalkCol = cs => { const h = lsHeard.get(cs); return h && h.atc ? LS_ATC_COL : COL.sel; };
 let LS = null;                             // the running listener: {stream, ctx, worker, ...}
 let lsMsg = '', lsLast = null;             // the panel's status line; the last transmission {text, cs}
 const lsSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
@@ -3321,7 +3323,7 @@ function lsRender() {
   b.textContent = LS ? 'LISTEN ●' : 'LISTEN';
   const p = $('lsp'); if (p.hidden) return;
   const opts = `<option value="">Default input${lsLoop() ? ' (' + lsLoop().label + ')' : ''}</option>` + lsDevs.map(d => `<option value="${esc(d.deviceId)}"${d.deviceId === lsDev ? ' selected' : ''}>${esc(d.label || 'Input ' + d.deviceId.slice(0, 6))}</option>`).join('');
-  p.innerHTML = `<div class="hd">Tags turn white while their aircraft is on the radio. Play LiveATC, then let the page hear it. The audio stays on this computer.</div>` +
+  p.innerHTML = `<div class="hd">Tags turn white while the pilot talks, <span style="color:#8ec9ff">light blue</span> while the controller talks to them. Play LiveATC, then let the page hear it. The audio stays on this computer.</div>` +
     (LS ? `<div class="row"><b>${esc(LS.label)}</b><button data-ls="stop">Stop</button></div>`
         : `<div class="row"><select id="lsDev" title="The microphone, hearing LiveATC from the speakers, or a loopback device (BlackHole) carrying the Mac's sound">${opts}</select><button data-ls="mic">Listen</button></div>` +
           (lsTabOk ? `<div class="row"><button data-ls="tab" title="Pick LiveATC's tab and tick “Share tab audio”">Share a tab's audio…</button></div>` : '')) +
@@ -3441,7 +3443,12 @@ function lsDone(r) {
   const hit = !text ? [] : lsMatch(text, [...all].filter(Boolean)).concat();
   if (text && !hit.length && S) hit.push(...lsMatch(text, S.aircraft.map(a => a.cs).filter(Boolean)));
   const until = performance.now() + LS_HOLD_S * 1000 + (job.final ? 0 : 3000);
-  for (const cs of hit) { lsHeard.set(cs, until); job.cs.add(cs); }
+  const who = text ? lsWho(lsFormat(text, hit), job.final) : null;
+  for (const cs of hit) {
+    const was = lsHeard.get(cs);
+    lsHeard.set(cs, { t: until, atc: who ? who === 'atc' : !!(was && was.t > performance.now() && was.atc) });
+    job.cs.add(cs);
+  }
   const real = text && !/^\[.*\]$|^\(.*\)$/.test(text);   // not Whisper's [BLANK_AUDIO] and the like
   if (job.final) { if (real) { lsLast = { text, cs: [...job.cs] }; lsCC.push({ parts: lsFormat(text, [...job.cs]), t: performance.now() }); } if (lsCCLive && job.id >= (s.liveId || 0)) lsCCLive = null; lsRender(); }
   else if (real && LS.speech) { lsCCLive = lsFormat(text, [...job.cs]); s.liveId = job.id; }
@@ -3539,6 +3546,28 @@ function lsMatch(text, css) {             // -> the callsigns among css the tran
   const top = Math.max(0, ...best.values());
   const hits = [...best].filter(([, v]) => v === top).map(([cs]) => cs);
   return top === 3 ? hits : hits.length === 1 ? hits : [];
+}
+
+// who is talking to or as aircraft cs, from the phraseology -> 'atc', 'pilot' or null (can't tell). A controller says the
+// callsign first, then the instruction ("American 1624, turn left heading 160"); a pilot reads back with the callsign last
+// ("left 160, American 1624"), or opens with the station ("Tower, Delta 100 heavy, with you"). Words only one side uses
+// tip it. On a partial transcript a callsign last means nothing yet: the rest may still be coming.
+const LS_PILOT = /\b(with you|checking in|request(ing)?|ready|wilco|unable|in sight|no contact|looking|we'?(re|ll|ve)?|our|us|i'?m|holding short|level at|out of|leaving|passing)\b/;
+const LS_CTRL = /\b(cleared|contact|monitor|radar contact|squawk|expect|traffic(?! (in sight|not in sight|no contact|insight))|wind|caution|report|say (again|altitude|heading|speed)|identified|resume|proceed|fly)\b/;
+const LS_STATION = /^(tower|ground|approach|departure|center|centre|clearance|delivery|ramp|radio|\w+ (tower|ground|approach|departure|center|centre))$/;
+function lsWho(fmt, final) {                // the first callsign said is who's talking or talked to; any later one is mentioned (traffic)
+  const i = fmt.findIndex(([, b]) => b); if (i < 0) return null;
+  const words = p => p.map(([s]) => s).join(' ').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const before = words(fmt.slice(0, i)), after = words(fmt.slice(i + 1)).join(' ').replace(/^(heavy|super)\b/, '').replace(/\b(good day|good night|thanks|thank you|bye|so long|see ya)$/, '').trim().split(/\s+/).filter(Boolean);
+  const all = before.concat(after).join(' ');
+  let atc = 0, pilot = 0;
+  if (!before.length && after.length) atc += 3;                                   // callsign first
+  else if (before.length && LS_STATION.test(before.join(' '))) pilot += 3;          // "Tower, Delta 100 heavy …"
+  else if (final && !after.length && before.length) pilot += 3;                     // readback: callsign last
+  else if (before.length >= 2 && after.length >= 2) atc += 1;                       // "Delta 100 … " mid-sentence: often a controller's traffic call
+  if (LS_PILOT.test(all)) pilot += 4;                                            // a pilot also opens with the callsign: "Delta 100, request…"
+  if (LS_CTRL.test(all)) atc += 1;
+  return atc > pilot ? 'atc' : pilot > atc ? 'pilot' : null;
 }
 
 // a transmission in ATC shorthand for the captions: callsigns as the scope writes them (DAL1234, N123AB), numbers as
