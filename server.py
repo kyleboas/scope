@@ -53,7 +53,6 @@ def init(site, providers):
     files = {"/": (page, "text/html; charset=utf-8"), "/live": (page, "text/html; charset=utf-8")}
     for f in ("lines.json", "ksfo.json", "centers.json", "airspace.json"):
         files["/live/" + f] = (open(os.path.join(HERE, "web", "geo", f), "rb").read(), "application/json")
-    files["/liveatc.user.js"] = (open(os.path.join(HERE, "web", "liveatc.user.js"), "rb").read(), "text/javascript; charset=utf-8")
     files["/live/major.json"] = (json.dumps(AIRPORTS.major, separators=(",", ":")).encode(), "application/json")
     for path, (body, ctype) in files.items():
         STATIC[path] = (body, gzip.compress(body, 9), ctype)
