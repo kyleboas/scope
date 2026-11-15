@@ -368,12 +368,13 @@ function setTagPx(v) {
   try { tagPx ? localStorage.setItem(KEY + '-tagpx', tagPx) : localStorage.removeItem(KEY + '-tagpx'); } catch (e) {}
   document.querySelectorAll('.tagsz b').forEach(b => b.textContent = tagSize());
 }
-// the opacity of the aircraft the filters leave out (OTHERS, the altitude filter): − / + 10 % at a time in the layers menu, remembered; tapping the number goes back to 100 %
-let othPct = (() => { try { return +localStorage.getItem(KEY + '-othpct') || 100; } catch (e) { return 100; } })();
+// the opacity of the aircraft the filters leave out (OTHERS, the altitude filter): − / + 10 % at a time in the layers menu, remembered; tapping the number goes back to 50 %
+const OTH_PCT = 50;
+let othPct = (() => { try { return +localStorage.getItem(KEY + '-othpct') || OTH_PCT; } catch (e) { return OTH_PCT; } })();
 const othA = () => othPct / 100;
 function setOthPct(v) {
   othPct = Math.min(100, Math.max(10, v));
-  try { othPct < 100 ? localStorage.setItem(KEY + '-othpct', othPct) : localStorage.removeItem(KEY + '-othpct'); } catch (e) {}
+  try { othPct !== OTH_PCT ? localStorage.setItem(KEY + '-othpct', othPct) : localStorage.removeItem(KEY + '-othpct'); } catch (e) {}
   document.querySelectorAll('.othop b').forEach(b => b.textContent = othPct + '%'); mapKey = '';
 }
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
@@ -438,13 +439,13 @@ function makeScope(v) {
   const lp = el.querySelector('.layers');
   const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram') && (has('wx') || !WX_KEYS.includes(k))));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
-    k === 'othop' ? `<div class="lr"><span class="tagsz othop"><span>${t}</span><span><button data-oth="-10" title="Fainter" aria-label="Fainter">−</button><b data-oth="0" title="Opacity (click for 100%)">${othPct}%</b><button data-oth="10" title="Stronger" aria-label="Stronger">+</button></span></span></div>` :
+    k === 'othop' ? `<div class="lr"><span class="tagsz othop"><span>${t}</span><span><button data-oth="-10" title="Fainter" aria-label="Fainter">−</button><b data-oth="0" title="Opacity (click for ${OTH_PCT}%)">${othPct}%</b><button data-oth="10" title="Stronger" aria-label="Stronger">+</button></span></span></div>` :
     `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null);
-    const o = e.target.closest('[data-oth]'); if (o) setOthPct(+o.dataset.oth ? othPct + +o.dataset.oth : 100); });
+    const o = e.target.closest('[data-oth]'); if (o) setOthPct(+o.dataset.oth ? othPct + +o.dataset.oth : OTH_PCT); });
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); loadCenters(); loadAirspace(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (e.target.dataset.l === 'radar') loadRadar(); if (!n && e.target.dataset.l === 'allproc') renderCard();
     s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
