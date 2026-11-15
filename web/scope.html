@@ -911,7 +911,8 @@ function drawMap() {
     if (!L.airports && !mineApt(a[0])) continue;
     if (view.half > APT_FAR && !mineApt(a[0])) continue;   // zoomed out that far: no airport boxes (the picked airport's still shows)
     // runways reach a few nm from the airport's reference point: keep it while they can still be on screen
-    const rw = a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
+    // a seaplane base's water lanes (often listed 500 to 1000 ft wide) aren't drawn: to scale they're big grey slabs over the water
+    const rw = kd === 'W' ? [] : a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
     const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -m || y < -m || x > P0.w + m || y > P0.h + m) continue;
     const drawRwy = L.runways && close && rw.length && ppn > 6 * d;
     if (drawRwy) for (const r of rw) {
