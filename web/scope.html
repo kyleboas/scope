@@ -46,6 +46,7 @@
   #pick { position:fixed; z-index:20; min-width:180px; max-width:320px; padding:3px 0; background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px #0008; }
   #pick div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #pick div b { color:var(--fg); margin-right:8px; font-weight:normal; } #pick div.ac b { color:#6ee36e; }
+  #pick .hd { cursor:default; border-bottom:1px solid var(--line); } #pick .hd:hover { background:none; } #pick .hd b { color:#6ee36e; }
   #pick div:hover { background:var(--soft); } #pick [data-pa] + .ac { border-top:1px solid var(--line); } #pick .more { color:var(--dim); cursor:default; }
   #wxpop { position:fixed; z-index:20; width:min(460px, calc(100vw - 8px)); max-height:60vh; overflow:auto; padding:2px 0; background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px #0008; font:12px var(--mono); color:var(--fg2); }
   #wxpop > div { padding:7px 10px; } #wxpop > div + div { border-top:1px solid var(--line); }
@@ -101,6 +102,8 @@
   .views { position:absolute; left:8px; bottom:8px; z-index:2; display:flex; }
   .views button { color:#555; font-size:11px; padding:4px 6px; }
   .views button:hover, .views button.on { color:#bbb; background:none; }
+  .fol { position:absolute; left:50%; transform:translateX(-50%); bottom:44px; z-index:2; background:rgba(28,28,30,.92); border:1px solid #ff9f0a; border-radius:4px; color:#ff9f0a; font:11px var(--mono); padding:5px 10px; cursor:pointer; white-space:nowrap; }
+  .fol[hidden] { display:none; } .fol b { font-weight:normal; color:var(--fg); margin:0 6px; }
   .flt { position:absolute; right:8px; bottom:8px; z-index:2; display:flex; align-items:center; color:#444; font-size:11px; }
   .flt button { color:#555; font-size:11px; padding:4px 6px; }
   .flt button:hover, .flt button.on { color:#bbb; background:none; }
@@ -518,7 +521,7 @@ function onCv(type, fn, opts) {
 }
 let home = null;                       // the airport picked (range rings): [ident, iata, name, city, country, lat, lon, elev, kind]
 let homeCardShut = false;              // its card closed with ✕: the airport stays picked (rings, filters)
-let S = null, sel = null, hover = null;
+let S = null, sel = null, hover = null, follow = null;   // follow: { id, s } the aircraft kept in the middle of scope s
 const motion = new Map(), hist = new Map();
 let LINES = null, MAJOR = [], KSFO = null;
 let AIRSPACE = null, airspaceAsked = false;   // the Class B, C and D layer's shelves, fetched the first time a scope shows it
@@ -1375,7 +1378,7 @@ function drawAircraft() {
   drawn = [];
   if (!S) return;
   const fOn = fltOn();   // ARR / DEP filter on: only its arrivals / departures are tagged, and always (any zoom, no declutter)
-  const pri = a => (a.id === sel || a.id === hover || a.emer || lsOn(a.cs) ? 4 : tagWas.has(a.id) ? 2 : 0) + (matches(a) ? 1 : 0);   // the filtered-out ones' short tags after the rest
+  const pri = a => (a.id === sel || a.id === hover || (follow && follow.id === a.id) || a.emer || lsOn(a.cs) ? 4 : tagWas.has(a.id) ? 2 : 0) + (matches(a) ? 1 : 0);   // the filtered-out ones' short tags after the rest
   for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel && !(lsHeard.size && lsOn(a.cs))) continue;   // on the ground: only with GND on, selected or on the radio
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
@@ -1904,6 +1907,7 @@ function drawFlight() {
 // ------------------------------------------------------------------ frame
 function frame() {
   if (RP) tlStep();
+  followStep();
   if (mapKey === '') { for (const s of scopes) s.key = ''; mapKey = 'ok'; }
   for (const s of scopes) {
     if (!s.cv.width || !s.cv.height || !s.el.offsetWidth) continue;
@@ -1929,6 +1933,7 @@ window.addEventListener('resize', resize);
 const pts = new Map(); let drag = null, pinch = null;
 function canvasXY(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * dpr(), (e.clientY - r.top) * dpr()]; }
 function panBy(dx, dy) {               // move the view so the map follows the pointer
+  if (follow && follow.s.view === view) setFollow(null);
   if (RP && RP.fh && RP.fh.follow) { RP.fh.follow = false; tlBar(); }
   setFrame(); const g = unproj(P0.w / 2 - dx, P0.h / 2 - dy);
   if (g) { view.lat = Math.max(-89, Math.min(89, g[0])); view.lon = g[1]; }
@@ -1939,12 +1944,12 @@ function zoomAt(mx, my, f) {
   setFrame(); const before = unproj(mx, my);
   view.half = Math.max(HALF_MIN, Math.min(HALF_GLOBE, view.half * f));
   setFrame();
-  if (before && view.half < 2000) { const [x, y, z] = proj(before[0], before[1]); if (z > 0) panBy(mx - x, my - y); }
+  if (before && view.half < 2000 && !(follow && follow.s.view === view)) { const [x, y, z] = proj(before[0], before[1]); if (z > 0) panBy(mx - x, my - y); }
   viewChanged();
 }
 // measuring: right-drag or shift-drag (long-press then drag on touch) draws a ruler with distance, bearing
 // and, from an aircraft, the time at its ground speed; it stays until the next click or Esc
-let measure = null, mDrag = null, longT = 0;
+let measure = null, mDrag = null, longT = 0, ctxDown = null, lastTap = null;   // ctxDown: a right-press on an aircraft, a menu unless it drags
 function measurePt(e) {
   const [mx, my] = canvasXY(e); setFrame();
   const h = hitAircraft(mx, my, 14); if (h) { const [la, lo] = pos(h.a); return { lat:la, lon:lo, id:h.a.id }; }
@@ -1983,6 +1988,10 @@ onCv('contextmenu', e => e.preventDefault());
 onCv('pointerdown', e => {
   cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); clearTimeout(longT);
   if (pts.size === 2) { drag = null; mDrag = null; const [a, b] = [...pts.values()]; pinch = { d:Math.hypot(a[0]-b[0], a[1]-b[1]) || 1, half:view.half }; return; }
+  if (e.button === 2 || (e.ctrlKey && e.pointerType === 'mouse')) {   // right-click on an aircraft: its menu (dragging still measures)
+    const [mx, my] = canvasXY(e), acs = hitAircraftAll(mx, my, 16).map(x => x.a);
+    if (acs.length) { drag = null; ctxDown = { id:e.pointerId, sx:e.clientX, sy:e.clientY, e, acs, s:active }; return; }
+  }
   if (e.button === 2 || e.shiftKey) { startMeasure(e); return; }
   drag = { sx:e.clientX, sy:e.clientY, moved:false, hadMeasure:!!measure };
   if (e.pointerType === 'touch') longT = setTimeout(() => { if (drag && !drag.moved && pts.size === 1) { startMeasure(e); navigator.vibrate && navigator.vibrate(15); } }, 450);
@@ -1993,6 +2002,7 @@ onCv('pointermove', e => {
   if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()], r = cv.getBoundingClientRect();
     const mx = ((a[0] + b[0]) / 2 - r.left) * dpr(), my = ((a[1] + b[1]) / 2 - r.top) * dpr();
     zoomAt(mx, my, pinch.half * pinch.d / (Math.hypot(a[0]-b[0], a[1]-b[1]) || 1) / view.half); return; }
+  if (ctxDown && ctxDown.id === e.pointerId) { if (Math.hypot(e.clientX - ctxDown.sx, e.clientY - ctxDown.sy) > 6) { startMeasure(ctxDown.e); ctxDown = null; } else return; }
   if (mDrag === e.pointerId && measure) { const p = measurePt(e); if (p) measure.b = p; return; }
   if (!drag) { if (e.pointerType === 'mouse') { const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, 16); hover = h ? h.a.id : null;
     worldHover = !h && worldPts.length && worldDrawn() ? hitWorld(mx, my) : null;
@@ -2004,6 +2014,7 @@ onCv('pointermove', e => {
 function endPointer(e) {
   if (!pts.has(e.pointerId)) return;
   pts.delete(e.pointerId); if (pts.size < 2) pinch = null; clearTimeout(longT);
+  if (ctxDown && ctxDown.id === e.pointerId) { const c = ctxDown; ctxDown = null; if (e.type === 'pointerup') acMenu(e.clientX, e.clientY, c.acs, c.s); return; }
   if (mDrag === e.pointerId) { mDrag = null; cv.style.cursor = ''; if (measure && gc(measure.a.lat, measure.a.lon, measure.b.lat, measure.b.lon) < 1e-4) measure = null; return; }
   if (pts.size || !drag) return;
   const dg = drag; drag = null;
@@ -2013,6 +2024,10 @@ function endPointer(e) {
   // are a wider target until their runways are drawn to scale, and then only count where no aircraft is
   const [mx, my] = canvasXY(e), touch = e.pointerType === 'touch', near = view.half < 10;
   const acs = hitAircraftAll(mx, my, touch ? 26 : 16).map(x => x.a);
+  // a double tap (touch) on an aircraft opens its menu, as a right-click does
+  const tapT = performance.now(), dbl = touch && lastTap && tapT - lastTap.t < 400 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
+  lastTap = touch && !dbl ? { t:tapT, x:e.clientX, y:e.clientY } : null;
+  if (dbl && acs.length) { acMenu(e.clientX, e.clientY, acs, active); return; }
   const aps = near && acs.length ? [] : hitAirports(mx, my, near ? 14 : touch ? 30 : 22);
   if (aps.length + acs.length > 1) { pickMenu(e.clientX, e.clientY, aps, acs); return; }
   boatSel = null;
@@ -2047,14 +2062,56 @@ function pickMenu(x, y, aps, acs) {
   m.innerHTML = A.map((a, i) => `<div data-pa="${i}"><b>${esc(a[0])}</b>${esc(a[2] || '')}</div>`).join('') +
     C.map((a, i) => `<div data-pc="${i}" class="ac"><b>${esc(a.cs || a.id)}</b>${esc([a.type, a.ground ? 'GND' : a3(a.alt)].filter(Boolean).join(' '))}</div>`).join('') +
     (acs.length > C.length ? `<div class="more">+${acs.length - C.length} more: zoom in</div>` : '');
-  m.hidden = false;
-  const r = m.getBoundingClientRect();
-  m.style.left = Math.max(4, Math.min(x + 6, innerWidth - r.width - 4)) + 'px';
-  m.style.top = Math.max(4, Math.min(y + 6, innerHeight - r.height - 4)) + 'px';
+  menuAt(m, x, y);
   m.onpointerover = ev => { const t = ev.target.closest('[data-pc]'); hover = t ? C[+t.dataset.pc].id : null; };
   m.onpointerleave = () => { hover = null; };
   m.onclick = ev => { const t = ev.target.closest('[data-pa],[data-pc]'); if (!t) return; pickClose();
     if (t.dataset.pa) pickAirport(A[+t.dataset.pa]); else select(C[+t.dataset.pc].id); };
+}
+function menuAt(m, x, y) {
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x + 6, innerWidth - r.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(y + 6, innerHeight - r.height - 4)) + 'px';
+}
+// an aircraft's own menu (right-click, or a double tap on touch): several under the pointer list them first
+function acMenu(x, y, acs, s) {
+  const m = $('pick'), C = acs.slice(0, 10), row = a => `<b>${esc(a.cs || a.id)}</b>${esc([a.type, a.ground ? 'GND' : a3(a.alt)].filter(Boolean).join(' '))}`;
+  m.onpointerover = m.onpointerleave = null; hover = null;
+  if (C.length > 1) {
+    m.innerHTML = C.map((a, i) => `<div data-pc="${i}" class="ac">${row(a)}</div>`).join('') + (acs.length > C.length ? `<div class="more">+${acs.length - C.length} more: zoom in</div>` : '');
+    m.onpointerover = ev => { const t = ev.target.closest('[data-pc]'); hover = t ? C[+t.dataset.pc].id : null; };
+    m.onpointerleave = () => { hover = null; };
+    m.onclick = ev => { const t = ev.target.closest('[data-pc]'); if (t) acMenu(x, y, [C[+t.dataset.pc]], s); };
+  } else {
+    const a = C[0], on = follow && follow.id === a.id; hover = a.id;
+    m.innerHTML = `<div class="hd">${row(a)}</div><div data-act="follow">${on ? 'Stop following' : 'Follow'}</div>` + (sel === a.id ? '' : '<div data-act="info">Show info</div>');
+    m.onclick = ev => { const t = ev.target.closest('[data-act]'); if (!t) return; pickClose();
+      if (t.dataset.act === 'follow') setFollow(on ? null : a.id, s); else select(a.id); };
+  }
+  menuAt(m, x, y);
+}
+// following an aircraft keeps it in the middle of the scope it was picked on; zooming keeps it there, dragging the map stops it
+function setFollow(id, s) {
+  follow = id ? { id, s: s || scopes[0], lost: 0, vc: 0 } : null;
+  followStep(); followChip();
+}
+function followChip() {
+  for (const x of scopes) {
+    let c = x.el.querySelector('.fol');
+    if (!follow || follow.s !== x) { if (c) c.hidden = true; continue; }
+    if (!c) { c = document.createElement('button'); c.className = 'fol'; c.title = 'Stop following (dragging the map stops it too)'; c.onclick = () => setFollow(null); x.el.appendChild(c); }
+    const a = S && S.aircraft.find(o => o.id === follow.id);
+    c.innerHTML = `FOLLOWING<b>${esc(a ? a.cs || a.id : follow.id)}</b>✕`; c.hidden = false;
+  }
+}
+function followStep() {
+  if (!follow) return;
+  const a = S && S.aircraft.find(o => o.id === follow.id), now = Date.now();
+  if (!a) { if (!follow.lost) follow.lost = now; else if (now - follow.lost > 60000) setFollow(null); return; }   // gone from the feed a minute: stop
+  follow.lost = 0;
+  const [la, lo] = pos(a), v = follow.s.view; v.lat = la; v.lon = lo;
+  if (now - follow.vc > 1000) { follow.vc = now; viewChanged(); followChip(); }
 }
 function pickClose() { const m = $('pick'); if (!m.hidden) { m.hidden = true; hover = null; } }
 document.addEventListener('pointerdown', e => { if (!e.target.closest('#pick')) pickClose(); if (!e.target.closest('#wxpop')) wxClose(); }, true);
@@ -2063,7 +2120,7 @@ window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Escape' && !$('pick').hidden) { pickClose(); return; }
   if (e.key === 'Escape' && !$('wxpop').hidden) { wxClose(); return; }
-  if (e.key === 'Escape') { if (measure) measure = null; else if (boatSel) boatSel = null; else select(null); }
+  if (e.key === 'Escape') { if (measure) measure = null; else if (follow) setFollow(null); else if (boatSel) boatSel = null; else select(null); }
   const zs = active && active.el.offsetWidth ? active : scopes[0];
   if (e.key === '+' || e.key === '=') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1 / 1.4); use(scopes[0]); }
   if (e.key === '-' || e.key === '_') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1.4); use(scopes[0]); }
@@ -2799,7 +2856,7 @@ function renderServers() {
 }
 $('srvs').onclick = e => { const b = e.target.closest('[data-srv]'); if (!b || b.dataset.srv === srv) return;
   srv = b.dataset.srv; try { localStorage.setItem(KEY + '.srv', srv); } catch (err) {}
-  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); motion.clear();
+  S = null; WORLD = null; worldPts = []; worldFetchT = 0; FL = null; sel = null; follow = null; followChip(); atcBy = new Map(); atcGen++; atcT = 0; ATC_APS = null; atcOpenAp = null; wantSel = null; atcPanel(); flowMem.clear(); motion.clear();
   renderServers(); renderCard(); mapKey = ''; schedule(0); };
 // controllers on duty, every minute: by airport ICAO ('' for Center)
 let atcBy = new Map(), atcT = 0, atcGen = 0;
