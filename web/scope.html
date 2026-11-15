@@ -260,6 +260,7 @@
   #atcp .inb span { cursor:pointer; } #atcp .inb .cs { color:var(--fg); } #atcp .inb .d { color:var(--dim); }
   #atcp .inb .none { grid-column:1 / span 4; color:var(--dim); cursor:default; }
   #atcp .err { color:var(--dim); padding:8px 12px 0; }
+  #atcp .ctrhd { padding-top:10px; }
   /* phones and small tablets, either way up: the side panel becomes a drawer (landscape) or a bottom sheet (portrait) */
   @media (max-width: 820px), (max-height: 500px) {
     body { grid-template-columns:1fr; }
@@ -313,7 +314,7 @@
   <button id="radioBtn" hidden title="Stop the live audio"></button>
   <button id="lsBtn" hidden title="Listen to LiveATC (or any radio) and turn the tag of the aircraft on the frequency white">LISTEN</button>
   <button id="bdBtn" hidden title="Departures and arrivals boards for the airports in view, and when each is busiest">BOARD</button>
-  <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
+  <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights, and the Centers on duty">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
   <button id="playBtn"></button>
 </header>
@@ -511,7 +512,7 @@ let S = null, sel = null, hover = null;
 const motion = new Map(), hist = new Map();
 let LINES = null, MAJOR = [], KSFO = null;
 let AIRSPACE = null, airspaceAsked = false;   // the Class B, C and D layer's shelves, fetched the first time a scope shows it
-let CENTERS = null, centersAsked = false;   // the Center airspaces layer's boundaries, fetched the first time a scope shows it
+let CENTERS = null, centersAsked = false, ctrHi = null;   // ctrHi: the boundary of the Center picked in the ATC list, drawn bright   // the Center airspaces layer's boundaries, fetched the first time a scope shows it
 const areaAps = new Map();             // ident -> airport with runways, near where you've looked
 const procs = new Map();               // ident -> {p: [[kind, name, transition, pts, missed]], f: {fix: [lat, lon]}} (US, FAA CIFP)
 let procSel = null;                    // [airport, kind, name] of the procedure picked in the airport card
@@ -584,17 +585,34 @@ function drawLines(c, lines, color, w) {
   c.stroke();
 }
 // Center airspaces (ARTCCs and FIRs; VATSpy's boundaries): outlined, oceanic ones dashed, named at their label points
-function loadCenters() {
-  if (centersAsked || !scopes.some(s => s.L.centers)) return;
+function loadCenters(force) {
+  if (centersAsked || !(force || scopes.some(s => s.L.centers))) return;
   centersAsked = true;
   fetch('/live/centers.json').then(r => r.json()).then(j => {
-    CENTERS = { land: [], ocean: [], names: [] };
-    for (const [id, oc, la, lo, rings] of j) { (oc ? CENTERS.ocean : CENTERS.land).push(...prepLines(rings)); CENTERS.names.push([id, la, lo]); }
-    mapKey = ''; for (const s of scopes) s.key = '';
+    CENTERS = { land: [], ocean: [], names: [], all: [] };
+    for (const [id, oc, la, lo, rings] of j) { const ls = prepLines(rings); (oc ? CENTERS.ocean : CENTERS.land).push(...ls); CENTERS.names.push([id, la, lo]);
+      CENTERS.all.push({ id, oc, rings, lines: ls, bb: ls.reduce((b, l) => [Math.min(b[0], l.bb[0]), Math.max(b[1], l.bb[1]), Math.min(b[2], l.bb[2]), Math.max(b[3], l.bb[3])], [90, -90, 180, -180]) }); }
+    mapKey = ''; for (const s of scopes) s.key = ''; atcPanel();
   }).catch(() => { centersAsked = false; });
+}
+// the boundary a Center controller works: the one named like its callsign (EDGG_CTR: EDGG), else the smallest one around
+// where it is (its antennas; Oakland's OAK_CTR: KZOA), land before oceanic, whole before sectors
+function inRings(rings, la, lo) {
+  let n = 0; for (const r of rings) for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const ax = r[i], ay = r[i + 1], bx = r[j], by = r[j + 1]; if ((ay > la) !== (by > la) && lo < ax + (la - ay) * (bx - ax) / (by - ay)) n++; }
+  return n % 2 === 1;
+}
+function centerArea(name, la, lo) {
+  if (!CENTERS) return null;
+  const nm = String(name || '').toUpperCase(), exact = nm && CENTERS.all.find(c => c.id === nm && !c.oc);
+  if (exact || la == null) return exact || null;
+  const area = c => (c.bb[1] - c.bb[0]) * (c.bb[3] - c.bb[2]);
+  return CENTERS.all.filter(c => la >= c.bb[0] && la <= c.bb[1] && lo >= c.bb[2] && lo <= c.bb[3] && inRings(c.rings, la, lo))
+    .sort((a, b) => a.oc - b.oc || a.id.includes('-') - b.id.includes('-') || area(a) - area(b))[0] || null;   // a whole Center before its sectors (LON_E_CTR: EGTT)
 }
 function drawCenters(c) {
   if (view.half < 8) return;             // inside one airport's field the lines are only clutter
+  if (!L.centers) return;
   drawLines(c, CENTERS.land, COL.ctr);
   c.setLineDash([4 * dpr(), 4 * dpr()]); drawLines(c, CENTERS.ocean, COL.ctr); c.setLineDash([]);
   if (!L.ctrnames || view.half > 1500) return;   // the whole globe of names is a smear
@@ -806,6 +824,7 @@ function drawMap() {
     if (L.coast) drawLines(c, LINES.coast, COL.coast);
   }
   if (L.centers && CENTERS) drawCenters(c);
+  if (ctrHi && view.half >= 8) drawLines(c, ctrHi.lines, '#5ac8fa', 2);
   if (L.airspace && AIRSPACE) drawAirspace(c);
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
   if (S && S.center && !(RP && RP.fh) && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
@@ -1402,7 +1421,7 @@ async function loadWorld() {
   if (!has('world') || RP) return;
   if (!eachScope(worldDrawn).some(Boolean) || Date.now() - worldFetchT < WORLD_MS) return;
   worldFetchT = Date.now();
-  try { const j = await (await fetch(`/api/live/world?${srvQ()}`)).json(); WORLD_ERR = j.err || ''; if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
+  try { const j = await (await fetch(`/api/live/world?${srvQ()}`)).json(); WORLD_ERR = j.err || ''; if (j.ok) { WORLD = j; worldPtsT = 0; mapKey = ''; if (String(atcOpenAp).startsWith('ctr:')) atcPanel(); } else worldFetchT = Date.now() - 25000; } catch (e) { worldFetchT = Date.now() - 25000; }
 }
 let worldHover = null;                 // the worldwide dot under the mouse: {r: record, p: [lat, lon]}
 function drawWorld() {
@@ -2730,6 +2749,28 @@ $('srvs').onclick = e => { const b = e.target.closest('[data-srv]'); if (!b || b
 let atcBy = new Map(), atcT = 0, atcGen = 0;
 // the ATC dropdown: airports with ATC open (not Center), most inbound flights (by flight plan) first; click one for its inbounds
 let ATC_APS = null, atcOpenAp = null, wantSel = null;   // wantSel: an inbound picked from the list, selected once the feed has it
+// the Centers on duty (the '' key of atcBy), one row per callsign prefix: [{key, fs: [controllers], lat, lon, area}]
+function atcCenters() {
+  const m = new Map(); for (const f of atcBy.get('') || []) { const k = f.icao || f.user || 'Center'; if (!m.has(k)) m.set(k, []); m.get(k).push(f); }
+  return [...m].map(([key, fs]) => { const p = fs.find(f => f.lat != null) || {}; return { key, fs, lat: p.lat, lon: p.lon, area: centerArea(key, p.lat, p.lon) }; })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+// the aircraft inside a Center's boundary (the worldwide feed, else the live area's), airborne, highest first
+function centerTraffic(c) {
+  if (!c.area) return null;
+  const [a, b, lo1, lo2] = c.area.bb, rows = WORLD && WORLD.ac ? WORLD.ac.map(r => ({ id: r[0], lat: r[1], lon: r[2], alt: r[5] * 100, cs: r[7], ground: !!r[8] }))
+    : S && S.aircraft ? S.aircraft.map(x => ({ id: x.id, lat: x.lat, lon: x.lon, alt: x.alt, cs: x.cs, type: x.type, ground: x.ground })) : null;
+  if (!rows) return null;
+  return rows.filter(r => !r.ground && r.lat >= a && r.lat <= b && r.lon >= lo1 && r.lon <= lo2 && inRings(c.area.rings, r.lat, r.lon)).sort((p, q) => q.alt - p.alt);
+}
+function centerGo(c) {
+  ctrHi = c.area; mapKey = ''; for (const s of scopes) s.key = '';
+  if (c.area) { const [a, b, lo1, lo2] = c.area.bb; view.lat = (a + b) / 2; view.lon = (lo1 + lo2) / 2;
+    view.half = Math.min(HALF_GLOBE, Math.max(60, gc(a, lo1, b, lo2) / 2 * 1.1)); }
+  else if (c.lat != null) { view.lat = c.lat; view.lon = c.lon; view.half = 250; }
+  else return;
+  worldFetchT = 0; viewChanged(true);
+}
 const ATC_ABBR = { Ground: 'GND', Tower: 'TWR', Unicom: 'UNICOM', Clearance: 'CLR', Approach: 'APP', Departure: 'DEP', ATIS: 'ATIS' };
 function atcInit() {
   const b = $('atcBtn'); b.hidden = false;
@@ -2738,11 +2779,22 @@ function atcInit() {
   document.addEventListener('pointerdown', e => { const p = $('atcp');
     if (!p.hidden && !p.contains(e.target) && !e.target.closest('#atcBtn')) { p.hidden = true; b.classList.remove('on'); } });
   $('atcp').onclick = e => {
+    const cgo = e.target.closest('[data-cgo]'), cac = e.target.closest('[data-cac]'), crow = e.target.closest('[data-ctr]');
+    if (cgo || cac || crow) {
+      const c = atcCenters().find(x => x.key === (cgo || cac || crow).dataset[cgo ? 'cgo' : cac ? 'cin' : 'ctr']); if (!c) return;
+      if ((cgo || cac) && small.matches) { $('atcp').hidden = true; $('atcBtn').classList.remove('on'); }
+      if (cgo) { centerGo(c); return; }
+      if (cac) { const r = (centerTraffic(c) || []).find(x => String(x.id) === cac.dataset.cac); if (!r) return;
+        ctrHi = c.area; view.lat = r.lat; view.lon = r.lon; if (view.half > 120) view.half = 60; wantSel = r.id; viewChanged(true); return; }
+      const k = 'ctr:' + c.key; atcOpenAp = atcOpenAp === k ? null : k;
+      if (atcOpenAp && !WORLD) { worldFetchT = 0; loadWorld(); }
+      atcPanel(); return;
+    }
     const go = e.target.closest('[data-go]'), ac = e.target.closest('[data-ac]'), row = e.target.closest('[data-ap]');
     const o = ATC_APS && ATC_APS.find(x => x.icao === (go || ac || row || {}).dataset?.[go ? 'go' : ac ? 'apt' : 'ap']);
     if (!o) return;
     if ((go || ac) && small.matches) { $('atcp').hidden = true; $('atcBtn').classList.remove('on'); }   // phones: out of the way of the map
-    if (go) { if (o.ap) setHome(o.ap, true, 40); return; }
+    if (go) { if (o.ap) { ctrHi = null; setHome(o.ap, true, 40); } return; }
     if (ac) {
       const r = o.inbound.find(x => x.id === ac.dataset.ac); if (!r) return;
       if (o.ap && (!home || home[0] !== o.ap[0])) setHome(o.ap, false);
@@ -2770,8 +2822,25 @@ function atcPanel() {
           `<span data-ac="${esc(r.id)}" data-apt="${esc(o.icao)}">${fl(r)}</span>` +
           `<span class="d" data-ac="${esc(r.id)}" data-apt="${esc(o.icao)}">${r.nm != null ? r.nm + ' nm' : ''}</span>`).join('')
           : '<span class="none">No inbound flights with a flight plan here.</span>'}</div>` : '');
-    }).join('');
+    }).join('') + centersPanel(fl);
   p.scrollTop = keep;
+}
+function centersPanel(fl) {
+  loadCenters(true);
+  const cs = atcCenters(); if (!cs.length) return '';
+  const since = t => t ? ' · since ' + new Date(t * 1000).toISOString().slice(11, 16) + 'Z' : '';
+  return `<div class="hd ctrhd">Centers on duty · ${cs.length}</div>` + cs.map(c => {
+    const k = esc(c.key), open = atcOpenAp === 'ctr:' + c.key, tr = open ? centerTraffic(c) : null;
+    return `<div class="ap" data-ctr="${k}"><b>${k}</b><span class="n">${c.area ? esc(c.area.id) : ''}</span>` +
+      `<span class="f">${c.fs.map(f => esc(f.user || 'controller') + since(f.since)).join('<br>')}</span>` +
+      (open && (c.area || c.lat != null) ? `<button class="go" data-cgo="${k}">Go to ${k} →</button>` : '') + '</div>' +
+      (open ? `<div class="inb">${!c.area ? '<span class="none">Its airspace isn\'t on the map.</span>' : tr == null ? '<span class="none">Loading its traffic…</span>'
+        : tr.length ? tr.slice(0, 60).map(r => `<span class="cs" data-cac="${esc(String(r.id))}" data-cin="${k}">${esc(r.cs || '----')}</span>` +
+          `<span class="d" data-cac="${esc(String(r.id))}" data-cin="${k}">${esc(r.type || '')}</span>` +
+          `<span data-cac="${esc(String(r.id))}" data-cin="${k}">${fl(r)}</span><span></span>`).join('') +
+          (tr.length > 60 ? `<span class="none">and ${tr.length - 60} more</span>` : '')
+        : '<span class="none">No aircraft in its airspace.</span>'}</div>` : '');
+  }).join('');
 }
 async function loadAtc() {
   if (!has('atc') || Date.now() - atcT < 60000) return; atcT = Date.now();
