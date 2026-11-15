@@ -51,7 +51,7 @@ def init(site, providers):
     page = page.replace("<title>livescope</title>", f"<title>{html.escape(SITE['title'])}</title>", 1)
     page = page.replace("<script>\n", "<script>\nconst SITE = " + json.dumps(client).replace("</", "<\\/") + ";\n", 1).encode()
     files = {"/": (page, "text/html; charset=utf-8"), "/live": (page, "text/html; charset=utf-8")}
-    for f in ("lines.json", "ksfo.json"):
+    for f in ("lines.json", "ksfo.json", "centers.json"):
         files["/live/" + f] = (open(os.path.join(HERE, "web", "geo", f), "rb").read(), "application/json")
     files["/live/major.json"] = (json.dumps(AIRPORTS.major, separators=(",", ":")).encode(), "application/json")
     for path, (body, ctype) in files.items():

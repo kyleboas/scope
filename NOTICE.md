@@ -5,6 +5,10 @@ feeds are in that site's NOTICE):
 
 - **Airports, runways and frequencies** are from OurAirports (public domain, <https://ourairports.com/data/>).
 - **Coastlines, borders and state/province lines** are from Natural Earth (public domain, <https://www.naturalearthdata.com>).
+- **Center airspaces** (ARTCC and FIR boundaries, `web/geo/centers.json`, from `tools/build_centers.py`) are the VATSpy Data
+  Project's (VATSIM, <https://github.com/vatsimnetwork/vatspy-data-project>), under Creative Commons Attribution-ShareAlike 4.0
+  (<https://creativecommons.org/licenses/by-sa/4.0/>); `centers.json` is an adaptation (coordinates rounded to 0.01°) under the
+  same licence. They follow the real boundaries closely but aren't official. Not for navigation.
 - **US SIDs, STARs and approaches** are from FAA CIFP (U.S. Government work, public domain; cycle 2611). Not for navigation.
 - **ILS and localizers** (`livedata/ils.json`) are from Robin A. Peel's navaid database (data cycle 2013.10, as shipped by
   FlightGear), © 2013 Robin A. Peel, under the GNU General Public License v2 or later:
