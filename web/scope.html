@@ -329,8 +329,8 @@ const R_NM = 3440.065, D2R = Math.PI / 180;
 const FONT = px => `bold ${px * dpr()}px ui-monospace, Menlo, Consolas, monospace`;
 const PHONE = matchMedia('(max-width: 820px), (max-height: 500px)');
 // aircraft data tags' text size, in the layers menu: − / + a pixel at a time (the callsign line; the rest a pixel under), remembered;
-// left alone, 7 on phones (where tags crowd) and 11 elsewhere. Tapping the number goes back to that
-const TAG_MIN = 4, TAG_MAX = 18, tagDefault = () => PHONE.matches ? 7 : 11;
+// left alone, 8 on phones (where tags crowd) and 11 elsewhere. Tapping the number goes back to that
+const TAG_MIN = 4, TAG_MAX = 18, tagDefault = () => PHONE.matches ? 8 : 11;
 let tagPx = (() => { try { return +localStorage.getItem(KEY + '-tagpx') || null; } catch (e) { return null; } })();
 const tagSize = () => tagPx || tagDefault();
 const TAG = px => Math.max(TAG_MIN, px - 11 + tagSize());
@@ -348,7 +348,7 @@ const PROC_SEL = '#4fb3ff';
 // map layers, as on atcscope (the stack button, bottom left; remembered). Layers icon: Tabler Icons (MIT)
 // grouped under small headings; a third field names the layer an item hangs off (indented, dimmed while that's off)
 const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['allproc', 'Not in use per the ATIS'], ['nearby', 'At nearby airports'],
-                ['#', 'Navigation'], ['fixes', 'Fixes'], ['fixnames', 'Names', 'fixes'], ['rings', 'Range rings'], ['finals', 'Extended finals and ILS'],
+                ['#', 'Navigation'], ['fixes', 'Fixes'], ['fixnames', 'Names', 'fixes'], ['rings', 'Range rings'], ['finals', 'Extended finals and ILS'], ['ilsnames', 'ILS names and frequencies', 'finals'],
                 ['#', 'Airports'], ['airports', 'Airports'], ['aptnames', 'Names', 'airports'], ['small', 'Small airports and strips'], ['runways', 'Runways'],
                 ['diagram', 'FAA airport diagrams (US)'], ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'], ['gatenames', 'Gate and terminal names', 'taxi'],
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
@@ -358,9 +358,10 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Weather'], ['radar', 'Radar'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
 const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
-const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:false, aptnames:false, small:true, runways:true,
+const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, ilsnames:true, airports:true, aptnames:false, small:true, runways:true,
             finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
             radar:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
+const APT_FAR = 150;                   // view half-width (nm) past which only the picked airport is drawn
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -391,8 +392,8 @@ function makeScope(v) {
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   s.save = () => { try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
-  // lv: the saved layers' version; before 2 airports were on by default, so a saved "on" from then is dropped (off, the picked airport only)
-  try { const o = JSON.parse(localStorage.getItem(lkey) || '{}'); if (!(o.lv >= 2)) delete o.airports; Object.assign(s.L, o, { lv: 2 }); } catch (e) {}
+  // lv: the saved layers' version; airports went back on by default in 3, so a saved "off" from before is dropped once
+  try { const o = JSON.parse(localStorage.getItem(lkey) || '{}'); if (!(o.lv >= 3)) delete o.airports; Object.assign(s.L, o, { lv: 3 }); } catch (e) {}
   const lp = el.querySelector('.layers');
   const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram') && (has('wx') || !WX_KEYS.includes(k))));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
@@ -735,6 +736,7 @@ function drawMap() {
     if (!close && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
     if (!L.airports && !mineApt(a[0])) continue;
+    if (view.half > APT_FAR && !mineApt(a[0])) continue;   // zoomed out that far: no airport boxes (the picked airport's still shows)
     // runways reach a few nm from the airport's reference point: keep it while they can still be on screen
     const rw = a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
     const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -m || y < -m || x > P0.w + m || y > P0.h + m) continue;
@@ -771,7 +773,7 @@ function drawFinals(c) {
       else continue;
       const s10 = dest(s0[0], s0[1], b, 10); geoLine(c, [s0, s10], COL.final, [10, 6]);
       for (const n of [5, 10]) { const m = dest(s0[0], s0[1], b, n); geoLine(c, [dest(m[0], m[1], b + 90, 0.3), dest(m[0], m[1], b - 90, 0.3)], COL.final); }
-      if (loc && view.half < (mine ? 20 : 8)) { const [x, y, z] = proj(...dest(s0[0], s0[1], b, 10.6)); if (z > 0) {
+      if (loc && L.ilsnames && view.half < (mine ? 20 : 8)) { const [x, y, z] = proj(...dest(s0[0], s0[1], b, 10.6)); if (z > 0) {
         c.fillStyle = COL.finalTxt; c.textAlign = 'center'; c.fillText(`${loc[0]} ${end} ${loc[2].toFixed(2)}`, x, y + 3*d); c.textAlign = 'left'; } }
     }
   }
@@ -1284,6 +1286,7 @@ function hitAirports(mx, my, r) {      // every airport drawn within r px, neare
     if (view.half >= 80 && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
     if (!L.airports && !mine) continue;
+    if (view.half > APT_FAR && !mine) continue;
     if (SITE.airports && !SITE.airports.includes(a[0])) continue;    // a site that only covers some airports: the rest can't be picked
     const [x, y, z] = proj(a[5], a[6]); if (z < 0) continue; const dd = Math.hypot(x - mx, y - my); if (dd < R) out.push([dd, a]); }
   return out.sort((p, q) => p[0] - q[0]).map(x => x[1]);
