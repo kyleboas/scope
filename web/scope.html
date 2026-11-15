@@ -209,8 +209,8 @@
   #bdp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(460px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); display:flex; flex-direction:column; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0 6px; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
   #bdp[hidden] { display:none; } #bdp .dim { color:var(--dim); } #bdp .bh { padding:0 8px 4px 12px; } #bdp .bh b { color:var(--fg); font-size:13px; } #bdp .x { float:right; padding:0 4px; }
-  #bdp .pk { padding:0 12px 4px; white-space:normal; } #bdp .pk b { color:var(--fg); font-weight:600; }
-  #bdp .bc { position:relative; flex:none; height:150px; margin:0 6px; touch-action:none; } #bdp .bc canvas { display:block; width:100%; height:100%; }
+  #bdp .pk { padding:0 12px 6px; white-space:normal; } #bdp .pk b { color:var(--fg); font-weight:600; }
+  #bdp .bc { position:relative; flex:none; height:120px; margin:0 6px; touch-action:none; } #bdp .bc canvas { display:block; width:100%; height:100%; }
   #bdp .tip { position:absolute; top:2px; pointer-events:none; background:#1c1c1e; border:1px solid var(--line); border-radius:5px; padding:2px 7px; font:11px/1.4 var(--mono); color:var(--fg); white-space:nowrap; }
   #bdp .tip[hidden] { display:none; } #bdp .tip i { font-style:normal; color:var(--dim); }
   #bdp .lg { display:flex; flex-wrap:wrap; gap:2px 12px; padding:4px 12px 6px; font-size:11px; color:var(--dim); } #bdp .lg span { display:inline-flex; align-items:center; gap:5px; }
@@ -3714,14 +3714,13 @@ function lsFormat(text, hits) {
 }
 
 // ------------------------------------------------------------------ the airport's board (feature 'board'): its departures and
-// arrivals, and its traffic by the hour, 12 h back to 12 h ahead (when it's busiest). The server's /api/live/board gives the hours
+// arrivals, and its traffic by the hour for the next 12 h (when it's busiest). The server's /api/live/board gives the hours
 // (movements seen in the world recording, OpenSky; flights filed with the FAA ahead, US) and the rows (FAA TFMS, else seen); the
 // aircraft on the scope add what they're doing now (inbound and its ETA, taxiing).
 let BD = null, bdTab = 'dep', bdHover = null, bdScrolled = '';
 const BD_ARR = '#3987e5', BD_DEP = '#d95926';
 const bdOpen = () => !$('bdp').hidden;
 const bdZ = t => { const d = new Date(t * 1000); return String(d.getUTCHours()).padStart(2, '0') + String(d.getUTCMinutes()).padStart(2, '0') + 'Z'; };
-const bdLocal = t => new Date(t * 1000).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
 function bdInit() {
   const b = $('bdBtn');
   b.onclick = () => { const p = $('bdp'); p.hidden = !p.hidden; if (!p.hidden) { bdScrolled = ''; bdLoad(); } };
@@ -3770,27 +3769,24 @@ function bdRender() {
   if (BD.err) { p.innerHTML = head + `<div class="note">${esc(BD.err)}</div>`; $('bdX').onclick = () => { p.hidden = true; }; return; }
   const now = Date.now() / 1000, rows = bdRows(bdTab), arrive = bdTab === 'arr';
   const fc = bdForecast(), pk = fc.peak;
-  const busy = pk ? `Busiest in the next 12 h: <b>${bdZ(pk.h).slice(0, 2)}–${bdZ(pk.h + 3600).slice(0, 2)}Z</b> <span class="dim">(${bdLocal(pk.h)} your time)</span>, about <b>${Math.round(pk.v)}</b> movements` +
-    `<span class="dim"> · ${pk.how}</span>` : '<span class="dim">Not enough seen yet to say when it’s busiest.</span>';
+  const busy = pk ? `Busiest: <b>${bdZ(pk.h).slice(0, 2)}–${bdZ(pk.h + 3600).slice(0, 2)}Z</b> <span class="dim">· ~${Math.round(pk.v)} flights</span>`
+    : '<span class="dim">Not enough data yet to say when it’s busiest.</span>';
   const st = r => {
-    const live = r.live && S && S.aircraft.find(a => a.id === r.live);
-    const word = { scheduled:'scheduled', departed:'departed', 'en route':'en route', landed:'landed', cancelled:'cancelled', approach:'on approach', inbound:'inbound', taxiing:'taxiing', 'taxiing in':'taxiing in', 'at the gate':'at the gate' }[r.st] || r.st;
-    const mins = r.t > now && (r.st === 'approach' || r.st === 'inbound') ? ` ${Math.max(1, Math.round((r.t - now) / 60))} min` : '';
-    return `<span class="s-${r.st.replace(/ /g, '')}">${esc(word)}${mins}</span>${live ? ' <i>on scope</i>' : ''}`;
+    const word = { approach:'approach', 'at the gate':'at gate' }[r.st] || r.st;
+    const mins = r.t > now && (r.st === 'approach' || r.st === 'inbound') ? ` ${Math.max(1, Math.round((r.t - now) / 60))}m` : '';
+    return `<span class="s-${r.st.replace(/ /g, '')}">${esc(word)}${mins}</span>`;
   };
   let nowAt = rows.findIndex(r => r.t >= now - 300); if (nowAt < 0) nowAt = rows.length;
   const list = rows.length ? rows.map((r, i) => (i === nowAt ? '<div class="now">now</div>' : '') +
-      `<div class="r${r.t < now - 300 ? ' past' : ''}${r.live ? ' lv' : ''}"${r.live ? ` data-bsel="${esc(r.live)}"` : ''} title="${r.sched && Math.abs(r.sched - r.t) > 300 ? 'planned ' + bdZ(r.sched) + ' · ' : ''}${r.src === 'filed' ? 'FAA flight plan (TFMS)' : r.src === 'seen' ? 'seen by OpenSky' : 'on the scope now'}">` +
+      `<div class="r${r.t < now - 300 ? ' past' : ''}${r.live ? ' lv' : ''}"${r.live ? ` data-bsel="${esc(r.live)}"` : ''}>` +
       `<span>${bdZ(r.t)}</span><b>${esc(r.cs || (r.hex || '').toUpperCase())}</b><span>${esc(r.apt || '')}</span><span>${st(r)}</span></div>`).join('') + (nowAt === rows.length ? '<div class="now">now</div>' : '')
-    : `<div class="note">No ${arrive ? 'arrivals' : 'departures'} ${BD.filed ? 'filed or seen' : 'seen'} from an hour ago to 12 h ahead.</div>`;
-  const nd = (BD.dep || []).filter(r => r.t >= now).length, na = (BD.arr || []).filter(r => r.t >= now).length;
+    : `<div class="note">No ${arrive ? 'arrivals' : 'departures'} known.</div>`;
   p.innerHTML = head + `<div class="pk">${busy}</div>` +
-    `<div class="bc"><canvas aria-label="Departures and arrivals each hour, 12 hours back to 12 ahead"></canvas><div class="tip" hidden></div></div>` +
-    `<div class="lg"><span><i style="background:${BD_ARR}"></i>Arrivals</span><span><i style="background:${BD_DEP}"></i>Departures</span><span><i class="ty"></i>Usual (the same hours, last 2 days)</span><span><i class="fa"></i>Faded: the usual, few filed yet</span></div>` +
-    `<div class="tb"><button data-bt="dep" class="${arrive ? '' : 'on'}">DEPARTURES${nd ? ` <i>${nd}</i>` : ''}</button><button data-bt="arr" class="${arrive ? 'on' : ''}">ARRIVALS${na ? ` <i>${na}</i>` : ''}</button></div>` +
+    `<div class="bc"><canvas aria-label="Departures and arrivals each hour, the next 12 hours"></canvas><div class="tip" hidden></div></div>` +
+    `<div class="lg"><span><i style="background:${BD_ARR}"></i>Arrivals</span><span><i style="background:${BD_DEP}"></i>Departures</span>${BD.filed ? '' : '<span><i class="ty"></i>Usual</span>'}</div>` +
+    `<div class="tb"><button data-bt="dep" class="${arrive ? '' : 'on'}">DEPARTURES</button><button data-bt="arr" class="${arrive ? 'on' : ''}">ARRIVALS</button></div>` +
     `<div class="rh"><span>TIME</span><span>FLIGHT</span><span>${arrive ? 'FROM' : 'TO'}</span><span>STATUS</span></div><div class="bl">${list}</div>` +
-    `<div class="note">${BD.filed ? 'Times ahead are the FAA’s filed flight plans (wheels off and on); airlines file a few hours ahead, so later hours fill in as they do. ' : 'No filed flight plans here (the FAA’s only cover the US), so the hours ahead are what’s usual: the same hours on the last two days. '}` +
-    `Hours behind are takeoffs and landings OpenSky saw (every 90 s, not every airport’s ground), each about 20 min after the hour ends${BD.seen_h < 48 ? ` (${BD.seen_h} of 48 h so far)` : ''}.</div>`;
+    `<div class="note">${BD.filed ? 'FAA filed flight plans' : `Usual traffic: the same hours over the last 2 days, as seen by OpenSky${BD.seen_h < 24 ? ` (${BD.seen_h} h counted so far)` : ''}`}</div>`;
   $('bdX').onclick = () => { p.hidden = true; };
   p.querySelectorAll('[data-bt]').forEach(b => b.onclick = () => { bdTab = b.dataset.bt; bdScrolled = ''; bdRender(); });
   p.querySelectorAll('[data-bsel]').forEach(el => el.onclick = () => select(el.dataset.bsel));
@@ -3799,14 +3795,14 @@ function bdRender() {
   bdChart();
 }
 function bdForecast() {                  // each hour's bars, and the busiest hour ahead
-  const hs = BD.hours.map((x, i) => {
+  const hs = BD.hours.map((x, i) => [x, i]).filter(([x]) => x.h >= BD.now_h).map(([x, i]) => {
     const ty = BD.typical[i], tyv = ty && ty.dep != null ? ty.dep + ty.arr : null, ahead = x.h >= BD.now_h;
     let arr = x.arr, dep = x.dep, src = x.src;
-    if (ahead && tyv != null && (arr == null || arr + dep < tyv * .5)) { arr = ty.arr; dep = ty.dep; src = 'usual'; }   // little filed yet: show the usual
-    return { h: x.h, arr, dep, src, ty: tyv, ahead, filed: x.src === 'filed' ? x.arr + x.dep : null };
+    if (!BD.filed && tyv != null) { arr = ty.arr; dep = ty.dep; src = 'usual'; }   // nothing filed (outside the US): the usual
+    return { h: x.h, arr, dep, src, ty: BD.filed ? null : tyv, ahead };
   });
   let peak = null;
-  for (const x of hs) if (x.ahead && x.arr != null) { const v = Math.max(x.arr + x.dep, x.ty || 0); if (v > 0 && (!peak || v > peak.v)) peak = { h: x.h, v, how: x.src === 'usual' ? 'as usual at this hour' : x.ty != null && x.ty > x.arr + x.dep ? 'as usual at this hour (fewer filed so far)' : 'filed with the FAA' }; }
+  for (const x of hs) if (x.arr != null) { const v = x.arr + x.dep; if (v > 0 && (!peak || v > peak.v)) peak = { h: x.h, v }; }
   return { hs, peak };
 }
 function bdChart() {
@@ -3829,7 +3825,7 @@ function bdChart() {
     c.fill(); c.globalAlpha = 1; };
   hs.forEach((x, i) => {
     if (x.arr == null) return;
-    const x0 = X(i) - bw / 2, a = x.src === 'usual' ? .35 : x.ahead ? .8 : 1, hov = bdHover === i;
+    const x0 = X(i) - bw / 2, a = bdHover == null || bdHover === i ? 1 : .55, hov = false;
     seg(x0, 0, x.arr, BD_ARR, hov ? 1 : a, !x.dep); seg(x0, x.arr, x.arr + x.dep, BD_DEP, hov ? 1 : a, true);
   });
   // the usual: a dashed step line along the hours' totals on the last two days
@@ -3842,19 +3838,16 @@ function bdChart() {
   c.strokeStyle = 'rgba(242,242,247,.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(xn) + .5, T0 - 4); c.lineTo(Math.round(xn) + .5, H - B0); c.stroke();
   c.fillStyle = '#f2f2f7'; c.textAlign = 'left'; c.fillText('now', Math.min(W - R0 - 22, xn + 4), T0);
   c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = '#98989f';
-  hs.forEach((x, i) => { const hh = new Date(x.h * 1000).getUTCHours(); if (hh % 3 === 0) c.fillText(String(hh).padStart(2, '0') + 'Z', X(i) - cw / 2, H - 4); });
+  hs.forEach((x, i) => { const hh = new Date(x.h * 1000).getUTCHours(); if (hh % 3 === 0) c.fillText(String(hh).padStart(2, '0') + 'Z', X(i), H - 4); });
   const tip = box.querySelector('.tip');
   if (bdHover == null || !hs[bdHover]) { tip.hidden = true; return; }
   const x = hs[bdHover];
-  tip.innerHTML = `<i>${bdZ(x.h).slice(0, 2)}–${bdZ(x.h + 3600).slice(0, 2)}Z · ${bdLocal(x.h)} your time</i><br>` +
-    (x.arr == null ? 'not seen' : `<span style="color:${BD_ARR}">■</span> ${Math.round(x.arr)} arrivals · <span style="color:${BD_DEP}">■</span> ${Math.round(x.dep)} departures` +
-      ` <i>· ${x.src === 'seen' ? 'seen' : x.src === 'filed' ? 'filed' : 'usual'}</i>`) +
-    (x.src === 'usual' && x.filed != null ? `<br><i>${x.filed} filed so far</i>` : '') + (x.ty != null && x.src !== 'usual' ? `<br><i>usually ${Math.round(x.ty)}</i>` : '');
+  tip.innerHTML = `<i>${bdZ(x.h).slice(0, 2)}Z</i> ` + (x.arr == null ? 'no data' : `${Math.round(x.arr)} arr · ${Math.round(x.dep)} dep`);
   tip.hidden = false; const tw = tip.offsetWidth, xc = X(bdHover); tip.style.left = Math.max(2, Math.min(W - tw - 2, xc + 12 > W - tw - 2 ? xc - tw - 12 : xc + 12)) + 'px';
 }
 {
   const p = $('bdp');
-  const at = e => { const box = p.querySelector('.bc'); if (!box || !BD || !BD.hours) return null; const r = box.getBoundingClientRect(), cw = (r.width - 34) / BD.hours.length, i = Math.floor((e.clientX - r.left - 28) / cw); return i >= 0 && i < BD.hours.length ? i : null; };
+  const at = e => { const box = p.querySelector('.bc'); if (!box || !BD || !BD.hours) return null; const n = BD.hours.filter(x => x.h >= BD.now_h).length, r = box.getBoundingClientRect(), cw = (r.width - 34) / n, i = Math.floor((e.clientX - r.left - 28) / cw); return i >= 0 && i < n ? i : null; };
   p.addEventListener('pointermove', e => { const i = e.target.closest('.bc') ? at(e) : null; if (i !== bdHover) { bdHover = i; if (BD && BD.hours) bdChart(); } });
   p.addEventListener('pointerleave', () => { if (bdHover != null) { bdHover = null; if (BD && BD.hours) bdChart(); } });
   addEventListener('resize', () => { if (bdOpen() && BD && BD.hours) bdChart(); });
