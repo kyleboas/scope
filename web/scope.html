@@ -152,19 +152,7 @@
   /* timelapses: the panel (header button) and the playback bar */
   #tlBtn.back, #tlBtn.back.on { color:var(--fg); white-space:nowrap; }
   #tlBtn { display:flex; align-items:center; gap:5px; } #tlBtn svg { width:14px; height:14px; } #tlBtn.on { color:#ff9f0a; }
-  /* play (the header's ▶): its bar and the aircraft card's instructions */
-  #playBtn { display:flex; align-items:center; } #playBtn svg { width:14px; height:14px; } #playBtn.on { color:#ff9f0a; } #playBtn:disabled { opacity:.35; cursor:default; background:none; color:var(--dim); }
-  #pgbar { position:absolute; left:50%; transform:translateX(-50%); top:var(--top); z-index:3; display:flex; align-items:center; gap:4px; max-width:calc(100% - 16px); box-sizing:border-box;
-           background:rgba(20,20,22,.92); border:1px solid var(--line); border-radius:8px; padding:3px 6px; font:11px var(--mono); color:var(--fg2); white-space:nowrap; }
-  #pgbar[hidden] { display:none; } #pgbar b { color:#ff9f0a; font-weight:normal; padding:0 4px; } #pgbar [data-pg=play] { width:3ch; color:var(--fg); }
-  #pgbar .sp { display:flex; } #pgbar .sp button { padding:4px 4px; font-size:11px; } #pgbar .sp button.on { color:#ff9f0a; }
-  #pgbar > * { flex:none; } #pgbar .st { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; padding:0 4px; color:var(--dim); } #pgbar .st.msg { color:#ffd166; }
-  body.pg #gnote { top:calc(var(--top) + 36px); }
-  #card .pgc { display:grid; grid-template-columns:auto 1fr; gap:4px 8px; align-items:center; margin:6px 0 2px; }
-  #card .pgc > span { color:var(--dim); } #card .pgc > div { display:flex; flex-wrap:wrap; gap:2px; align-items:center; }
-  #card .pgc select, #card .pgc input { background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:3px 5px; font:12px var(--mono); min-width:0; }
-  #card .pgc input { width:5ch; text-align:center; } #card .pgc button { padding:3px 6px; color:var(--fg2); } #card .pga button.on { color:#ff9f0a; }
-  #card .pgn { color:var(--dim); font-size:11px; white-space:normal; margin-top:4px; }
+  #playBtn { display:flex; align-items:center; } #playBtn svg { width:14px; height:14px; } #playBtn:disabled { opacity:.35; cursor:default; background:none; color:var(--dim); }
   #tlp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
   #tlp[hidden], #tlbar[hidden] { display:none; }
@@ -305,7 +293,6 @@
   <div id="atcp" hidden></div>
   <div id="lsp" hidden></div>
   <div id="tlbar" hidden></div>
-  <div id="pgbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
   <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category), or hidden with OTHERS">
     <button data-f="all">ALL</button><button data-f="arr">ARR</button><button data-f="dep">DEP</button><button data-f="both">ARR+DEP</button><button data-h title="With ARR / DEP on: show the other aircraft greyed out, or hide them so only its arrivals and departures are on the scope">OTHERS</button>
@@ -1173,7 +1160,7 @@ function uiBoxes(s) {
   const now = performance.now(); if (s.uiT && now - s.uiT < 500) return s.ui;
   s.uiT = now; s.ui = [];
   const r = s.cv.getBoundingClientRect(), d = dpr(), pad = 4;
-  const els = [...document.querySelectorAll('header > *, #flt > button, #tlbar, #pgbar, #gnote'), ...s.el.querySelectorAll('.views > button')];
+  const els = [...document.querySelectorAll('header > *, #flt > button, #tlbar, #gnote'), ...s.el.querySelectorAll('.views > button')];
   for (const e of els) {
     if (!e.offsetWidth || !e.offsetHeight) continue;
     let b = e.getBoundingClientRect();
@@ -1733,7 +1720,7 @@ function drawFlight() {
 
 // ------------------------------------------------------------------ frame
 function frame() {
-  if (RP) tlStep(); else if (PG) pgStep();
+  if (RP) tlStep();
   if (mapKey === '') { for (const s of scopes) s.key = ''; mapKey = 'ok'; }
   for (const s of scopes) {
     if (!s.cv.width || !s.cv.height || !s.el.offsetWidth) continue;
@@ -1741,7 +1728,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], apt && apt[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (PG) pgDraw(s); tagDone(s); if (measure && measure.s === s) drawMeasure();
+    tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); tagDone(s); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
@@ -1812,10 +1799,8 @@ function onInput() {
 onCv('contextmenu', e => e.preventDefault());
 onCv('pointerdown', e => {
   cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); clearTimeout(longT);
-  if (pts.size === 2) { drag = null; mDrag = null; pgVec = null; const [a, b] = [...pts.values()]; pinch = { d:Math.hypot(a[0]-b[0], a[1]-b[1]) || 1, half:view.half }; return; }
+  if (pts.size === 2) { drag = null; mDrag = null; const [a, b] = [...pts.values()]; pinch = { d:Math.hypot(a[0]-b[0], a[1]-b[1]) || 1, half:view.half }; return; }
   if (e.button === 2 || e.shiftKey) { startMeasure(e); return; }
-  if (PG) { const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, e.pointerType === 'touch' ? 24 : 14);   // playing: dragging an aircraft gives it an instruction
-    if (h && h.a.pg) { drag = null; pgVec = { s: active, id: h.a.id, x: mx, y: my, sx: e.clientX, sy: e.clientY, moved: false }; return; } }
   drag = { sx:e.clientX, sy:e.clientY, moved:false, hadMeasure:!!measure };
   if (e.pointerType === 'touch') longT = setTimeout(() => { if (drag && !drag.moved && pts.size === 1) { startMeasure(e); navigator.vibrate && navigator.vibrate(15); } }, 450);
 });
@@ -1826,7 +1811,6 @@ onCv('pointermove', e => {
     const mx = ((a[0] + b[0]) / 2 - r.left) * dpr(), my = ((a[1] + b[1]) / 2 - r.top) * dpr();
     zoomAt(mx, my, pinch.half * pinch.d / (Math.hypot(a[0]-b[0], a[1]-b[1]) || 1) / view.half); return; }
   if (mDrag === e.pointerId && measure) { const p = measurePt(e); if (p) measure.b = p; return; }
-  if (pgVec && prev) { [pgVec.x, pgVec.y] = canvasXY(e); if (Math.hypot(e.clientX - pgVec.sx, e.clientY - pgVec.sy) > 6) pgVec.moved = true; return; }
   if (!drag) { if (e.pointerType === 'mouse') { const [mx, my] = canvasXY(e), h = hitAircraft(mx, my, 16); hover = h ? h.a.id : null;
     worldHover = !h && worldPts.length && worldDrawn() ? hitWorld(mx, my) : null;
     boatHover = !h && !worldHover ? hitBoat(mx, my, 12) : null; cv.style.cursor = h || boatHover ? 'pointer' : ''; } return; }
@@ -1837,7 +1821,6 @@ onCv('pointermove', e => {
 function endPointer(e) {
   if (!pts.has(e.pointerId)) return;
   pts.delete(e.pointerId); if (pts.size < 2) pinch = null; clearTimeout(longT);
-  if (pgVec && !pts.size) { const v = pgVec; pgVec = null; if (e.type !== 'pointercancel') { if (v.moved) pgDrop(v); else select(v.id); } return; }
   if (mDrag === e.pointerId) { mDrag = null; cv.style.cursor = ''; if (measure && gc(measure.a.lat, measure.a.lon, measure.b.lat, measure.b.lon) < 1e-4) measure = null; return; }
   if (pts.size || !drag) return;
   const dg = drag; drag = null;
@@ -1900,8 +1883,6 @@ window.addEventListener('keydown', e => {
   if (e.key === '+' || e.key === '=') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1 / 1.4); use(scopes[0]); }
   if (e.key === '-' || e.key === '_') { use(zs); zoomAt(cv.width / 2, cv.height / 2, 1.4); use(scopes[0]); }
   if (e.key === '/') { e.preventDefault(); $('q').focus(); }
-  if (PG && e.key === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); PG.paused = !PG.paused; PG.last = performance.now(); pgBar(); }
-  if (e.key === 'Escape' && pgVec) { pgVec = null; return; }
   if (RP && e.key === ' ' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); tlPlay(!RP.playing); }
   if (RP && SITE.tl_bar === 'strip' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); tlSkip(e.key === 'ArrowLeft' ? -10 : 10); }
 });
@@ -1938,17 +1919,50 @@ function updateSide() {
   b.classList.toggle('noApt', !home); b.classList.toggle('noCard', $('card').style.display === 'none');
   b.classList.toggle('sideShut', !!home && homeCardShut && !sel);   // the airport card closed with ✕: no side panel (the Info button reopens it on phones)
   if (!home && !sel) b.classList.remove('listOpen');
-  $('playBtn').disabled = !home && !PG;
+  playUpd();
   metarHead(); $('listBtn').textContent = home ? home[0] : 'Info'; $('listBtn').title = home ? `${home[0]} information (the airport's card)` : '';
   $('listBtn').classList.toggle('on', small.matches ? b.classList.contains('listOpen') : !!home && !homeCardShut && !sel);
   if (b.className !== was) resize();
 }
+// ---------------------------------------------------------------- play: the screen's traffic, worked in playscope
+// ▶ takes the aircraft on the screen around the picked airport (live, or the timelapse at the frame shown) to
+// playscope, which starts each from where it was. playscope flies KSFO only, so it's on there.
+const PLAY_URL = 'https://playscope.kyleboas.com/';
+const playApt = () => !!home && /^K?SFO$/.test(home[0]);
+function playUpd() { const b = $('playBtn'), ok = playApt();
+  b.disabled = !ok; b.title = ok ? 'Play: work the traffic on this screen yourself in playscope' : 'Play: pick KSFO (playscope flies San Francisco)'; }
+function playSnap() {
+  const nm = Math.min(60, Math.max(20, viewNm())), t = S && S.t || Date.now() / 1000, ac = [];
+  for (const a of (S && S.aircraft) || []) {
+    if (a.sq === '1200') continue;
+    const [la, lo, trk] = pos(a); if (gc(home[5], home[6], la, lo) > nm || gc(view.lat, view.lon, la, lo) > viewNm() * 1.1) continue;
+    const r = routeOf(a), fit = r && routeFits(a, r);
+    ac.push([a.cs || a.id, a.type || '', +la.toFixed(4), +lo.toFixed(4), Math.round(a.alt || 0), Math.round(a.gs || 0), Math.round(trk ?? a.hdg ?? 0),
+      Math.round(a.vs || 0), a.ground ? 1 : 0, a.cat || '', fit && r[0] || '', fit && r[3] || '']);
+  }
+  return { ap: 'KSFO', t: Math.round(t), ac };
+}
+$('playBtn').innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l12-7z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/></svg>';
+$('playBtn').onclick = async () => {
+  if (!playApt() || !S) return;
+  const w = window.open('', '_blank');           // opened now, while it's still the click (no popup block); filled in below
+  // routes not loaded yet (just opened the page): asked for now, so playscope knows who's landing at KSFO, who left it,
+  // and who's going somewhere else
+  const want = [...new Set(S.aircraft.filter(a => !a.ground && a.cs && /^[A-Z0-9]{2,8}$/i.test(a.cs) && !routes.has(a.cs.toUpperCase())
+    && gc(home[5], home[6], ...pos(a).slice(0, 2)) < 60).map(a => a.cs.toUpperCase()))].slice(0, 80);
+  if (want.length) try {
+    const c = new AbortController(), tm = setTimeout(() => c.abort(), 2500);
+    const j = await (await fetch('/api/live/routes?cs=' + want.join(','), { signal: c.signal })).json(); clearTimeout(tm);
+    for (const [cs, r] of Object.entries(j)) { routes.set(cs, r); routeGot.set(cs, Date.now()); }
+  } catch (e) {}
+  const url = PLAY_URL + '#sit=' + encodeURIComponent(JSON.stringify(playSnap()));
+  if (w) w.location.href = url; else window.open(url, '_blank');
+};
+playUpd();
 function renderCard() { renderCard1(); updateSide(); }
 function renderCard1() {
   const card = $('card'), a = S && sel && S.aircraft.find(o => o.id === sel);
   const acx = card.querySelector('.acx'), acTop = acx ? acx.scrollTop : 0;   // the ACARS list keeps its scroll through redraws
-  if (a && PG) { pgCard(card, a); card.style.display = 'block'; return; }
-  card.dataset.pg = '';
   if (a && has('flight')) {
     const [la, lo] = pos(a), plan = FL && FL.id === a.id && FL.plan, dim = t => `<span style="color:var(--dim)">${t}</span>`;
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)}${a.away ? ' ' + dim(esc(a.state || 'pilot away')) : ''}<br>` +
@@ -2356,7 +2370,7 @@ async function poll() {
   // ARR / DEP filter on and zoomed out past the feed: it's asked around the picked airport instead, so its arrivals and departures stay live
   const aroundHome = fltOn() && viewNm() > MAX_LIVE_NM * 1.05;
   const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && !aroundHome && eachScope(worldShown).every(Boolean);
-  if (RP || PG) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
+  if (RP) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
   else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
     ingest(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadAtc(); }
   else try {
@@ -2369,7 +2383,7 @@ async function poll() {
     s.areas = [[la0, lo0, nm0]];
     if (s.ok) for (const [i, x] of ex.entries()) { if (!x || !x.ok) continue; s.areas.push(more[i]);
       const ids = new Set(s.aircraft.map(a => a.id)); for (const a of x.aircraft) if (!ids.has(a.id)) s.aircraft.push(a); }
-    if (RP || PG) throw 0;                         // a timelapse (or play) started while this was on its way
+    if (RP) throw 0;                               // a timelapse started while this was on its way
     if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; motion.clear(); }
     if (S && s.t !== S.t) {
       const old = new Map(S.aircraft.map(a => [a.id, a]));
@@ -2521,7 +2535,7 @@ function trailDots(a, la, lo) {         // the trail's dots, oldest first, as [l
   if (RP && RP.rec.every_s <= 5 && RP.frames.length) return tlTrail(a.id);
   const h = hist.get(a.id) || [];
   if (!SITE.smooth_trails || RP) return h.slice(-6, -1);
-  const now = PG ? S.t : Date.now() / 1000, pts = [...h.filter(q => q[2] < now), [la, lo, now]], out = [];
+  const now = Date.now() / 1000, pts = [...h.filter(q => q[2] < now), [la, lo, now]], out = [];
   for (let k = 5; k >= 1; k--) {
     const tt = now - 4 * k; let j = pts.length - 1;
     while (j > 0 && pts[j - 1][2] > tt) j--;
@@ -2539,7 +2553,7 @@ let lastHistT = 0;
 const HIST_S = SITE.hist_s || 32, HIST_EVERY = SITE.smooth_trails ? 1 : 4;
 function sampleHist() {
   if (SITE.no_history || !S) return;
-  const t = RP || PG ? S.t : Date.now() / 1000;
+  const t = RP ? S.t : Date.now() / 1000;
   if (t - lastHistT < HIST_EVERY && t >= lastHistT) return;
   lastHistT = t; const ids = new Set();
   for (const a of S.aircraft) { ids.add(a.id); const p = pos(a);
@@ -2561,7 +2575,7 @@ function ingest() {
   if (wAge && wAge > 2 * WORLD.every + 60) $('status').innerHTML += `${S.ok ? '' : ' · '}<span class="bad">worldwide picture ${wAge < 5400 ? Math.round(wAge / 60) + ' min' : Math.round(wAge / 3600) + ' h'} old${WORLD_ERR ? ' (' + esc(WORLD_ERR) + ')' : ''}</span>`;
   if (sel) renderCard();
 }
-setInterval(() => { if (!RP) { if (!PG) $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; sampleHist(); } if (sel) renderCard(); }, 1000);
+setInterval(() => { if (!RP) { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; sampleHist(); } if (sel) renderCard(); }, 1000);
 
 // ------------------------------------------------------------------ servers (infinitescope: Casual / Training / Expert)
 const ERRS = { 'no API key':'no API key on the server yet', 'not approved yet':'API client waiting for approval', busy:'over the API rate limit, retrying', 'rate limited':'rate limited, retrying' };
@@ -2755,7 +2769,7 @@ async function tlOpen(id, fly, pastH) {
   const rec = TL.recs.find(r => r.id === id);
   if (!rec || !(rec.last > rec.first)) { tlErr = !rec ? 'That timelapse is gone.' : 'It needs two snapshots to play; ' + (rec.rec ? tlNext(rec) + '.' : 'it only has one.');
     $('tlp').hidden = false; tlPanel(true); return; }
-  tlClose(true); pgStop(true);
+  tlClose(true);
   // at most ~5000 snapshots in memory: long recordings are thinned (the easing covers the gaps)
   const from = pastH ? Math.max(rec.first, Date.now() / 1000 - pastH * 3600) : rec.first;
   const world = rec.kind === 'world', every = Math.max(1, Math.ceil(((rec.last - from) / rec.every_s + 1) / (world ? 150 : 5000)));
@@ -2948,259 +2962,6 @@ function tlStep() {
   if (now - RP.ing > 400) { RP.ing = now; ingest(); tlBar(); $('clock').textContent = tlClock(RP.t); $('status').innerHTML = RP.fh ? `replay ${esc(RP.rec.name)} · OpenSky, a position every ${fhEvery(RP.fh.every)}` : `timelapse ${esc(RP.rec.name)} · ` + $('status').innerHTML.replace(/ · timelapse$/, ''); }
 }
 
-// ------------------------------------------------------------------ play: work the traffic on the screen yourself
-// The header's ▶ (with an airport picked) takes the aircraft on the screen as they are right now (live, or a timelapse
-// where it is) and hands them to you: from then on they're flown here in the page, not by the feed. Drag an aircraft
-// and let go in open sky for that heading, on a fix for direct, or along one of the airport's extended finals for its
-// approach (the drag's direction is the heading to join it). The aircraft card has heading, altitude, speed, direct and
-// the approaches. Standard-rate turns, 2,000 fpm, about 2 kt a second; one cleared for an approach with no heading
-// given steers itself onto the final and slows down; established, it follows the localizer and a 3° path down and lands (still
-// 600 ft high inside 2.5 nm: it goes around). Two aircraft under 3 nm and 900 ft apart, above 1,000 ft and not both
-// on finals (nor squawking VFR, 1200): CA, counted once a minute a pair. Aircraft on the ground stay where they are. Not in playscope, which has its own simulator.
-let PG = null;      // {apt, nm, src (the aircraft as taken), ac, rp (the timelapse it came from), t0, t (sim s), speed, paused, last, landed, ga, out, ca, pairs, msg, gen}
-let pgVec = null;   // dragging from an aircraft: {s, id, x, y, sx, sy, moved}
-const PG_SPEEDS = [1, 2, 4, 8], PG_GP = 318;     // ft per nm on a 3° path
-const pgElev = () => PG ? PG.apt[7] || 0 : 0;
-const pgHdg = h => String((Math.round(((h % 360) + 360) % 360 / 5) * 5) % 360 || 360).padStart(3, '0');
-const pgAlt = v => v >= 18000 ? 'FL' + Math.round(v / 100) : Math.round(v).toLocaleString();
-function pgRwys() {   // the airport's runway ends: {end, s0 (on the final's line, abeam the threshold), crs (inbound, true), kind, gs}
-  const id = PG ? PG.apt[0] : home && home[0], a = homeInfo && homeInfo[0] === id ? homeInfo : areaAps.get(id), out = [];
-  for (const r of (a && a[9]) || []) for (const [end, t, o, loc] of [[r[0], [r[2], r[3]], [r[4], r[5]], r[7]], [r[1], [r[4], r[5]], [r[2], r[3]], r[8]]]) {
-    if (!end) continue;
-    if (loc) out.push({ end, s0: dest(loc[4], loc[5], (loc[3] + 180) % 360, gc(loc[4], loc[5], t[0], t[1])), crs: loc[3], kind: loc[0] === 'IGS' ? 'ILS' : loc[0], gs: loc[6] || 3 });
-    else if (gc(t[0], t[1], o[0], o[1]) > 0.5) out.push({ end, s0: t, crs: brg(t[0], t[1], o[0], o[1]), kind: 'RNAV', gs: 3 });
-  }
-  return out.sort((p, q) => p.end.localeCompare(q.end, 'en', { numeric: true }));
-}
-function pgFinal(r, la, lo) {   // [nm out along the final (before the threshold: +), nm right of it facing in]
-  const n = (la - r.s0[0]) * 60, e = ((((lo - r.s0[1]) + 540) % 360) - 180) * 60 * Math.cos(la * D2R), c = r.crs * D2R;
-  return [-(n * Math.cos(c) + e * Math.sin(c)), -n * Math.sin(c) + e * Math.cos(c)];
-}
-function pgFixes() { const p = PG && procs.get(PG.apt[0]); return p ? Object.entries(p.f) : []; }
-function pgStart() {
-  if (PG || !home || !S || !S.aircraft) return;
-  const nm = Math.min(MAX_LIVE_NM, viewNm()), list = [];
-  for (const a of S.aircraft) {
-    const [la, lo, trk] = pos(a); if (gc(view.lat, view.lon, la, lo) > nm) continue;
-    list.push({ id: a.id, cs: a.cs || a.id, type: a.type || '', reg: a.reg || '', sq: a.sq || '', hex: a.hex || '', route: a.route, gt: a.gt, cat: a.cat || '',
-      ground: !!a.ground, air: !a.ground, lat: la, lon: lo, hdg: trk ?? a.hdg ?? 0, alt: a.alt || 0, gs: a.gs || 0, vs: a.vs || 0 });
-  }
-  const rp = RP && !RP.fh ? { id: RP.rec.id, pastH: RP.pastH } : null;
-  if (RP) tlClose(true);
-  $('tlp').hidden = true;
-  PG = { apt: home, nm: Math.max(20, nm), src: list, rp, speed: 1, paused: false, gen: 0 };
-  document.body.classList.add('pg'); $('playBtn').classList.add('on'); $('playBtn').title = 'Stop playing: back to ' + (rp ? 'the timelapse' : 'live traffic');
-  pgInit(false);
-}
-function pgInit(again) {          // the aircraft as they were taken, each told to carry on as it is
-  const elev = pgElev(), rw = pgRwys(), wall = Date.now() / 1000;
-  Object.assign(PG, { gen: PG.gen + 1, t0: wall, t: 0, last: performance.now(), landed: 0, ga: 0, out: 0, ca: 0, pairs: new Set(), caSeen: new Map(), msg: null });
-  PG.ac = PG.src.map(o => {
-    const a = { ...o, ts: wall, emer: '', l3: '' };
-    if (a.ground) { a.gs = 0; a.pg = null; return a; }
-    const v = a.vs, step = a.alt >= 18000 ? 1000 : 1000;
-    const alt = v > 500 ? Math.ceil((a.alt + 2000) / step) * step : v < -500 ? Math.max(Math.ceil((elev + 2000) / 1000) * 1000, Math.floor((a.alt - 2000) / step) * step) : Math.round(a.alt / 100) * 100;
-    a.pg = { h: null, turn: 0, fix: null, alt, spd: Math.max(a.gs < 100 ? 0 : 130, Math.round(a.gs / 10) * 10), app: null, est: false };
-    // already on a final, lined up and low enough: it carries on down it
-    let best = 1;
-    for (const r of rw) { const [out, x] = pgFinal(r, a.lat, a.lon), dh = Math.abs((((a.hdg - r.crs) + 540) % 360) - 180);
-      if (out > 0.3 && out < 20 && Math.abs(x) < Math.min(best, 0.8) && dh < 25 && a.alt - elev < out * PG_GP + 1500) { best = Math.abs(x); a.pg.app = r; a.pg.est = true; } }
-    a.vs = 0; pgTag(a); return a;
-  });
-  motion.clear(); if (again) { hist.clear(); lastHistT = 0; }
-  pgConflicts(true);                 // the ones already too close when taken don't count
-  S = { ok: true, t: wall, src: 'play', center: [PG.apt[5], PG.apt[6]], nm: PG.nm, aircraft: PG.ac };
-  pgBar(); $('card').dataset.pg = ''; renderCard(); updateSide();
-}
-function pgStop(quiet) {
-  if (!PG) return;
-  const rp = PG.rp; PG = null; pgVec = null; S = null; motion.clear(); hist.clear();
-  document.body.classList.remove('pg'); $('playBtn').classList.remove('on'); $('playBtn').title = PLAY_TITLE;
-  pgBar(); $('card').dataset.pg = ''; renderCard(); updateSide();
-  if (quiet) return;
-  if (rp) tlOpen(rp.id, false, rp.pastH); else schedule(0);
-}
-function pgNote(t) { if (PG) { PG.msg = [t, performance.now()]; pgBar(); } }
-function pgTag(a) {               // the data block's third line: what it's been told (heading or fix; the altitude and speed it's going to)
-  const g = a.pg; if (!g) { a.l3 = ''; return; }
-  const lat = g.app && g.est ? (g.app.kind === 'RNAV' ? 'R' : 'I') + g.app.end : g.fix ? g.fix[0].slice(0, 5) : g.h != null ? 'H' + pgHdg(g.h) : g.app ? '→' + g.app.end : '';
-  a.l3 = [lat, !g.est && Math.abs(g.alt - a.alt) >= 100 ? a3(g.alt) : '', !g.app && g.spd && Math.abs(g.spd - a.gs) > 5 ? 'S' + Math.round(g.spd / 10) : ''].filter(Boolean).join(' ');
-}
-function pgFly(a, dt) {
-  const g = a.pg, elev = pgElev();
-  for (let left = dt; left > 1e-6; ) {
-    const s = Math.min(1, left); left -= s;
-    let hT = g.h, alt = g.alt, spd = g.spd;
-    if (g.fix) { hT = brg(a.lat, a.lon, g.fix[1], g.fix[2]); if (gc(a.lat, a.lon, g.fix[1], g.fix[2]) < a.gs / 3600 * 2) { g.h = hT; g.fix = null; } }
-    if (g.app) {
-      const r = g.app, [out, x] = pgFinal(r, a.lat, a.lon), dh = Math.abs((((a.hdg - r.crs) + 540) % 360) - 180);
-      if (!g.est && out > 0.3 && Math.abs(x) < 0.6 && dh < 90) { g.est = true; g.h = null; g.fix = null; g.turn = 0; }
-      if (g.est) {
-        const gp = elev + Math.max(0, out) * PG_GP * Math.tan(r.gs * D2R) / Math.tan(3 * D2R);
-        if (out < 0.05) { g.gone = 'landed'; PG.landed++; pgNote(`${a.cs} landed ${r.end}`); return; }
-        if ((out < 2.5 && a.alt - gp > 600) || out < -1) {    // too high to land, or past it: go around, runway heading, 3,000 ft
-          g.app = null; g.est = false; g.h = r.crs; g.alt = Math.round((elev + 3000) / 1000) * 1000; g.spd = 200; PG.ga++; pgNote(`${a.cs} going around`); pgTag(a); continue;
-        }
-        hT = r.crs - Math.max(-30, Math.min(30, x * 60)); alt = Math.min(g.alt, gp);
-      } else if (g.h == null && !g.fix) {                  // cleared with no heading: it joins the final by itself, by way of a base
-        const side = Math.sign(x) || 1, D = Math.min(30, Math.max(8, (Math.min(a.alt, g.alt) - elev) / PG_GP + 4));   // turn 3 nm to the side of it,
-        if (!g.join && out > D - 1 && Math.abs(x) < 5) g.join = side;                                              // far enough out to get down; then a 30° intercept
-        if (!g.join) { const f = dest(r.s0[0], r.s0[1], (r.crs + 180) % 360, Math.max(D, Math.min(D + 7, out))), bp = dest(f[0], f[1], r.crs + 90 * side, 3);
-          hT = brg(a.lat, a.lon, bp[0], bp[1]); if (gc(a.lat, a.lon, bp[0], bp[1]) < 1) g.join = side; }
-        if (g.join) hT = r.crs - g.join * 30;
-      }
-      spd = Math.min(spd || 999, g.est && out < 4 ? 140 : out < 10 ? 170 : 210);   // cleared: it slows down by itself (AIM 4-4-12)
-    }
-    if (hT != null) {
-      let d = (((hT - a.hdg) + 540) % 360) - 180;
-      if (g.turn > 0 && d < -3) d += 360; else if (g.turn < 0 && d > 3) d -= 360;
-      const rt = (a.gs > 250 ? 2 : 3) * s;
-      if (Math.abs(d) <= rt) { a.hdg = (hT + 360) % 360; g.turn = 0; } else a.hdg = (a.hdg + Math.sign(d) * rt + 360) % 360;
-    }
-    const was = a.alt, vr = 2000 / 60 * s;
-    a.alt = Math.abs(alt - a.alt) <= vr ? alt : a.alt + Math.sign(alt - a.alt) * vr;
-    a.vs = Math.round((a.alt - was) / s * 60);
-    if (spd) { const ds = spd - a.gs, k = (ds > 0 ? 2 : 1.5) * s; a.gs = Math.abs(ds) <= k ? spd : a.gs + Math.sign(ds) * k; }
-    if (a.gs > 0) [a.lat, a.lon] = dest(a.lat, a.lon, a.hdg, a.gs / 3600 * s);
-  }
-  if (gc(a.lat, a.lon, PG.apt[5], PG.apt[6]) > PG.nm + 30) { g.gone = 'out'; PG.out++; }
-  pgTag(a);
-}
-function pgConflicts(quiet) {
-  const elev = pgElev(), air = PG.ac.filter(a => a.pg && a.alt - elev > 1000 && a.sq !== '1200'), now = new Set(), hit = new Set(), t = PG.t;
-  for (let i = 0; i < air.length; i++) for (let j = i + 1; j < air.length; j++) {
-    const a = air[i], b = air[j];
-    if (Math.abs(a.alt - b.alt) >= 900 || (a.pg.est && b.pg.est) || Math.abs(a.lat - b.lat) > 0.06 || gc(a.lat, a.lon, b.lat, b.lon) >= 3) continue;
-    const k = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id; now.add(k); hit.add(a.id); hit.add(b.id);
-    if (!quiet && !PG.pairs.has(k) && !(t - (PG.caSeen.get(k) ?? -1e9) < 60)) { PG.ca++; pgNote(`CA: ${a.cs} and ${b.cs}`); }
-    PG.caSeen.set(k, t);
-  }
-  PG.pairs = now;
-  for (const a of PG.ac) a.emer = hit.has(a.id) ? 'CA' : '';
-}
-function pgStep() {
-  const now = performance.now(), dt = PG.paused ? 0 : Math.min(250, now - PG.last) / 1000 * PG.speed, wall = Date.now() / 1000; PG.last = now;
-  if (dt) {
-    PG.t += dt;
-    for (const a of PG.ac) if (a.pg) pgFly(a, dt);
-    if (PG.ac.some(a => a.pg && a.pg.gone)) { PG.ac = PG.ac.filter(a => !(a.pg && a.pg.gone)); if (sel && !PG.ac.some(a => a.id === sel)) select(null); }
-    if (now - (PG.caT || 0) > 500) { PG.caT = now; pgConflicts(); }
-  }
-  for (const a of PG.ac) a.ts = wall;
-  S = { ok: true, t: PG.t0 + PG.t, src: 'play', center: [PG.apt[5], PG.apt[6]], nm: PG.nm, aircraft: PG.ac };   // t: the game's clock (trails)
-  if (now - (PG.ing || 0) > 400) { PG.ing = now; ingest(); pgBar(); $('clock').textContent = new Date((PG.t0 + PG.t) * 1000).toISOString().slice(11, 19) + 'Z'; }
-}
-function pgBar() {
-  const b = $('pgbar'); if (!PG) { b.hidden = true; return; }
-  if (b.hidden || b.dataset.gen !== String(PG.gen)) {
-    b.hidden = false; b.dataset.gen = PG.gen;
-    b.innerHTML = `<b>PLAY ${esc(PG.apt[0])}</b><button data-pg="play" title="Pause / go on (space)"></button><span class="sp">${PG_SPEEDS.map(v => `<button data-sp="${v}">${v}×</button>`).join('')}</span>` +
-      `<span class="st"></span><button data-pg="again" title="Start again from the traffic as it was taken">RESTART</button><button data-pg="x" title="Stop playing">${PG.rp ? 'TIMELAPSE' : 'LIVE'} ✕</button>`;
-    b.querySelector('[data-pg=play]').onclick = () => { PG.paused = !PG.paused; PG.last = performance.now(); pgBar(); };
-    b.querySelector('[data-pg=again]').onclick = () => pgInit(true);
-    b.querySelector('[data-pg=x]').onclick = () => pgStop();
-    b.querySelectorAll('[data-sp]').forEach(x => x.onclick = () => { PG.speed = +x.dataset.sp; pgBar(); });
-  }
-  b.querySelector('[data-pg=play]').textContent = PG.paused ? '▶' : '❚❚';
-  b.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('on', +x.dataset.sp === PG.speed));
-  const m = PG.msg && performance.now() - PG.msg[1] < 5000 ? PG.msg[0] : '', st = b.querySelector('.st');
-  st.classList.toggle('msg', !!m);
-  st.textContent = m || [`${PG.ac.filter(a => a.pg).length} flying`, PG.landed && `${PG.landed} landed`, PG.ga && `${PG.ga} go-around${PG.ga > 1 ? 's' : ''}`,
-    PG.out && `${PG.out} left`, `${PG.ca} CA`].filter(Boolean).join(' · ');
-}
-// a drag from an aircraft: what letting go here would tell it
-function pgTarget(v) {
-  const a = PG && PG.ac.find(o => o.id === v.id); if (!a || !a.pg) return null;
-  const d = dpr(), g = unproj(v.x, v.y); if (!g) return null;
-  const h = brg(a.lat, a.lon, g[0], g[1]);
-  let fix = null, bd = 14 * d;
-  for (const [n, f] of pgFixes()) { const [x, y, z] = proj(f[0], f[1]); if (z < 0) continue; const dd = Math.hypot(x - v.x, y - v.y); if (dd < bd) { bd = dd; fix = [n, f[0], f[1]]; } }
-  if (fix) return { a, fix, text: 'direct ' + fix[0] };
-  const ppn = pxPerNm();
-  let app = null, bx = 12 * d / ppn;                 // the nearest final (parallel runways' are close together)
-  for (const r of pgRwys()) { const [out, x] = pgFinal(r, g[0], g[1]); if (out > 0.5 && out < 25 && Math.abs(x) < bx) { bx = Math.abs(x); app = r; } }
-  return app ? { a, h, app, text: `${pgHdg(h)}° · cleared ${app.kind} ${app.end}` } : { a, h, text: pgHdg(h) + '°' };
-}
-function pgTurn(a, h) {           // the heading, and which way it turns to get there
-  const d = (((h - a.hdg) + 540) % 360) - 180; a.pg.h = Math.round(h / 5) * 5 % 360; a.pg.turn = 0; a.pg.fix = null;
-  return Math.abs(d) < 3 ? 'fly heading' : d > 0 ? 'turn right heading' : 'turn left heading';
-}
-function pgDrop(v) {
-  const t = pgTarget(v); if (!t) return;
-  const a = t.a, g = a.pg;
-  if (t.fix) { g.fix = t.fix; g.h = null; g.app = null; g.est = false; pgNote(`${a.cs} proceed direct ${t.fix[0]}`); }
-  else {
-    if (g.est || t.app) { g.app = t.app || null; g.est = false; g.join = 0; }
-    const w = pgTurn(a, t.h); pgNote(`${a.cs} ${w} ${pgHdg(t.h)}` + (t.app ? `, cleared ${t.app.kind} ${t.app.end}` : ''));
-  }
-  pgTag(a); select(a.id); $('card').dataset.pg = ''; renderCard();
-}
-function pgDraw(s) {
-  if (!pgVec || pgVec.s !== s || !pgVec.moved) return;
-  const a = PG.ac.find(o => o.id === pgVec.id); if (!a) return;
-  const d = dpr(), [px, py] = proj(...pos(a)), t = pgTarget(pgVec);
-  ctx.save(); ctx.font = FONT(9);
-  if (view.half < 60) for (const [n, f] of pgFixes()) fixMark(ctx, n, f[0], f[1], '#6a6a6a', view.half < 30);
-  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.2 * d; ctx.setLineDash([6 * d, 4 * d]);
-  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(pgVec.x, pgVec.y); ctx.stroke(); ctx.setLineDash([]);
-  if (t && t.fix) { ctx.font = FONT(10); fixMark(ctx, t.fix[0], t.fix[1], t.fix[2], '#ffd166', true); }
-  if (t) { ctx.font = FONT(12); const w = ctx.measureText(t.text).width + 10 * d, x = Math.min(pgVec.x + 14 * d, cv.width - w - 4 * d), y = Math.max(pgVec.y - 30 * d, 4 * d);
-    ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(x, y, w, 18 * d); ctx.fillStyle = '#ffd166'; ctx.fillText(t.text, x + 5 * d, y + 13 * d); }
-  ctx.restore();
-}
-// the selected aircraft's card while playing: what it's doing, and its instructions (built once, then kept up to date)
-function pgCard(card, a) {
-  const g = a.pg, key = a.id + '|' + PG.gen;
-  if (card.dataset.pg !== key) {
-    card.dataset.pg = key;
-    const elev = pgElev(), alts = [], spds = [];
-    for (let v = Math.ceil((elev + 1500) / 1000) * 1000; v <= 45000; v += 1000) alts.push(v);
-    for (let v = 130; v <= 350; v += 10) spds.push(v);
-    const fx = pgFixes().map(([n, f]) => [n, gc(a.lat, a.lon, f[0], f[1])]).sort((p, q) => p[1] - q[1]).slice(0, 60);
-    card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br><span class="pgs"></span>` + (g ?
-      `<div class="pgc"><span>HDG</span><div><button data-ph="-10" title="Turn left 10°">◀10</button><input data-pi="h" inputmode="numeric" maxlength="3" placeholder="---" title="Heading, then Enter"><button data-ph="10" title="Turn right 10°">10▶</button></div>` +
-      `<span>ALT</span><select data-ps="alt">${alts.map(v => `<option value="${v}">${pgAlt(v)}</option>`).join('')}</select>` +
-      `<span>SPD</span><select data-ps="spd">${spds.map(v => `<option value="${v}">${v} kt</option>`).join('')}</select>` +
-      `<span>DCT</span><select data-ps="fix"><option value="">${fx.length ? 'fix…' : 'no fixes here'}</option>${fx.map(([n, dd]) => `<option value="${esc(n)}">${esc(n)} · ${dd.toFixed(0)} nm</option>`).join('')}</select>` +
-      `<span>APP</span><div class="pga">${pgRwys().map((r, i) => `<button data-pa="${i}">${esc(r.kind)} ${esc(r.end)}</button>`).join('') || '<i>no runways on file</i>'}</div></div>` +
-      `<div class="pgn">Or drag it: let go in open sky for that heading, on a fix for direct, on a final for the approach.</div>`
-      : '<div class="pgn">On the ground: it stays where it is.</div>');
-    if (g) {
-      const rws = pgRwys();
-      card.querySelectorAll('[data-ph]').forEach(el => el.onclick = () => { const h = (g.h ?? a.hdg) + +el.dataset.ph, w = pgTurn(a, h); g.turn = Math.sign(+el.dataset.ph); if (g.est) { g.app = null; g.est = false; } pgNote(`${a.cs} ${w.replace(/(left|right)/, +el.dataset.ph > 0 ? 'right' : 'left')} ${pgHdg(h)}`); pgTag(a); pgCardNow(card, a); });
-      card.querySelector('[data-pi=h]').onkeydown = e => { if (e.key !== 'Enter') return; const h = +e.target.value; if (!(h >= 1 && h <= 360)) return;
-        if (g.est) { g.app = null; g.est = false; } pgNote(`${a.cs} ${pgTurn(a, h)} ${pgHdg(h)}`); e.target.value = ''; e.target.blur(); pgTag(a); pgCardNow(card, a); };
-      card.querySelector('[data-ps=alt]').onchange = e => { const v = +e.target.value; pgNote(`${a.cs} ${v > a.alt ? 'climb and maintain' : v < a.alt ? 'descend and maintain' : 'maintain'} ${pgAlt(v)}`); g.alt = v; pgTag(a); };
-      card.querySelector('[data-ps=spd]').onchange = e => { g.spd = +e.target.value; pgNote(`${a.cs} ${g.spd > a.gs ? 'increase' : 'reduce'} speed to ${g.spd}`); pgTag(a); };
-      card.querySelector('[data-ps=fix]').onchange = e => { const f = pgFixes().find(([n]) => n === e.target.value); if (!f) return;
-        g.fix = [f[0], f[1][0], f[1][1]]; g.h = null; g.app = null; g.est = false; pgNote(`${a.cs} proceed direct ${f[0]}`); pgTag(a); pgCardNow(card, a); };
-      card.querySelectorAll('[data-pa]').forEach(el => el.onclick = () => { const r = rws[+el.dataset.pa];
-        if (g.app && g.app.end === r.end) { g.app = null; g.est = false; g.h = Math.round(a.hdg); pgNote(`${a.cs} cancel approach clearance, fly heading ${pgHdg(a.hdg)}`); }
-        else { g.app = r; g.est = false; g.join = 0; g.h = null; g.fix = null; pgNote(`${a.cs} cleared ${r.kind} runway ${r.end} approach`); }
-        pgTag(a); pgCardNow(card, a); });
-    }
-    $('cardX').onclick = () => select(null);
-  }
-  pgCardNow(card, a);
-}
-function pgCardNow(card, a) {     // the parts that change
-  const g = a.pg, st = card.querySelector('.pgs'); if (!st) return;
-  st.innerHTML = a.ground ? 'on the ground' : `${pgAlt(a.alt)}${a.alt >= 18000 ? '' : ' ft'}${a.vs > 300 ? ' ↑' : a.vs < -300 ? ' ↓' : ''} · ${Math.round(a.gs)} kt · heading ${pgHdg(a.hdg)}` +
-    (a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : '') + (g ? '<br><span style="color:var(--dim)">' + esc([
-      g.app && g.est ? `established ${g.app.kind} ${g.app.end}` : g.app ? `cleared ${g.app.kind} ${g.app.end}` + (g.h != null ? `, heading ${pgHdg(g.h)} to join` : g.fix ? '' : ', joining') : '',
-      !g.est && g.fix ? 'direct ' + g.fix[0] : '', !g.est && !g.app && g.h != null ? 'heading ' + pgHdg(g.h) : '', !g.est && !g.app && g.h == null && !g.fix ? 'own heading' : '',
-      'to ' + pgAlt(g.alt), g.spd ? g.spd + ' kt' : ''].filter(Boolean).join(' · ')) + '</span>' : '');
-  if (!g) return;
-  const set = (k, v, label) => { const el = card.querySelector(`[data-ps=${k}]`); if (!el || document.activeElement === el) return;
-    if (v !== '' && ![...el.options].some(o => o.value === String(v))) el.add(new Option(label, v), 0); el.value = String(v); };
-  set('alt', g.alt, pgAlt(g.alt)); set('spd', g.spd || 250, (g.spd || 250) + ' kt'); set('fix', g.fix ? g.fix[0] : '', g.fix ? g.fix[0] : '');
-  card.querySelectorAll('[data-pa]').forEach(el => el.classList.toggle('on', !!g.app && el.textContent.endsWith(' ' + g.app.end)));
-}
-const PLAY_TITLE = 'Play: take the traffic on the screen around the picked airport and work it yourself (pick an airport first)';
-$('playBtn').innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l12-7z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2"/></svg>';
-$('playBtn').title = PLAY_TITLE;
-$('playBtn').onclick = () => { if (PG) pgStop(); else pgStart(); };
-
 // ------------------------------------------------------------------ radio log (SITE feature 'radio': sim replays)
 // A recording's radio transcript beside the scope, kept to the replay's time: /api/live/radio?id=<recording> returns
 // {ok, head, lines:[{t, who, cs, g, k, a, text}], colors:{who: colour}, groups:[[g, label, on]], talk_s, alert_s, atis}.
@@ -3365,7 +3126,7 @@ function fhPlay(f, hex, a, fly) {
   for (const p of P) { s0 = Math.min(s0, p[1]); n0 = Math.max(n0, p[1]); w0 = Math.min(w0, p[2]); e0 = Math.max(e0, p[2]); }
   const wide = e0 - w0 > 180, clat = (s0 + n0) / 2, clon = wide ? P[Math.floor(P.length / 2)][2] : (w0 + e0) / 2;
   const span = Math.max(...P.map(p => gc(clat, clon, p[1], p[2])), 5);
-  tlClose(true); pgStop(true);
+  tlClose(true);
   const rec = { id: 'fh-' + hex + '-' + Math.round(f.t0), kind: 'flight', name: fhName(f, a), lat: clat, lon: clon, nm: span, every_s: 60, rec: false, first: f.t0, last: f.t1 };
   RP = { rec, every: 1, from: 0, frames, t: f.t0, speed: +(localStorage.getItem(KEY + '-fhsp') || 60), playing: false, last: performance.now(), ing: 0, loading: false, gen: Math.random(),
          fh: { hex, f, id, follow: false, every: (FH && FH.every_s) || 90, line: P.map(p => [p[1], p[2]]), solo: frames, around: null } };
