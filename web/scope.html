@@ -3263,23 +3263,23 @@ function fhDraw() {                              // the replayed flight's whole 
 // ------------------------------------------------------------------ listen (SITE feature 'listen'): white tags for the aircraft on the radio
 // The page hears LiveATC through an audio input (any browser, Safari too: the mic hearing the speakers, or a loopback
 // device such as BlackHole carrying the Mac's sound) or, in Chrome / Edge, a tab shared with its audio.
-// Nothing leaves the browser. The audio is cut into transmissions at the pauses, and Whisper (transformers.js, in a worker;
-// WebGPU where there is one) writes each one down, a partial one every second and a half while it goes on. An aircraft
+// Nothing leaves the browser. The audio is cut into transmissions at the pauses, and Whisper small.en fine-tuned on real
+// ATC radio (TU Delft's, ATCO2; transformers.js in a worker, WebGPU where there is one) writes each one down, a partial one every second and a half while it goes on. An aircraft
 // whose callsign is in it gets a white tag for LS_HOLD_S after its last mention.
-const LS_ASR = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js', LS_MODEL = 'onnx-community/whisper-base.en';
+const LS_ASR = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js', LS_MODEL = 'Japb62/whisper-atc-small-onnx', LS_REV = 'ad565af9243aa0761a187515d8cfaccbd4082c49';
 const LS_HOLD_S = 6;
 const LS_WORKER = `import { pipeline } from '${LS_ASR}';
 let asr = null;
 const ready = (async () => {
   const gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null));
-  const opt = gpu ? { device:'webgpu', dtype:{ encoder_model:'fp32', decoder_model_merged:'q4' } } : { device:'wasm', dtype:'q8' };
-  asr = await pipeline('automatic-speech-recognition', '${LS_MODEL}', { ...opt, progress_callback: p => p.status === 'progress' && postMessage({ progress: [p.file, p.loaded, p.total] }) });
+  const opt = gpu ? { device:'webgpu', dtype:{ encoder_model:'fp16', decoder_model_merged:'fp16' } } : { device:'wasm', dtype:'q8' };
+  asr = await pipeline('automatic-speech-recognition', '${LS_MODEL}', { ...opt, revision:'${LS_REV}', progress_callback: p => p.status === 'progress' && postMessage({ progress: [p.file, p.loaded, p.total] }) });
   await asr(new Float32Array(16000));      // the first run compiles the model: done now, not on the first transmission
   postMessage({ ready: gpu ? 'WebGPU' : 'CPU' });
 })().catch(e => postMessage({ error: String(e && e.message || e) }));
-onmessage = async ({ data }) => {
+onmessage = async ({ data }) => {   // what it writes is capped at 96 tokens: on noise it can loop
   await ready; if (!asr) return;
-  try { const r = await asr(data.audio); postMessage({ id: data.id, text: (r.text || '').trim() }); }
+  try { const r = await asr(data.audio, { max_new_tokens: 96 }); postMessage({ id: data.id, text: (r.text || '').trim() }); }
   catch (e) { postMessage({ id: data.id, text: '', error: String(e && e.message || e) }); }
 };`;
 const lsHeard = new Map();                 // cs -> when its tag stops being white (performance.now() ms)
@@ -3479,6 +3479,10 @@ function lsSpoken(text) {                // -> [{tel, n, g}]: each group of lett
     out.push({ tel: before.tel || null, n: nov, g: nov ? g.slice(1) : g, raw: g });
     // a NATO letter that started it may be an airline-free group's first character, or not part of it at all ("delta 12" without telephony)
     if (tok[i].nato && !nov && g.length > 1) out.push({ tel: before.tel || null, n: false, g: g.slice(1), raw: g.slice(1) });
+    // a number said right before a callsign runs into it ("heading one zero zero, Oscar Kilo Delta Sierra India"): its parts too, split where digits meet letters
+    if (!nov) for (let k = 1; k < g.length; k++) if (/\d/.test(g[k - 1]) !== /\d/.test(g[k])) {
+      out.push({ tel: before.tel || null, n: false, g: g.slice(0, k), raw: g.slice(0, k) }, { tel: null, n: false, g: g.slice(k), raw: g.slice(k) });
+    }
     i = j - 1;
   }
   return out;
