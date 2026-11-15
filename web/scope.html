@@ -3397,7 +3397,7 @@ async function lsStart(src) {
 }
 // 16 kHz in 30 ms frames; a frame is speech when it is well over the noise floor (followed down fast, up slowly between
 // transmissions). A transmission ends after LS_GAP of quiet, or at LS_MAX; it keeps 300 ms from before it started.
-const LS_FR = 480, LS_GAP = 20, LS_MIN = 15, LS_MAX = 600;      // in frames: 0.6 s, 0.45 s, 18 s
+const LS_FR = 480, LS_GAP = 12, LS_MIN = 15, LS_MAX = 600;      // in frames: 0.36 s (LiveATC leaves little between a call and its readback), 0.45 s, 18 s
 function lsAudio(x) {
   const s = LS;
   for (let i = 0; i < x.length; i++) {     // to 16 kHz, averaging the samples that make each one
@@ -3522,7 +3522,8 @@ function lsLev1(a, b) {                   // whether a and b are at most one edi
 function lsScore(cs, sp) {                // how well one spoken group fits callsign cs (0: not at all, 3: exactly)
   const m = cs.match(/^([A-Z]{3})(\d[0-9A-Z]*)$/);
   if (m) {                                 // an airline's: code + flight number
-    if (sp.tel === m[1]) return sp.g === m[2] ? 3 : m[2].length >= 2 && lsLev1(sp.g, m[2]) ? 2 : 0;
+    if (sp.tel === m[1]) return sp.g === m[2] ? 3 : m[2].length >= 2 && lsLev1(sp.g, m[2]) ? 2
+      : m[2].length >= 2 && sp.g.startsWith(m[2]) ? 2 + m[2].length / 10 : 0;    // numbers said after it ran on: the longest such wins
     return !sp.tel && sp.g === m[2] && m[2].length >= 3 ? 1 : 0;    // the airline's name missed, the number heard
   }
   if (sp.tel) return 0;
@@ -3562,10 +3563,27 @@ function lsFormat(text, hits) {
     }
     return [big ? String(total + (cur ? +cur : 0)) : cur, i];
   };
-  const group = i => {                     // a callsign's letters and digits from i on
-    let g = '';
-    while (i < w.length) { if (isNum(i, !g)) { const [d, j] = num(i); g += d; i = j; } else if (w[i].k in LS_NATO) { g += LS_NATO[w[i].k]; i++; } else break; }
-    return [g, i];
+  const one = i => {                       // one number word (or two: "twenty four") -> [digits, next i]
+    const k = w[i].k;
+    if (k in LS_NUM && LS_NUM[k] != null) return [String(LS_NUM[k]), i + 1];
+    if (k in LS_TEEN) return [String(LS_TEEN[k]), i + 1];
+    if (k in LS_TENS) { const u = w[i + 1] && LS_NUM[w[i + 1].k]; return u > 0 ? [LS_TENS[k] + '' + u, i + 2] : [LS_TENS[k] + '0', i + 1]; }
+    if (/^\d+$/.test(k)) return [k, i + 1];
+    return null;
+  };
+  // a callsign's letters and digits from i on, no longer than a callsign is (an airline's: 4 digits and 2 letters), so the
+  // numbers said after it stay numbers. The longest one that is an aircraft heard wins, else the longest.
+  const group = (i, maxD, maxL, anyOrder, is = hit) => {
+    let g = '', d = 0, l = 0; const ok = [];
+    while (i < w.length) {
+      const k = w[i].k;
+      if (k === 'hundred' && /\d$/.test(g) && d + 2 <= maxD) { g += '00'; d += 2; i++; }
+      else if (isNum(i, !g) && (anyOrder || !l)) { const r = one(i); if (!r || d + r[0].length > maxD) break; g += r[0]; d += r[0].length; i = r[1]; }
+      else if (k in LS_NATO && l < maxL) { g += LS_NATO[k]; l++; i++; }
+      else break;
+      ok.push([g, i]);
+    }
+    return ok.reverse().find(([s]) => is(s)) || ok[0] || [g, i];
   };
   const out = [], put = (s, b) => out.push([s, !!b]);
   const hit = s => hits.find(cs => cs === s || cs === 'N' + s || s.length >= 3 && /[A-Z]/.test(s) && cs.endsWith(s));
@@ -3573,15 +3591,15 @@ function lsFormat(text, hits) {
     const k = w[i].k;
     let tel = null, n = 0;
     for (let m = 3; m >= 1 && !tel; m--) if (i + m <= w.length) { const c = LS_TEL[w.slice(i, i + m).map(x => x.k).join('')]; if (c && isNum(i + m, true)) { tel = c; n = m; } }
-    if (tel) { const [g, j] = group(i + n); put(tel + g, hits.includes(tel + g)); i = j; continue; }
-    if (k === 'november' && (isNum(i + 1, true) || w[i + 1] && w[i + 1].k in LS_NATO)) { const [g, j] = group(i + 1); { const h = hit('N' + g); put(h || 'N' + g, h); } i = j; continue; }
+    if (tel) { const [g, j] = group(i + n, 4, 2, false, s => hits.includes(tel + s)); put(tel + g, hits.includes(tel + g)); i = j; continue; }
+    if (k === 'november' && (isNum(i + 1, true) || w[i + 1] && w[i + 1].k in LS_NATO)) { const [g, j] = group(i + 1, 5, 2, true); { const h = hit('N' + g); put(h || 'N' + g, h); } i = j; continue; }
     if (k === 'runway' && isNum(i + 1, true)) {
       let [d, j] = num(i + 1); const s = w[j] && { left: 'L', right: 'R', center: 'C', centre: 'C' }[w[j].k];
       put('RWY ' + d + (s || '')); i = j + (s ? 1 : 0); continue;
     }
     if (k === 'flight' && w[i + 1] && w[i + 1].k === 'level' && isNum(i + 2, true)) { const [d, j] = num(i + 2); put('FL' + d); i = j; continue; }
     if (k === 'heading' && isNum(i + 1, true)) { const [d, j] = num(i + 1); put('HDG ' + d); i = j; continue; }
-    if (k in LS_NATO && (w[i + 1] && (w[i + 1].k in LS_NATO || isNum(i + 1, false)))) { const [g, j] = group(i); const h = hit(g); put(h || g, h); i = j; continue; }   // spelled out: OKPRM, 3AB
+    if (k in LS_NATO && (w[i + 1] && (w[i + 1].k in LS_NATO || isNum(i + 1, false)))) { const [g, j] = group(i, 5, 5, true); const h = hit(g); put(h || g, h); i = j; continue; }   // spelled out: OKPRM, 3AB
     if (k in LS_NATO && w[i - 1] && /^(information|taxiway|via|atis|on|and)$/.test(w[i - 1].k)) { put(LS_NATO[k]); i++; continue; }
     if (isNum(i, true)) { const [d, j] = num(i); let g = d, m = j;     // digits then letters: a shortened GA callsign
       while (w[m] && w[m].k in LS_NATO) g += LS_NATO[w[m++].k];
