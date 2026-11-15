@@ -1270,7 +1270,7 @@ function apdFit(ol, OPS, rwys, lat0, lon0) {
 // between reports, the drawn aircraft blends from the path it was on onto the new one, its speed and direction unbroken.
 const TURN_TAU = 8, MAX_TURN = 4;      // s, °/s
 function track(r, rate, t, ts = r.ts) {   // [lat, lon, track] of report r (taken at ts), t (epoch s) carried on for at most STALE_S
-  const dt = Math.max(0, Math.min(STALE_S + (r.cst ? COAST_S : 0), t - ts));
+  const dt = Math.max(0, Math.min(STALE_S + (r.id !== undefined && coastable(r) ? COAST_S : 0), t - ts));
   if (!(r.gs > 2) || !dt) return [r.lat, r.lon, r.hdg];
   if (!rate) return [...dest(r.lat, r.lon, r.hdg, r.gs / 3600 * dt), r.hdg];
   const turned = s => rate * TURN_TAU * (1 - Math.exp(-s / TURN_TAU)), n = Math.min(16, Math.ceil(dt)), step = dt / n, v = r.gs / 3600 * step;
@@ -1279,13 +1279,13 @@ function track(r, rate, t, ts = r.ts) {   // [lat, lon, track] of report r (take
   const lat = r.lat + no / 60;
   return [lat, ((r.lon + ea / (60 * Math.cos((r.lat + lat) / 2 * D2R))) + 540) % 360 - 180, (r.hdg + turned(dt) + 360) % 360];
 }
-// with SITE.coast_s: does a report past STALE_S stay (as a coast track)? a.cst marks one that may be carried on that long.
+// with SITE.coast_s: does a report past STALE_S stay (as a coast track)?
 // Dropped once, 30 s on, two aircraft within 8 nm of where it's guessed to be, no higher than 1,000 ft above it, are still
 // being reported: the receivers there see that low, so it would be seen too (landed, or its transponder is off)
 function keepCoast(a, all, now) {
   const dt = now - a.ts;
   if (a.ground || dt < STALE_S) return true;
-  if (!(a.cst = coastable(a)) || dt >= STALE_S + COAST_S) return false;
+  if (!coastable(a) || dt >= STALE_S + COAST_S) return false;
   if (dt < 30) return true;
   const [la, lo] = pos(a, now); let n = 0;
   for (const b of all) if (b !== a && !b.ground && now - b.ts < 10 && b.alt <= a.alt + 1000 && Math.abs(b.lat - la) < .14 && gc(b.lat, b.lon, la, lo) < 8 && ++n >= 2) return false;
@@ -2674,7 +2674,7 @@ async function poll() {
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
     // (or, with SITE.coast_s, coasts on: see coastable)
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id)), now = Date.now() / 1000;
-      for (const o of S.aircraft) if (!ids.has(o.id) && now - o.ts < STALE_S + (o.cst ? COAST_S : 0) && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o);
+      for (const o of S.aircraft) if (!ids.has(o.id) && now - o.ts < STALE_S + (coastable(o) ? COAST_S : 0) && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o);
       if (COAST_S) s.aircraft = s.aircraft.filter(a => keepCoast(a, s.aircraft, now)); }
     S = s;
     ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
