@@ -2368,7 +2368,12 @@ function sampleHist() {
   const t = RP ? S.t : Date.now() / 1000;
   if (t - lastHistT < HIST_EVERY && t >= lastHistT) return;
   lastHistT = t; const ids = new Set();
-  for (const a of S.aircraft) { ids.add(a.id); const h = (hist.get(a.id) || []).filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); h.push([...pos(a).slice(0, 2), t]); hist.set(a.id, h); }
+  for (const a of S.aircraft) { ids.add(a.id); const p = pos(a);
+    let h = hist.get(a.id);
+    // first seen (page opened, panned there, or just appeared), live: the feed gives no past positions, so the trail starts
+    // as where it would have been flying its present track and speed, a dot every 4 s; the real dots take over as they come
+    if (!h) { h = []; if (!RP && !a.ground && a.gs > 30 && p[2] != null) for (let k = Math.floor((HIST_S - HIST_EVERY) / 4); k >= 1; k--) h.push([...dest(p[0], p[1], p[2] + 180, a.gs / 3600 * 4 * k), t - 4 * k]); }
+    h = h.filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); h.push([p[0], p[1], t]); hist.set(a.id, h); }
   for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
 }
 function ingest() {
