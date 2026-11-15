@@ -3485,18 +3485,20 @@ let lsDevs = [];
 async function lsDevices() {
   try { lsDevs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch (e) { lsDevs = []; }
 }
+// a loopback input (BlackHole, Loopback, Soundflower) carries the Mac's own sound, clean: picked when the input is left on Default
+const lsLoop = () => lsDevs.find(d => /blackhole|loopback|soundflower/i.test(d.label));
 function lsRender() {
   const b = $('lsBtn'); b.classList.toggle('on', !!LS); b.classList.toggle('hear', !!(LS && LS.speech));
   b.textContent = LS ? 'LISTEN ●' : 'LISTEN';
   const p = $('lsp'); if (p.hidden) return;
-  const opts = `<option value="">Default input</option>` + lsDevs.map(d => `<option value="${esc(d.deviceId)}"${d.deviceId === lsDev ? ' selected' : ''}>${esc(d.label || 'Input ' + d.deviceId.slice(0, 6))}</option>`).join('');
+  const opts = `<option value="">Default input${lsLoop() ? ' (' + lsLoop().label + ')' : ''}</option>` + lsDevs.map(d => `<option value="${esc(d.deviceId)}"${d.deviceId === lsDev ? ' selected' : ''}>${esc(d.label || 'Input ' + d.deviceId.slice(0, 6))}</option>`).join('');
   p.innerHTML = `<div class="hd">Tags turn white while their aircraft is on the radio. Play LiveATC, then let the page hear it. The audio stays on this computer.</div>` +
     (LS ? `<div class="row"><b>${esc(LS.label)}</b><button data-ls="stop">Stop</button></div>`
         : `<div class="row"><select id="lsDev" title="The microphone, hearing LiveATC from the speakers, or a loopback device (BlackHole) carrying the Mac's sound">${opts}</select><button data-ls="mic">Listen</button></div>` +
           (lsTabOk ? `<div class="row"><button data-ls="tab" title="Pick LiveATC's tab and tick “Share tab audio”">Share a tab's audio…</button></div>` : '')) +
     `<div class="st">${esc(lsMsg)}</div>` +
     (lsLast ? `<div class="last"><b>${esc(lsLast.cs.join(' ') || '—')}</b> ${esc(lsLast.text)}</div>` : '') +
-    (lsSafari && !LS ? `<div class="tip">Safari can't hear another tab, so play LiveATC through the speakers and pick the microphone, or for a clean feed install BlackHole and send the Mac's sound to it (Audio MIDI Setup → Multi-Output Device) and pick BlackHole here.</div>` : '');
+    (lsSafari && !LS ? `<div class="tip">Safari can't hear another tab. For a clean feed, not the microphone: install BlackHole (brew install --cask blackhole-2ch), then make a Multi-Output Device of your speakers and BlackHole in Audio MIDI Setup and switch the Mac's sound to it (livescope's tools/listen-setup.swift does both steps). BlackHole is then picked here by itself.</div>` : '');
 }
 $('lsBtn').onclick = async () => {
   const p = $('lsp'); p.hidden = !p.hidden; if (p.hidden) return;
@@ -3546,6 +3548,11 @@ async function lsStart(src) {
       stream = await ask(lsDev).catch(e => { if (lsDev && e && e.name === 'OverconstrainedError') { lsDev = ''; return ask(''); } throw e; });   // that input gone (Safari renames them)
       label = stream.getAudioTracks()[0].label || 'microphone';
       await lsDevices();                   // the inputs' names, now that the page may see them
+      const loop = !lsDev && lsLoop();
+      if (loop && stream.getAudioTracks()[0].label !== loop.label) {
+        stream.getTracks().forEach(t => t.stop()); stream = await ask(loop.deviceId); label = loop.label;
+        lsDev = loop.deviceId; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (e) {}
+      }
     }
   } catch (e) { ctx.close(); lsMsg = e && e.name === 'NotAllowedError' ? 'not allowed: the browser was told no' : 'no audio: ' + (e && e.message || e); return lsRender(); }
   stream.getAudioTracks()[0].onended = () => LS && LS.stream === stream && lsStop('the audio ended');
