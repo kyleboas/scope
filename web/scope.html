@@ -78,7 +78,9 @@
   #card a { color:#7aa2ff; text-decoration:none; }
   #card .x { float:right; padding:0 4px; }
   #card .fq { display:grid; grid-template-columns:max-content max-content 1fr; gap:0 10px; margin:5px 0; max-height:180px; overflow:auto; color:var(--dim); }
-  #card .fq span:nth-child(3n+2) { color:var(--fg); }
+  #card .fq span:nth-child(3n+2), #card .fq a { color:var(--fg); text-decoration:none; }
+  #card .fq a:hover { text-decoration:underline; }
+  #card .fq a.on { color:var(--bg, #000); background:var(--fg); }
   #card .pr { margin:5px 0; max-height:200px; overflow:auto; }
   #card .pr i { font-style:normal; color:var(--dim); display:block; margin-top:3px; }
   #card .pr span { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; cursor:pointer; color:var(--fg2); }
@@ -2130,16 +2132,17 @@ function renderCard1() {
     const ils = info ? info[9].flatMap(r => [[r[0], r[7]], [r[1], r[8]]]).filter(([, l]) => l).sort((p, q) => p[0].localeCompare(q[0], 'en', { numeric:true })) : [];
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
-      (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
+      (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span><a href="${lwUrl(home[0], f[2])}" target="_blank" data-fq="${f[2].toFixed(3)}" class="${lwOpen() && lwId === home[0] && lwFq === f[2].toFixed(3) ? 'on' : ''}" title="Play it on LiveATC.net, in the LiveATC tab (needs the livescope userscript there: /liveatc.user.js)">${f[2].toFixed(3)}</a></span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
         `${ils.map(([e, l]) => `<span>${esc(l[0] + ' ' + e)}</span><span>${l[2].toFixed(2)}</span><span>${esc(l[1])} · ${Math.round(l[3])}° true${l[6] ? ` · glideslope ${l[6]}°` : ''}</span>`).join('')}</div>` : '') +
       radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + (has('board') ? '<br><a href="#" id="bdLink" title="Its departures and arrivals, and its traffic hour by hour">Departures and arrivals board</a>' : '') + atisCard() + procCard() + chartCard();
-    if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
+    if (lwOpen() && lwId !== home[0] && !lwFq) lwGo(home[0]);      // a frequency playing there keeps playing
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (acTop && card.querySelector('.acx')) card.querySelector('.acx').scrollTop = acTop;
   const ph = card.querySelector('.ph0'), pe = ph && a && (has('flight') ? FL && FL.id === a.id && photoEl(a.acName + '|' + a.livery, FL.photo)
     : AD && AD.id === a.id && photoEl(a.hex, AD.photo)); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
+  card.querySelectorAll('[data-fq]').forEach(el => el.onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true, el.dataset.fq); });
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
@@ -2219,22 +2222,25 @@ $('radioBtn').onclick = () => radioPlay(null);
 // LiveATC.net's airport page in a tab of its own. Their terms rule out playing their streams
 // here, and their player page cuts its link to the page that opened it, so this tab is as far as control goes: it
 // opens, follows the airport picked, and closes from the header; the feeds play in LiveATC's own player.
-let lw = null, lwId = '';
-const lwUrl = id => 'https://www.liveatc.net/search/?icao=' + encodeURIComponent(id);
+// A frequency clicked in the card adds #livescope=<MHz>: the userscript web/liveatc.user.js, if the browser has it,
+// then finds the feed on LiveATC's page that lists that frequency and plays it there.
+let lw = null, lwId = '', lwFq = '';
+const lwUrl = (id, fq) => 'https://www.liveatc.net/search/?icao=' + encodeURIComponent(id) + (fq ? '#livescope=' + (+fq).toFixed(3) : '');
 const lwOpen = () => { try { return !!lw && !lw.closed; } catch (e) { return false; } };
-function lwGo(id, focus) {
-  if (lwOpen()) { if (lwId !== id) lw.location.href = lwUrl(id); }
+function lwGo(id, focus, fq) {
+  fq = fq || (lwId === id ? lwFq : '');      // the airport again: the frequency playing carries on
+  if (lwOpen()) { if (lwId !== id || lwFq !== fq) lw.location.href = lwUrl(id, fq); }
   else {
-    lw = window.open(lwUrl(id), 'livescope-liveatc');
+    lw = window.open(lwUrl(id, fq), 'livescope-liveatc');
     if (!lw) return;
   }
-  lwId = id; if (focus) try { lw.focus(); } catch (e) {}
+  lwId = id; lwFq = fq; if (focus) try { lw.focus(); } catch (e) {}
   lwShow(); if (home && !sel) renderCard();
 }
 function lwShow() {
   const b = $('lwBtn'), on = lwOpen(); b.hidden = !on;
-  if (on) b.textContent = `LiveATC ${lwId} ✕`;
-  else if (lw) { lw = null; lwId = ''; if (home && !sel) renderCard(); }
+  if (on) b.textContent = `LiveATC ${lwId}${lwFq ? ' ' + lwFq : ''} ✕`;
+  else if (lw) { lw = null; lwId = ''; lwFq = ''; if (home && !sel) renderCard(); }
 }
 $('lwBtn').onclick = () => { try { lw.close(); } catch (e) {} lwShow(); };
 setInterval(lwShow, 1000);                  // closed from its own title bar
