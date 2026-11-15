@@ -64,6 +64,12 @@
   .tile { position:relative; min-width:0; min-height:0; background:#000; overflow:hidden; }
   #tiles:not(.one) ~ .flt { bottom:auto; top:var(--top); }
   .views [data-layout] { display:flex; align-items:center; } .views [data-layout] svg { width:14px; height:14px; }
+  /* a split scope's own airport: its button in the view bar, and a search box over the scope */
+  #tiles.one .views [data-apt] { display:none; } .views [data-apt].on { color:#bbb; }
+  .tapt { position:absolute; left:8px; bottom:38px; z-index:4; width:min(300px, calc(100% - 16px)); background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 24px #0008; }
+  .tapt[hidden] { display:none; } .tapt input { width:100%; box-sizing:border-box; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); font:12px var(--mono); padding:8px 10px; outline:none; }
+  .tapt .r { max-height:min(40vh, 240px); overflow:auto; } .tapt .r div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tapt .r div b { color:var(--fg); margin-right:6px; } .tapt .r div:hover, .tapt .r div.on { background:var(--soft); } .tapt .r .dim { color:var(--dim); cursor:default; }
   #side { grid-column:2; grid-row:1 / 3; border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
   #card { flex-shrink:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:9px 10px; border-bottom:1px solid var(--line); font:12px/1.55 var(--mono); color:var(--fg2); background:var(--card); display:none; }
   #card b { color:var(--fg); font-size:13px; }
@@ -337,10 +343,11 @@ const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
 // use(s) points cv / ctx / map / view / drawn / L at one of them. Outside drawing and input handlers they
 // point at the main scope, which also drives the feed, the URL and the list.
-let cv, ctx, map, mctx, view, L, mapKey = '', drawn = [];
+let cv, ctx, map, mctx, view, L, apt = null, mapKey = '', drawn = [];   // apt: the scope's own airport (a split scope's), else null
 const scopes = [];
 let active = null;                     // the scope the pointer was last in (keyboard zoom)
-function use(s) { cv = s.cv; ctx = s.ctx; map = s.map; mctx = s.mctx; view = s.view; L = s.L; drawn = s.drawn; }
+function use(s) { cv = s.cv; ctx = s.ctx; map = s.map; mctx = s.mctx; view = s.view; L = s.L; apt = s.apt || null; drawn = s.drawn; }
+const mineApt = id => !!((home && home[0] === id) || (apt && apt[0] === id));   // the picked airport, or this scope's own
 const ICO = { layers:'<path d="M12 4L4 8l8 4l8-4zm-8 8l8 4l8-4M4 16l8 4l8-4"/>', one:'<path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
               big:'<path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm11-2v16"/>', even:'<path d="M3 4a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zm9-1v18"/>' };
 const ico = n => `<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">${ICO[n]}</g></svg>`;
@@ -353,8 +360,9 @@ function setLayout(m) {
 function makeScope(v) {
   const el = document.createElement('div'), n = scopes.length; el.className = 'tile';
   el.innerHTML = `<canvas></canvas><div class="layers" hidden></div><div class="views">${n ? '' : '<button data-layout></button>'}` +
-    `<button data-layers title="Layers" aria-label="Layers">${ico('layers')}</button>` +
-    '<button data-bm title="Map background: the scope (black), a street map or satellite imagery (click to change)"></button><button data-v="0.8">GND</button><button data-v="3">FLD</button><button data-v="40">APP</button><button data-v="250">CTR</button><button data-v="globe">GLOBE</button></div>';
+    `<button data-layers title="Layers" aria-label="Layers">${ico('layers')}</button>` + (n ? '<button data-apt></button>' : '') +
+    '<button data-bm title="Map background: the scope (black), a street map or satellite imagery (click to change)"></button><button data-v="0.8">GND</button><button data-v="3">FLD</button><button data-v="40">APP</button><button data-v="250">CTR</button><button data-v="globe">GLOBE</button></div>' +
+    (n ? '<div class="tapt" hidden><input placeholder="Airport for this scope..." autocomplete="off" spellcheck="false"><div class="r"></div></div>' : '');
   $('tiles').appendChild(el);
   const c = el.querySelector('canvas'), m = document.createElement('canvas');
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
@@ -381,10 +389,51 @@ function makeScope(v) {
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
   el.querySelectorAll('.views [data-v]').forEach(b => b.onclick = () => {
     use(s); const v = b.dataset.v; view.half = v === 'globe' ? R_NM * 1.05 : +v;
-    if (v !== 'globe' && home && gc(view.lat, view.lon, home[5], home[6]) < 600) { view.lat = home[5]; view.lon = home[6]; }
+    const h = s.apt || home; if (v !== 'globe' && h && gc(view.lat, view.lon, h[5], h[6]) < 600) { view.lat = h[5]; view.lon = h[6]; }
     viewChanged(true); use(scopes[0]);
   });
+  if (n) aptPicker(s);
   scopes.push(s); return s;
+}
+// a split scope's airport: it follows the airport picked (the header's search, a tap on the map) until it's given one of its
+// own here, then it stays there (its traffic fetched too if that's past the main scope's feed); "follow" goes back
+function aptPicker(s) {
+  const b = s.el.querySelector('[data-apt]'), box = s.el.querySelector('.tapt'), q = box.querySelector('input'), res = box.querySelector('.r'), akey = KEY + '-apt-' + s.n;
+  let list = [], idx = 0, gen = 0;
+  s.aptShow = () => { const a = s.apt || home; b.textContent = a ? a[0] : 'APT'; b.classList.toggle('on', !!s.apt);
+    b.title = s.apt ? `This scope stays on ${s.apt[0]} (click to change it, or to follow the airport picked)` : `This scope follows the airport picked${home ? ' (' + home[0] + ')' : ''}: click to give it an airport of its own`; };
+  s.setApt = (a, fly = true) => {
+    s.apt = a; s.areaKey = ''; s.key = '';
+    try { a ? localStorage.setItem(akey, a[0]) : localStorage.removeItem(akey); } catch (e) {}
+    const c = a || home; if (fly && c) Object.assign(s.view, { lat:c[5], lon:c[6], half:c[8] === 'L' ? 3 : 2 });
+    s.aptShow(); if (a && !procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
+    viewChanged(true);
+  };
+  const show = () => {
+    res.innerHTML = list.length ? list.map((a, i) => `<div data-i="${i}" class="${i === idx ? 'on' : ''}">` + (a === 'follow' ? `<b>Follow</b>the airport picked${home ? ' (' + esc(home[0]) + ')' : ''}`
+      : `<b>${esc(a[0])}</b>${a[1] ? esc(a[1]) + ' · ' : ''}${esc(a[2])}${a[3] ? ', ' + esc(a[3]) : ''} ${esc(a[4])}`) + '</div>').join('') : q.value.trim() ? '<div class="dim">Nothing found</div>' : '';
+    res.querySelectorAll('[data-i]').forEach(el => el.onmousedown = e => { e.preventDefault(); choose(list[+el.dataset.i]); });
+  };
+  const choose = a => { if (!a) return; close(); s.setApt(a === 'follow' ? null : a); };
+  const close = () => { box.hidden = true; q.value = ''; q.blur(); };
+  const search = async () => {
+    const v = q.value.trim(), my = ++gen; idx = 0;
+    if (!v) { list = s.apt ? ['follow'] : []; show(); return; }
+    let aps = []; try { aps = await (await fetch('/api/live/search?q=' + encodeURIComponent(v))).json(); } catch (e) {}
+    if (my !== gen) return;
+    if (SITE.airports) aps = aps.filter(a => SITE.airports.includes(a[0]));
+    const nv = norm(v), exact = aps.filter(a => norm(a[0]) === nv || norm(a[1]) === nv);
+    list = [...exact, ...aps.filter(a => !exact.includes(a)), ...(s.apt ? ['follow'] : [])]; show();
+  };
+  b.onclick = () => { box.hidden = !box.hidden; if (!box.hidden) { q.focus(); search(); } };
+  q.oninput = search;
+  q.onkeydown = e => {
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.length) { idx = (idx + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length; show(); } return; }
+    if (e.key === 'Enter') { e.preventDefault(); choose(list[idx]); }
+  };
+  document.addEventListener('pointerdown', e => { if (!box.hidden && !box.contains(e.target) && !e.target.closest('[data-apt]')) close(); });
+  s.aptShow();
 }
 // every scope's canvas gets the handler, run with that scope in use
 function eachScope(fn) { const out = []; for (const s of scopes) if (s.el.offsetWidth) { use(s); out.push(fn(s)); } use(scopes[0]); return out; }
@@ -575,7 +624,8 @@ function drawMap() {
   if (L.diagram && view.half < 4) drawDiagrams(c);
   if (L.taxi && view.half < 4) drawGround(c);
   // range rings around the airport you picked
-  if (L.rings && home && view.half < 150) { for (let r = 10; r <= 50; r += 10) geoCircle(c, home[5], home[6], r, r === 50 ? '#555' : COL.ring); }
+  const rc = apt || home;
+  if (L.rings && rc && view.half < 150) { for (let r = 10; r <= 50; r += 10) geoCircle(c, rc[5], rc[6], r, r === 50 ? '#555' : COL.ring); }
   // airports: the big ones from afar, every strip close in, runways to scale
   const close = view.half < 80;
   const list = close ? [...areaAps.values()] : MAJOR;
@@ -584,7 +634,7 @@ function drawMap() {
     const kd = a[8];
     if (!close && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
-    if (!L.airports && !(home && a[0] === home[0])) continue;
+    if (!L.airports && !mineApt(a[0])) continue;
     // runways reach a few nm from the airport's reference point: keep it while they can still be on screen
     const rw = a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
     const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -m || y < -m || x > P0.w + m || y > P0.h + m) continue;
@@ -597,7 +647,7 @@ function drawMap() {
     } else if (view.half > 400) { c.strokeStyle = '#3a3a3a'; c.lineWidth = d; c.strokeRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); }
     else { c.strokeStyle = kd === 'L' ? COL.apt : COL.aptDim; c.lineWidth = d; c.strokeRect(x - 2*d, y - 2*d, 4*d, 4*d); }
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
-    if (label && (L.aptnames || (home && a[0] === home[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
+    if (label && (L.aptnames || mineApt(a[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
   }
   basemapCredit(c);
 }
@@ -665,7 +715,7 @@ const groundAsked = new Map();
 async function loadGround() {
   const ids = [];
   eachScope(() => { if (!L.taxi || view.half >= 4) return; const vn = viewNm() + 3;
-    if (home && !ids.includes(home[0]) && gc(view.lat, view.lon, home[5], home[6]) < vn) ids.push(home[0]);
+    for (const h of [apt, home]) if (h && !ids.includes(h[0]) && gc(view.lat, view.lon, h[5], h[6]) < vn) ids.push(h[0]);
     for (const a of areaAps.values()) if ('LM'.includes(a[8]) && !ids.includes(a[0]) && gc(view.lat, view.lon, a[5], a[6]) < vn) ids.push(a[0]); });
   for (const id of ids.slice(0, 3)) {
     const g = ground.get(id); if (g && g !== 'pending') continue;
@@ -712,7 +762,7 @@ function drawGround(c) {
   const d = dpr(), ppn = pxPerNm(), vn = viewNm() + 3;
   for (const [id, g] of ground) {
     if (typeof g !== 'object') continue;
-    const a = areaAps.get(id) || (home && home[0] === id ? home : null); if (a && gc(view.lat, view.lon, a[5], a[6]) > vn) continue;
+    const a = areaAps.get(id) || (home && home[0] === id ? home : apt && apt[0] === id ? apt : null); if (a && gc(view.lat, view.lon, a[5], a[6]) > vn) continue;
     if (L.diagram && diagShown(id)) continue;             // its FAA diagram is drawn instead
     for (const p of g.ap) polyFill(c, p, '#121212');
     for (const [, p] of g.tm) polyFill(c, p, '#242424');
@@ -1130,7 +1180,7 @@ function hitAircraftAll(mx, my, r) {  // every aircraft within r px, nearest fir
 }
 function hitAirports(mx, my, r) {      // every airport drawn within r px, nearest first
   const list = view.half < 80 ? [...areaAps.values()] : MAJOR, R = r * dpr(), out = [];
-  for (const a of list) { const kd = a[8], mine = home && a[0] === home[0];
+  for (const a of list) { const kd = a[8], mine = mineApt(a[0]);
     if (view.half >= 80 && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
     if (!L.airports && !mine) continue;
@@ -1584,7 +1634,7 @@ function frame() {
   for (const s of scopes) {
     if (!s.cv.width || !s.cv.height || !s.el.offsetWidth) continue;
     use(s); setFrame();
-    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
+    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], apt && apt[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
     tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); tagDone(s); if (measure && measure.s === s) drawMeasure();
@@ -1766,7 +1816,7 @@ function setHome(a, fly, half) {
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
   if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = half || 40; }
-  if (scopes[1]) Object.assign(scopes[1].view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 });
+  for (const s of scopes.slice(1)) { if (!s.apt) Object.assign(s.view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 }); s.aptShow(); }
   renderCard(); viewChanged(true);
 }
 // the side panel holds the airport card (or the selected aircraft's): nothing picked, no side panel
@@ -2194,7 +2244,15 @@ async function poll() {
   else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
     ingest(); loadWorld(); loadBoats(); loadWx(); loadAtc(); }
   else try {
-    const s = await (await fetch(`/api/live?${srvQ()}lat=${(aroundHome ? home[5] : view.lat).toFixed(3)}&lon=${(aroundHome ? home[6] : view.lon).toFixed(3)}&nm=${(aroundHome ? MAX_LIVE_NM : nm).toFixed(0)}`)).json();
+    const la0 = aroundHome ? home[5] : view.lat, lo0 = aroundHome ? home[6] : view.lon, nm0 = aroundHome ? MAX_LIVE_NM : nm;
+    // a split scope showing somewhere past that (its own airport, or panned away): its area is asked too, and merged in
+    const more = eachScope(o => o !== scopes[0] && viewNm() <= MAX_LIVE_NM * 1.05 && gc(view.lat, view.lon, la0, lo0) + viewNm() > nm0
+      ? [view.lat, view.lon, Math.max(10, Math.min(250, viewNm() * 1.05))] : null).filter(Boolean);
+    const live = (la, lo, n) => fetch(`/api/live?${srvQ()}lat=${la.toFixed(3)}&lon=${lo.toFixed(3)}&nm=${n.toFixed(0)}`).then(r => r.json());
+    const [s, ...ex] = await Promise.all([live(la0, lo0, nm0), ...more.map(m => live(...m).catch(() => null))]);
+    s.areas = [[la0, lo0, nm0]];
+    if (s.ok) for (const [i, x] of ex.entries()) { if (!x || !x.ok) continue; s.areas.push(more[i]);
+      const ids = new Set(s.aircraft.map(a => a.id)); for (const a of x.aircraft) if (!ids.has(a.id)) s.aircraft.push(a); }
     if (RP) throw 0;                               // a timelapse started while this was on its way
     if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; motion.clear(); }
     if (S && s.t !== S.t) {
@@ -2204,7 +2262,7 @@ async function poll() {
     }
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
-      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
+      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o); }
     S = s;
     ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
   } catch (e) { /* server restarting */ }
@@ -3102,6 +3160,13 @@ function fhDraw() {                              // the replayed flight's whole 
     if (!a) { try { a = (await (await fetch('/api/live/search?q=' + encodeURIComponent(id))).json())[0]; } catch (e) {} }
     if (a) setHome(a, true, want[1] ? +want[1] : 40);
     schedule(0);
+  }
+  // a split scope given an airport of its own last time
+  for (const s of scopes.slice(1)) {
+    const id = (() => { try { return localStorage.getItem(KEY + '-apt-' + s.n); } catch (e) { return null; } })(); if (!id) continue;
+    let a = MAJOR.find(x => x[0] === id);
+    if (!a) { try { a = (await (await fetch('/api/live/search?q=' + encodeURIComponent(id))).json()).find(x => x[0] === id); } catch (e) {} }
+    if (a) s.setApt(a);
   }
 })();
 </script>
