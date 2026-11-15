@@ -359,8 +359,22 @@ const has = f => SITE.features.includes(f);
 const KEY = SITE.name;                 // localStorage prefix
 // optional site settings: no_history (no trails), hist_s (seconds of trail to keep, default 32), stale_s (dead reckoning limit), idle_min (stop polling after that
 // long without input), poll_ms, world_ms, start (hash to open on; null = the globe), metar_label,
-// network (one network's name, no server picker), ctr_nm (Centers listed in an airport card, default within 400 nm)
+// network (one network's name, no server picker), ctr_nm (Centers listed in an airport card, default within 400 nm),
+// coast_s (coast tracks, below)
 const STALE_S = SITE.stale_s || 20, POLL_MS = SITE.poll_ms || 2000, WORLD_MS = SITE.world_ms || 30000;
+// SITE.coast_s (a real feed, whose gaps are coverage: terrain, the edge of the receivers' range): an airborne aircraft whose
+// reports stop is carried on for that many seconds past STALE_S as a coast track, the way a radar coasts one: drawn hollow
+// and dim, CST in its data block, its trail left behind. Not one low near an airport (landing, or just off the runway: it
+// stops at STALE_S as before), nor one with aircraft reported around it at or below its altitude (its receivers would see
+// it, so it's gone). Off when 0 (sims: an aircraft gone is a pilot who left).
+const COAST_S = SITE.coast_s || 0, CST_AFTER = Math.min(12, STALE_S);
+function coastable(a) {                // may this report be carried on past STALE_S
+  if (!COAST_S || RP || a.ground || !(a.gs >= 50)) return false;
+  if (a._low === undefined) { a._low = false;      // worked out once per report: near an airport, under 3,500 ft above it
+    for (const ap of areaAps.values()) if (a.alt - ap[7] < 3500 && gc(a.lat, a.lon, ap[5], ap[6]) < 15) { a._low = true; break; } }
+  return !a._low;
+}
+const coasting = (a, t = Date.now() / 1000) => t - a.ts > CST_AFTER && coastable(a);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[ch]));
 const dpr = () => devicePixelRatio || 1;
@@ -1256,7 +1270,7 @@ function apdFit(ol, OPS, rwys, lat0, lon0) {
 // between reports, the drawn aircraft blends from the path it was on onto the new one, its speed and direction unbroken.
 const TURN_TAU = 8, MAX_TURN = 4;      // s, °/s
 function track(r, rate, t, ts = r.ts) {   // [lat, lon, track] of report r (taken at ts), t (epoch s) carried on for at most STALE_S
-  const dt = Math.max(0, Math.min(STALE_S, t - ts));
+  const dt = Math.max(0, Math.min(STALE_S + (r.cst ? COAST_S : 0), t - ts));
   if (!(r.gs > 2) || !dt) return [r.lat, r.lon, r.hdg];
   if (!rate) return [...dest(r.lat, r.lon, r.hdg, r.gs / 3600 * dt), r.hdg];
   const turned = s => rate * TURN_TAU * (1 - Math.exp(-s / TURN_TAU)), n = Math.min(16, Math.ceil(dt)), step = dt / n, v = r.gs / 3600 * step;
@@ -1264,6 +1278,18 @@ function track(r, rate, t, ts = r.ts) {   // [lat, lon, track] of report r (take
   for (let i = 0; i < n; i++) { const h = (r.hdg + turned((i + .5) * step)) * D2R; no += Math.cos(h) * v; ea += Math.sin(h) * v; }
   const lat = r.lat + no / 60;
   return [lat, ((r.lon + ea / (60 * Math.cos((r.lat + lat) / 2 * D2R))) + 540) % 360 - 180, (r.hdg + turned(dt) + 360) % 360];
+}
+// with SITE.coast_s: does a report past STALE_S stay (as a coast track)? a.cst marks one that may be carried on that long.
+// Dropped once, 30 s on, two aircraft within 8 nm of where it's guessed to be, no higher than 1,000 ft above it, are still
+// being reported: the receivers there see that low, so it would be seen too (landed, or its transponder is off)
+function keepCoast(a, all, now) {
+  const dt = now - a.ts;
+  if (a.ground || dt < STALE_S) return true;
+  if (!(a.cst = coastable(a)) || dt >= STALE_S + COAST_S) return false;
+  if (dt < 30) return true;
+  const [la, lo] = pos(a, now); let n = 0;
+  for (const b of all) if (b !== a && !b.ground && now - b.ts < 10 && b.alt <= a.alt + 1000 && Math.abs(b.lat - la) < .14 && gc(b.lat, b.lon, la, lo) < 8 && ++n >= 2) return false;
+  return true;
 }
 function deadReckon(a, t = Date.now() / 1000) { const m = motion.get(a.id); return track(a, m ? m.rate : 0, t, m && m.ets || a.ts); }
 function pos(a, t = Date.now() / 1000) {   // [lat, lon, track] as drawn now
@@ -1407,7 +1433,10 @@ function drawAircraft() {
     }
     const keep = fOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
     const blend = far && worldShown() && !isSel && !isHov && !emer && !keep && !talk;   // zoomed out with the worldwide dots: look like them
-    if (!out) {                          // (TAGS on one filtered out: its grey dot is drawn, the data block follows in dim green)
+    const cst = coasting(a);                                  // a coast track: a hollow ring and a dim tag with CST
+    if (!out && cst) { ctx.strokeStyle = emer ? COL.alert : isSel ? COL.sel : COL.dbDim; ctx.lineWidth = 1.2 * d;
+      ctx.beginPath(); ctx.arc(px, py, (far ? 2 : 3) * d, 0, 7); ctx.stroke(); }
+    else if (!out) {                          // (TAGS on one filtered out: its grey dot is drawn, the data block follows in dim green)
     ctx.fillStyle = emer ? COL.alert : talk ? COL.sel : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     if (a.ps && !blend && !far) {        // a.ps [letter, colour]: the STARS position symbol (the controlling position) instead of the dot
       ctx.font = FONT(TAG(a.ground ? 9 : 11)); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.ps[0], px, py + .5*d);
@@ -1418,7 +1447,7 @@ function drawAircraft() {
     if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer && !talk) continue;
     if (a.ground && !L.aprontags && !isSel && !isHov && !emer && !talk && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
-    const col = isSel || talk ? COL.sel : out ? COL.dbDim : COL.db;   // an emergency's tag looks like any other, its label red after the callsign
+    const col = isSel || talk ? COL.sel : out || cst ? COL.dbDim : COL.db;   // an emergency's tag looks like any other, its label red after the callsign
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     const l3 = !a.ground && a.l3 ? a.l3 : '';                // a.l3: the site's third line (sim replays: assigned heading and altitude)
     if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep || talk || (out ? 2 : 0))) continue;
@@ -1428,7 +1457,7 @@ function drawAircraft() {
     const l1 = a.cs + (radioTalk.has(a.cs) ? ' ◀' : '');
     ctx.fillText(l1, bx, ly - 2*d);
     if (emer) { ctx.fillStyle = COL.alert; ctx.fillText(' ' + a.emer, bx + ctx.measureText(l1).width, ly - 2*d); ctx.fillStyle = col; }
-    const l2 = a.ground ? (a.gt != null ? a.gt : a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
+    const l2 = a.ground ? (a.gt != null ? a.gt : a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0') + (cst ? ' CST' : '');
     if (l2) ctx.fillText(l2, bx, ly - 2*d + lh);
     if (l3) ctx.fillText(l3, bx, ly - 2*d + 2*lh);
     const n = l3 ? 3 : 2;
@@ -2218,6 +2247,7 @@ function renderCard1() {
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(a.cs)}</b> ${esc(a.type)} ${esc(a.reg)}<br>` + (a.st ? `${esc(a.st)}<br>` : '') +
       `${alt}${a.vs && !a.ground ? ` · ${a.vs > 0 ? '+' : ''}${a.vs} fpm` : ''} · ${a.gs} kt · track ${String(Math.round(a.hdg)).padStart(3, '0')}°T<br>` +
       `squawk ${esc(a.sq || '----')}${a.emer ? ` <span style="color:var(--bad)">${esc(a.emer)}</span>` : ''} · ${la.toFixed(3)}, ${lo.toFixed(3)}<br>` +
+      (coasting(a) ? `<span style="color:var(--dim)">coasting: no position for ${Math.round(Date.now() / 1000 - a.ts)} s, carried on at its last track and speed</span><br>` : '') +
       (FL && FL.id === a.id && FL.dep ? `${esc(FL.dep)} → ${esc(FL.arr || '????')} <span style="color:var(--dim)">filed flight plan</span><br>` +
         (FL.route ? `<div class="fp">${esc(FL.route)}</div>` : '')
       : routeOf(a) ? `${esc(routeOf(a)[0])} → ${esc(routeOf(a)[3])} <span style="color:var(--dim)">${routeOf(a)[6] === 'filed' ? 'filed flight plan' : 'scheduled route'}${routeFits(a, routeOf(a)) ? '' : ", but it doesn't fit where it is"}</span><br>` : '') +
@@ -2642,8 +2672,10 @@ async function poll() {
       if (motion.size > s.aircraft.length + 500) { const ids = new Set(s.aircraft.map(a => a.id)); for (const id of motion.keys()) if (!ids.has(id)) motion.delete(id); }
     }
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
-    if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
-      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o); }
+    // (or, with SITE.coast_s, coasts on: see coastable)
+    if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id)), now = Date.now() / 1000;
+      for (const o of S.aircraft) if (!ids.has(o.id) && now - o.ts < STALE_S + (o.cst ? COAST_S : 0) && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o);
+      if (COAST_S) s.aircraft = s.aircraft.filter(a => keepCoast(a, s.aircraft, now)); }
     S = s;
     ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
   } catch (e) { /* server restarting */ }
@@ -2827,7 +2859,7 @@ function sampleHist() {
     // first seen (page opened, panned there, or just appeared), live: the feed gives no past positions, so the trail starts
     // as where it would have been flying its present track and speed, a dot every 4 s; the real dots take over as they come
     if (!h) { h = []; if (!RP && !a.ground && a.gs > 30 && p[2] != null) for (let k = Math.floor((HIST_S - HIST_EVERY) / 4); k >= 1; k--) h.push([...dest(p[0], p[1], p[2] + 180, a.gs / 3600 * 4 * k), t - 4 * k]); }
-    h = h.filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); h.push([p[0], p[1], t]); hist.set(a.id, h); }
+    h = h.filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); if (!coasting(a, t)) h.push([p[0], p[1], t]); hist.set(a.id, h); }
   for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
 }
 function ingest() {
