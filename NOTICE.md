@@ -9,6 +9,8 @@ feeds are in that site's NOTICE):
   Project's (VATSIM, <https://github.com/vatsimnetwork/vatspy-data-project>), under Creative Commons Attribution-ShareAlike 4.0
   (<https://creativecommons.org/licenses/by-sa/4.0/>); `centers.json` is an adaptation (coordinates rounded to 0.01°) under the
   same licence. They follow the real boundaries closely but aren't official. Not for navigation.
+- **US Class B, C and D airspace** (`web/geo/airspace.json`, from `tools/build_airspace.py`) is the FAA's Class Airspace data
+  (U.S. Government work, public domain), simplified. Not for navigation.
 - **US SIDs, STARs and approaches** are from FAA CIFP (U.S. Government work, public domain; cycle 2611). Not for navigation.
 - **ILS and localizers** (`livedata/ils.json`) are from Robin A. Peel's navaid database (data cycle 2013.10, as shipped by
   FlightGear), © 2013 Robin A. Peel, under the GNU General Public License v2 or later:

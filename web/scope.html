@@ -361,7 +361,8 @@ function setTagPx(v) {
 }
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
               alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
-              final:'#2a2a2a', finalTxt:'#4a4a4a', ctr:'#2c4560', ctrTxt:'#4d6f94' };
+              final:'#2a2a2a', finalTxt:'#4a4a4a', ctr:'#2c4560', ctrTxt:'#4d6f94',
+              asB:'#2f5b94', asC:'#7c3f74', asD:'#2f5b94', asBTxt:'#5a86c0', asCTxt:'#a8669e', asDTxt:'#5a86c0' };
 const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approach:['#555', null], sid:['#262626', [8, 6]] };
 const PROC_HOME = { star:['#4a4a4a', [2, 5]], transition:['#4a4a4a', [2, 5]], approach:['#6a6a6a', null], sid:['#3c3c3c', [8, 6]] };
 const PROC_SEL = '#4fb3ff';
@@ -370,6 +371,7 @@ const PROC_SEL = '#4fb3ff';
 const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches'], ['sid', 'SIDs'], ['allproc', 'Not in use per the ATIS'], ['nearby', 'At nearby airports'],
                 ['#', 'Navigation'], ['fixes', 'Fixes'], ['fixnames', 'Names', 'fixes'], ['rings', 'Range rings'], ['finals', 'Extended finals and ILS'], ['ilsnames', 'ILS names and frequencies', 'finals'],
                 ['#', 'Airports'], ['airports', 'Airports'], ['aptnames', 'Names', 'airports'], ['small', 'Small airports and strips'], ['runways', 'Runways'],
+                ['airspace', 'Class B, C and D airspace (US)'], ['asalt', 'Floors and ceilings', 'airspace'],
                 ['diagram', 'FAA airport diagrams (US)'], ['taxi', 'Ground maps'], ['taxinames', 'Taxiway names', 'taxi'], ['gatenames', 'Gate and terminal names', 'taxi'],
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
                 ['centers', 'Center airspaces (ARTCCs and FIRs)'], ['ctrnames', 'Names', 'centers'],
@@ -380,7 +382,7 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
 const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, ilsnames:false, airports:true, aptnames:false, small:true, runways:true,
-            finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, centers:false, ctrnames:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
+            finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, centers:false, ctrnames:true, airspace:false, asalt:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
             radar:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const APT_FAR = 150;                   // view half-width (nm) past which only the picked airport is drawn
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
@@ -424,7 +426,7 @@ function makeScope(v) {
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); loadCenters(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (e.target.dataset.l === 'radar') loadRadar(); if (!n && e.target.dataset.l === 'allproc') renderCard();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); loadCenters(); loadAirspace(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (e.target.dataset.l === 'radar') loadRadar(); if (!n && e.target.dataset.l === 'allproc') renderCard();
     s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
@@ -492,6 +494,7 @@ let homeCardShut = false;              // its card closed with ✕: the airport 
 let S = null, sel = null, hover = null;
 const motion = new Map(), hist = new Map();
 let LINES = null, MAJOR = [], KSFO = null;
+let AIRSPACE = null, airspaceAsked = false;   // the Class B, C and D layer's shelves, fetched the first time a scope shows it
 let CENTERS = null, centersAsked = false;   // the Center airspaces layer's boundaries, fetched the first time a scope shows it
 const areaAps = new Map();             // ident -> airport with runways, near where you've looked
 const procs = new Map();               // ident -> {p: [[kind, name, transition, pts, missed]], f: {fix: [lat, lon]}} (US, FAA CIFP)
@@ -585,7 +588,32 @@ function drawCenters(c) {
     placed.push([x, y]); c.fillText(id, x, y); }
   c.textAlign = 'left';
 }
-// ------------------------------------------------------------------ map background: street map or satellite tiles (the MAP button)
+// US Class B, C and D airspace (FAA): every shelf outlined as on a sectional (B solid blue, C solid magenta, D dashed blue),
+// and zoomed in its ceiling over its floor in hundreds of feet MSL (SFC: from the surface)
+function loadAirspace() {
+  if (airspaceAsked || !scopes.some(s => s.L.airspace)) return;
+  airspaceAsked = true;
+  fetch('/live/airspace.json').then(r => r.json()).then(j => {
+    AIRSPACE = { B: [], C: [], D: [], labels: [] };
+    for (const [, cl, lo, hi, la, ln, rings] of j) { AIRSPACE[cl].push(...prepLines(rings)); AIRSPACE.labels.push([cl, lo, hi, la, ln]); }
+    mapKey = ''; for (const s of scopes) s.key = '';
+  }).catch(() => { airspaceAsked = false; });
+}
+function drawAirspace(c) {
+  if (view.half > 250) return;
+  const d = dpr();
+  drawLines(c, AIRSPACE.B, COL.asB, 1.5); drawLines(c, AIRSPACE.C, COL.asC, 1.5);
+  c.setLineDash([5 * d, 3 * d]); drawLines(c, AIRSPACE.D, COL.asD); c.setLineDash([]);
+  if (!L.asalt || view.half > 45) return;
+  const placed = []; c.font = FONT(10); c.textAlign = 'center';
+  for (const [cl, lo, hi, la, ln] of AIRSPACE.labels) { const [x, y, z] = proj(la, ln); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+    if (placed.some(q => Math.abs(q[0] - x) < 30 * d && Math.abs(q[1] - y) < 26 * d)) continue;
+    placed.push([x, y]); c.fillStyle = c.strokeStyle = COL['as' + cl + 'Txt']; c.lineWidth = d;
+    c.fillText(String(hi), x, y - 2 * d); c.fillText(lo ? String(lo) : 'SFC', x, y + 10 * d);
+    c.beginPath(); c.moveTo(x - 9 * d, y + .5 * d); c.lineTo(x + 9 * d, y + .5 * d); c.stroke(); }
+  c.textAlign = 'left';
+}
+// Center airspaces (ARTCCs: street map or satellite tiles (the MAP button)
 // Web Mercator tiles warped onto the globe: each tile cut into a grid of cells, each cell drawn as two triangles with an affine
 // transform. A tile still loading is stood in for by a loaded ancestor's matching corner, so zooming never flashes black.
 const BM_ORDER = ['', 'map', 'sat'];
@@ -762,6 +790,7 @@ function drawMap() {
     if (L.coast) drawLines(c, LINES.coast, COL.coast);
   }
   if (L.centers && CENTERS) drawCenters(c);
+  if (L.airspace && AIRSPACE) drawAirspace(c);
   // traffic is only fetched this far from the centre: show the edge when the view is bigger
   if (S && S.center && !(RP && RP.fh) && viewNm() > S.nm * 1.05 && !(WORLD && WORLD.ok && L.world)) { geoCircle(c, S.center[0], S.center[1], S.nm, COL.cover, [6, 6]);
     const [x, y, z] = proj(...dest(S.center[0], S.center[1], 0, S.nm)); if (z > 0) { c.font = FONT(10); c.fillStyle = COL.cover; c.textAlign = 'center'; c.fillText(WORLD && WORLD.ok ? `live within ${S.nm} nm · elsewhere every ${WORLD.every < 60 ? WORLD.every + ' s' : Math.round(WORLD.every / 60) + ' min'} (${SITE.world_link[1]})` : `traffic within ${S.nm} nm of the centre` + (WORLD_ERR && L.world && !RP ? ` · worldwide traffic unavailable: ${WORLD_ERR}` : ''), x, y - 6*d); c.textAlign = 'left'; } }
@@ -1785,7 +1814,7 @@ function frame() {
   for (const s of scopes) {
     if (!s.cv.width || !s.cv.height || !s.el.offsetWidth) continue;
     use(s); setFrame();
-    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, !!CENTERS, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], apt && apt[0], S && S.center && S.center.join(), S && S.nm].join();
+    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, !!CENTERS, !!AIRSPACE, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], apt && apt[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
     tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); tagDone(s); if (measure && measure.s === s) drawMeasure();
@@ -3849,7 +3878,7 @@ function bdChart() {
   if (has('timelapse')) { tlInit(); if (tlq) { const ph = +new URLSearchParams(location.search).get('h') || 0; tlOpen(tlq, !m && !h && !ph, ph); } }
   if (!want) poll();                       // an airport to open on: the first poll waits until it's found, rather than asking for SFO first
   fetch('/live/lines.json').then(r => r.json()).then(j => { LINES = { coast:prepLines(j.coast), borders:prepLines(j.borders), states:prepLines(j.states) }; mapKey = ''; });
-  loadCenters();
+  loadCenters(); loadAirspace();
   fetch('/live/ksfo.json').then(r => r.json()).then(j => { KSFO = j; mapKey = ''; });
   try { MAJOR = await (await fetch('/live/major.json')).json(); mapKey = ''; } catch (e) {}
   if (want) {
