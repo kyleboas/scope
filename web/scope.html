@@ -364,7 +364,7 @@ const KEY = SITE.name;                 // localStorage prefix
 const STALE_S = SITE.stale_s || 20, POLL_MS = SITE.poll_ms || 2000, WORLD_MS = SITE.world_ms || 30000;
 // SITE.coast_s (a real feed, whose gaps are coverage: terrain, the edge of the receivers' range): an airborne aircraft whose
 // reports stop is carried on for that many seconds past STALE_S as a coast track, the way a radar coasts one: drawn hollow
-// and dim, CST in its data block, its trail left behind. Not one low near an airport (landing, or just off the runway: it
+// and dim, CST in its data block. Not one low near an airport (landing, or just off the runway: it
 // stops at STALE_S as before), nor one with aircraft reported around it at or below its altitude (its receivers would see
 // it, so it's gone). Off when 0 (sims: an aircraft gone is a pilot who left).
 const COAST_S = SITE.coast_s || 0, CST_AFTER = Math.min(12, STALE_S);
@@ -2859,7 +2859,7 @@ function sampleHist() {
     // first seen (page opened, panned there, or just appeared), live: the feed gives no past positions, so the trail starts
     // as where it would have been flying its present track and speed, a dot every 4 s; the real dots take over as they come
     if (!h) { h = []; if (!RP && !a.ground && a.gs > 30 && p[2] != null) for (let k = Math.floor((HIST_S - HIST_EVERY) / 4); k >= 1; k--) h.push([...dest(p[0], p[1], p[2] + 180, a.gs / 3600 * 4 * k), t - 4 * k]); }
-    h = h.filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); if (!coasting(a, t)) h.push([p[0], p[1], t]); hist.set(a.id, h); }
+    h = h.filter(q => q[2] > t - HIST_S + HIST_EVERY && q[2] <= t); h.push([p[0], p[1], t]); hist.set(a.id, h); }
   for (const id of hist.keys()) if (!ids.has(id)) hist.delete(id);
 }
 function ingest() {
