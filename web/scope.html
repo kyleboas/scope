@@ -226,10 +226,13 @@
   #bdp .r i { font-style:normal; color:#6ee36e; font-size:10px; } #bdp .s-cancelled { color:var(--bad); } #bdp .s-approach, #bdp .s-taxiing, #bdp .s-taxiingin { color:var(--fg); }
   #bdp .now { margin:2px 12px; border-top:1px solid #636366; font-size:10px; color:var(--dim); text-align:right; line-height:1.2; }
   #bdp #bdBack { padding:2px 6px; margin:0 0 4px -6px; color:var(--fg2); }
-  #bdp .al { overflow:auto; overscroll-behavior:contain; } #bdp .ap { display:flex; align-items:center; gap:10px; padding:5px 12px; cursor:pointer; border-top:1px solid #2a2a2c; }
-  #bdp .ap:hover { background:var(--alt); } #bdp .ap > div { flex:1; min-width:0; } #bdp .ap b { color:var(--fg); }
-  #bdp .ap span { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #bdp .ap i { display:block; font-style:normal; font-size:11px; color:var(--dim); }
-  #bdp .ap svg { flex:none; fill:#636366; } #bdp .ap:hover svg { fill:#98989f; }
+  #bdp .al { overflow:auto; overscroll-behavior:contain; }
+  #bdp .lb { display:grid; grid-template-columns:3ch minmax(0, 1fr) 5ch 5ch 6ch 9ch; gap:0 8px; align-items:baseline; padding:4px 12px; border-top:1px solid #2a2a2c; cursor:pointer; }
+  #bdp .lb > span:nth-child(n+3) { text-align:right; font-variant-numeric:tabular-nums; color:var(--fg); } #bdp .lb > span:first-child { color:var(--dim); text-align:right; }
+  #bdp .lb > span:nth-child(2) { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #bdp .lb b { color:var(--fg); font-weight:600; }
+  #bdp .lb i { font-style:normal; color:var(--dim); font-size:11px; } #bdp .lb:hover { background:var(--alt); } #bdp .lb.me { box-shadow:inset 2px 0 #4fb3ff; }
+  #bdp .lb.hd { cursor:default; border-top:0; padding-top:2px; padding-bottom:3px; font-size:10px; letter-spacing:.06em; color:var(--dim); } #bdp .lb.hd:hover { background:none; }
+  #bdp .lb.hd button { padding:2px 0; font-size:10px; letter-spacing:.06em; text-align:right; color:var(--dim); } #bdp .lb.hd button:hover { background:none; color:var(--fg); } #bdp .lb.hd button.on { color:var(--fg); }
   #bdp .note { padding:6px 12px 0; font-size:11px; color:var(--dim); white-space:normal; }
   #lsp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
@@ -3832,7 +3835,7 @@ function bdInto(a) {                     // from the list (or the airport card):
   bdIn = true; bdScrolled = ''; $('bdp').hidden = false;
   if (!home || home[0] !== a[0]) setHome(a, false); else bdLoad();
 }
-async function bdList() {                // the main board: the picked airport, then the 30 busiest big airports over the next 12 h
+async function bdList() {                // the main board: the picked airport, then the 50 busiest big airports over the next 12 h
   if (!BDL) BDL = { aps: [], by: new Map() };
   const pin = () => { if (home && !BDL.aps.some(a => a[0] === home[0])) BDL.aps.unshift(home); };
   BDL.aps = BDL.aps.filter(a => a !== BDL.pinned); pin(); BDL.pinned = home && BDL.aps[0] === home ? home : null; bdRender();
@@ -3847,14 +3850,22 @@ async function bdList() {                // the main board: the picked airport, 
   } catch (e) {}
   bdRender();
 }
+// the main board as a leaderboard: sorted by any column (click its head; again for the other way), remembered
+let bdSort = (() => { try { return JSON.parse(localStorage.getItem(KEY + '-bdsort')) || ['tot', -1]; } catch (e) { return ['tot', -1]; } })();
+const BD_COLS = [['dep', 'DEP', 'Departures this hour'], ['arr', 'ARR', 'Arrivals this hour'], ['tot', '12 H', 'Flights over the next 12 hours'], ['pk', 'PEAK', 'Flights in its busiest hour ahead (and which hour)']];
+const bdVal = (r, k) => !r || r.src === 'none' ? null : k === 'dep' ? (r.next ? r.next[0] : null) : k === 'arr' ? (r.next ? r.next[1] : null)
+  : k === 'tot' ? r.up.reduce((s, v) => s + (v || 0), 0) : r.peak ? r.peak[1] : null;
 function bdListRender(p) {
-  const bars = up => { if (!up || !up.some(v => v)) return ''; const m = Math.max(...up.map(v => v || 0)), w = 5;
-    return `<svg width="${up.length * w}" height="18" aria-hidden="true">${up.map((v, i) => v ? `<rect x="${i * w}" y="${18 - Math.max(1, v / m * 18)}" width="${w - 1}" height="${Math.max(1, v / m * 18)}" rx="1"/>` : '').join('')}</svg>`; };
-  p.innerHTML = `<div class="bh"><b>Busiest airports</b> <span class="dim">· next 12 h</span><button class="x" id="bdX">✕</button></div><div class="al">` +
-    BDL.aps.map(a => { const r = BDL.by.get(a[0]);
-      const sub = !r ? 'loading…' : r.src === 'none' ? 'no data yet' : `${r.next ? `this hour ${r.next[0]} dep · ${r.next[1]} arr` : ''}${r.peak ? ` · busiest ${bdZ(r.peak[0]).slice(0, 2)}Z` : ''}`;
-      return `<div class="ap" data-bap="${esc(a[0])}"><div><b>${esc(a[0])}</b> <span>${esc(a[2])}</span><i>${esc(sub)}</i></div>${r ? bars(r.up) : ''}</div>`; }).join('') + '</div>';
+  const [k, dir] = bdSort, rows = BDL.aps.map(a => [a, BDL.by.get(a[0])]);
+  rows.sort((x, y) => { const u = bdVal(x[1], k), v = bdVal(y[1], k); return u == null ? (v == null ? 0 : 1) : v == null ? -1 : (u - v) * dir || (bdVal(y[1], 'tot') - bdVal(x[1], 'tot')); });
+  const cell = (r, c) => { const v = bdVal(r, c); return v == null ? '<span class="dim">–</span>' : c === 'pk' ? `${v}<i> ${bdZ(r.peak[0]).slice(0, 2)}Z</i>` : String(v); };
+  p.innerHTML = `<div class="bh"><b>Busiest airports</b> <span class="dim">· now and the next 12 h</span><button class="x" id="bdX">✕</button></div>` +
+    `<div class="lb hd"><span>#</span><span>AIRPORT</span>${BD_COLS.map(([c, t, tip]) => `<button data-bs="${c}" title="${tip}" class="${c === k ? 'on' : ''}">${t}${c === k ? (dir < 0 ? ' ▾' : ' ▴') : ''}</button>`).join('')}</div><div class="al">` +
+    rows.map((x, i) => [...x, i]).sort((x, y) => (home && y[0][0] === home[0]) - (home && x[0][0] === home[0])).map(([a, r, i]) => `<div class="lb${home && home[0] === a[0] ? ' me' : ''}" data-bap="${esc(a[0])}"><span>${i + 1}</span><span><b>${esc(a[0])}</b> ${esc(a[3] || a[2])}</span>` +
+      (r ? BD_COLS.map(([c]) => `<span>${cell(r, c)}</span>`).join('') : '<span class="dim" style="grid-column:span 4">loading…</span>') + '</div>').join('') + '</div>';
   $('bdX').onclick = () => { p.hidden = true; };
+  p.querySelectorAll('[data-bs]').forEach(b => b.onclick = () => { const c = b.dataset.bs; bdSort = [c, c === k ? -dir : -1];
+    try { localStorage.setItem(KEY + '-bdsort', JSON.stringify(bdSort)); } catch (e) {} bdRender(); });
   p.querySelectorAll('[data-bap]').forEach(el => el.onclick = () => bdInto(BDL.aps.find(a => a[0] === el.dataset.bap)));
 }
 async function bdLoad() {

@@ -91,7 +91,7 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     `{ok, every_s, frames:[[t, OpenSky compact rows, estimate rows]]}`, the other aircraft within nm of it, for the replay's
     TRAFFIC; the replay also charts altitude and ground speed (PROFILE); see livescope's `history.py`),
     `board` (a BOARD header button: the busiest airports over the next 12 h (`?a=top`) and the picked one (`?a=list&ids=`),
-    each in short; one opens
+    each in short, as a leaderboard sortable by any number; one opens
     its board, as does the airport card's link: the airport's departures and arrivals, and a
     chart of its movements hour by hour for the next 12 h (filed, else the usual) and the busiest hour ahead,
     from a `board` endpoint: `?id=` returns `{ok, id, now_h, hours:[{h, dep, arr, src seen / filed / none}],
