@@ -332,12 +332,12 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans'],
-                ['#', 'Weather'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
+                ['#', 'Weather'], ['radar', 'Radar'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
 const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:false, aptnames:false, small:true, runways:true,
             finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
-            sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
+            radar:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
@@ -378,7 +378,7 @@ function makeScope(v) {
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (e.target.dataset.l === 'radar') loadRadar(); if (!n && e.target.dataset.l === 'allproc') renderCard();
     s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
@@ -523,18 +523,18 @@ const BM_ORDER = ['', 'map', 'sat'];
 // Esri's (no key needed): the dark grey canvas with its labels on top, and world imagery darkened so the scope stays readable
 const esri = s => (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/${z}/${y}/${x}`;
 const BASEMAPS = {
-  map: { urls:[esri('Canvas/World_Dark_Gray_Base'), esri('Canvas/World_Dark_Gray_Reference')], max:16, credit:'Esri, HERE, Garmin, © OpenStreetMap contributors' },
-  sat: { urls:[esri('World_Imagery')], max:19, dim:.35, credit:'Imagery © Esri, Maxar, Earthstar Geographics' } };
+  map: { id:'map', urls:[esri('Canvas/World_Dark_Gray_Base'), esri('Canvas/World_Dark_Gray_Reference')], max:16, credit:'Esri, HERE, Garmin, © OpenStreetMap contributors' },
+  sat: { id:'sat', urls:[esri('World_Imagery')], max:19, dim:.35, credit:'Imagery © Esri, Maxar, Earthstar Geographics' } };
 const tileCache = new Map();           // 'style/z/x/y' -> Image (complete once loaded; .bad when it failed)
 let tilesWaiting = 0;
-function tileImg(st, li, z, x, y, load) {
-  const k = `${st}${li}/${z}/${x}/${y}`; let im = tileCache.get(k);
+function tileImg(B, li, z, x, y, load) {
+  const k = `${B.id}${li}/${z}/${x}/${y}`; let im = tileCache.get(k);
   if (im) { tileCache.delete(k); tileCache.set(k, im); return im; }   // most recently used last
   if (!load || tilesWaiting > 48) return null;
   im = new Image(); tilesWaiting++;
   im.onload = () => { tilesWaiting--; im.ok = true; mapKey = ''; };
   im.onerror = () => { tilesWaiting--; im.bad = true; setTimeout(() => tileCache.get(k) === im && tileCache.delete(k), 30000); };
-  im.src = BASEMAPS[st].urls[li](z, x, y); tileCache.set(k, im);
+  im.src = B.urls[li](z, x, y); tileCache.set(k, im);
   if (tileCache.size > 600) for (const [kk, v] of tileCache) { if (tileCache.size <= 500) break; if (v.ok || v.bad) tileCache.delete(kk); }
   return im;
 }
@@ -551,8 +551,8 @@ function drawTri(c, im, a, b, e, ua, ub, ue) {
   c.setTransform(m11, m12, m21, m22, a[0] - m11 * ua[0] - m21 * ua[1], a[1] - m12 * ua[0] - m22 * ua[1]);
   c.drawImage(im, 0, 0); c.restore();
 }
-function drawBasemap(c) {
-  const st = L.basemap, B = BASEMAPS[st]; if (!B) return;
+function drawBasemap(c) { if (BASEMAPS[L.basemap]) drawTiles(c, BASEMAPS[L.basemap]); }
+function drawTiles(c, B) {
   const d = dpr(), w = P0.w, h = P0.h;
   // the zoom whose tile pixels are about screen pixels, at the centre's latitude
   const mpp = 2 * view.half * 1852 / Math.min(w, h) * d, tpx = 256;   // per CSS pixel, so labels stay legible on retina
@@ -576,9 +576,12 @@ function drawBasemap(c) {
   list.sort((p, q) => Math.hypot(p[0] + .5 - cx, p[1] + .5 - cy) - Math.hypot(q[0] + .5 - cx, q[1] + .5 - cy));
   for (let li = 0; li < B.urls.length; li++) for (const [tx, ty_] of list) {
     const x = ((tx % n) + n) % n;
-    // the tile itself, else its nearest loaded ancestor and where this tile sits in it
-    let im = tileImg(st, li, z, x, ty_, true), zz = z, ax = x, ay = ty_;
-    while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(st, li, zz, ax, ay, false); }
+    // the tile itself, else its nearest loaded ancestor and where this tile sits in it (then the same from the source it
+    // replaced, B.prev: the radar's last frame while the new one loads)
+    let im = tileImg(B, li, z, x, ty_, true), zz = z, ax = x, ay = ty_;
+    while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(B, li, zz, ax, ay, false); }
+    if (!(im && im.ok) && B.prev) { zz = z; ax = x; ay = ty_; im = tileImg(B.prev, li, z, x, ty_, false);
+      while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(B.prev, li, zz, ax, ay, false); } }
     if (!(im && im.ok)) continue;
     const f = 2 ** (z - zz), S0 = im.naturalWidth / f, u0 = (x - ax * f) * S0, v0 = (ty_ - ay * f) * S0;
     const grid = [];
@@ -597,14 +600,40 @@ function drawBasemap(c) {
   if (B.dim) { c.fillStyle = `rgba(0,0,0,${B.dim})`; c.fillRect(0, 0, w, h); }
 }
 function basemapCredit(c) {
-  const B = BASEMAPS[L.basemap]; if (!B) return; const d = dpr();
+  const B = BASEMAPS[L.basemap], t = [B && B.credit, radarShown() && RADAR.credit].filter(Boolean).join(' · '); if (!t) return; const d = dpr();
   c.font = `${10 * d}px ui-monospace, Menlo, monospace`; c.textAlign = 'right'; c.fillStyle = '#9a9a9a'; c.shadowColor = '#000'; c.shadowBlur = 3 * d;
-  c.fillText(B.credit, P0.w - 8 * d, P0.h - (PHONE.matches ? 52 : 40) * d); c.textAlign = 'left'; c.shadowBlur = 0;
+  c.fillText(t, P0.w - 8 * d, P0.h - (PHONE.matches ? 52 : 40) * d); c.textAlign = 'left'; c.shadowBlur = 0;
+}
+// ------------------------------------------------------------------ weather radar (Layers: Radar; off by default)
+// RainViewer's composite of the world's radars (no key needed), its latest frame (every 10 min; the list of frames asked for
+// every 5 while a scope has the layer on), laid over the background. Its free tiles go to zoom 7: closer in they're scaled up.
+// Not shown when playing back a timelapse (it's now, not then).
+let RADAR = null, radarT = 0;
+const RADAR_MS = 5 * 60000;
+const radarOn = () => !RP && eachScope(s => s.L.radar).some(Boolean);
+const radarShown = () => RADAR && L.radar && !RP;
+async function loadRadar() {
+  if (!radarOn() || Date.now() - radarT < RADAR_MS) return;
+  radarT = Date.now();
+  try {
+    const j = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json(), f = j.radar && j.radar.past && j.radar.past.slice(-1)[0];
+    if (!f || !j.host) throw 0;
+    if (RADAR && RADAR.id === f.path) return;
+    const u = j.host + f.path, hm = new Date(f.time * 1000).toISOString().slice(11, 16).replace(':', '');
+    RADAR = { id:f.path, urls:[(z, x, y) => `${u}/256/${z}/${x}/${y}/2/1_1.png`], max:7, alpha:.7, prev:RADAR && { ...RADAR, prev:null },
+              credit:`radar ${hm}Z RainViewer` };
+    mapKey = '';
+  } catch (e) { radarT = Date.now() - RADAR_MS + 30000; }
+}
+function drawRadar(c) {
+  if (!radarShown()) return;
+  c.save(); c.globalAlpha = RADAR.alpha; drawTiles(c, RADAR); c.restore();
 }
 function drawMap() {
   const c = mctx, d = dpr();
   c.fillStyle = '#000'; c.fillRect(0, 0, map.width, map.height);
   drawBasemap(c);
+  drawRadar(c);
   const ppn = pxPerNm();
   if (view.half > 400) {              // the globe's edge and a 15° graticule
     c.strokeStyle = '#222'; c.lineWidth = d; c.beginPath(); c.arc(P0.w / 2, P0.h / 2, P0.k, 0, 7); c.stroke();
@@ -2242,7 +2271,7 @@ async function poll() {
   const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && !aroundHome && eachScope(worldShown).every(Boolean);
   if (RP) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
   else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
-    ingest(); loadWorld(); loadBoats(); loadWx(); loadAtc(); }
+    ingest(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadAtc(); }
   else try {
     const la0 = aroundHome ? home[5] : view.lat, lo0 = aroundHome ? home[6] : view.lon, nm0 = aroundHome ? MAX_LIVE_NM : nm;
     // a split scope showing somewhere past that (its own airport, or panned away): its area is asked too, and merged in
@@ -2264,7 +2293,7 @@ async function poll() {
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
       for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
+    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
