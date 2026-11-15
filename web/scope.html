@@ -34,10 +34,10 @@
   #q::placeholder, .altf input::placeholder { color:#5a5a5e; }
   .altf { display:flex; align-items:center; gap:1px; font:11px var(--mono); color:var(--dim); white-space:nowrap; }
   .altf input { width:4.5ch; padding:5px 2px; text-align:center; }
-  .altf.on, .altf.on input { color:#4fb3ff; }
-  #altT { cursor:pointer; padding:5px 2px; } #altT:hover { color:var(--fg); } .altf.on #altT:hover { color:#8fd0ff; }
+  .altf.on, .altf.on input { color:var(--fg); }
+  #altT { cursor:pointer; padding:5px 2px; } #altT:hover { color:var(--fg); } .altf.on #altT:hover { color:#fff; }
   .altf.off input, .altf.off #altM { text-decoration:line-through; }
-  #altM { cursor:pointer; padding:5px 2px 5px 5px; } #altM:hover { color:var(--fg); } .altf.on #altM:hover { color:#8fd0ff; }
+  #altM { cursor:pointer; padding:5px 2px 5px 5px; } #altM:hover { color:var(--fg); } .altf.on #altM:hover { color:#fff; }
   #res { position:absolute; left:0; top:calc(100% + 4px); z-index:5; width:340px; max-height:60vh; overflow:auto; background:rgba(28,28,30,.98);
          border-radius:6px; box-shadow:0 8px 24px #0008; display:none; }
   #res div { padding:7px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -67,7 +67,7 @@
   .views [data-layout] { display:flex; align-items:center; } .views [data-layout] svg { width:14px; height:14px; }
   /* a split scope's own airport: its button in the view bar, and a search box over the scope */
   #tiles.one .views [data-apt] { display:none; }
-  .views [data-apt] { color:#bbb; border:1px solid #444; margin:0 4px; padding:3px 7px; } .views [data-apt]:hover { border-color:#777; } .views [data-apt].on { color:#4fb3ff; border-color:#4fb3ff; }
+  .views [data-apt] { color:#bbb; border:1px solid #444; margin:0 4px; padding:3px 7px; } .views [data-apt]:hover { border-color:#777; } .views [data-apt].on { color:var(--fg); border-color:var(--fg); }
   .tapt { position:absolute; left:8px; bottom:38px; z-index:4; width:min(300px, calc(100% - 16px)); background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 24px #0008; }
   .tapt[hidden] { display:none; } .tapt input { width:100%; box-sizing:border-box; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); font:12px var(--mono); padding:8px 10px; outline:none; }
   .tapt .r { max-height:min(40vh, 240px); overflow:auto; } .tapt .r div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -86,7 +86,7 @@
   #card .pr span { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; cursor:pointer; color:var(--fg2); }
   #card .pr span.use { border-color:#6a6a6a; color:#e8e8e8; }
   #card .pr span.off { opacity:.45; }
-  #card .pr span.on { border-color:#4fb3ff; color:#4fb3ff; opacity:1; }
+  #card .pr span.on { border-color:var(--fg); color:var(--fg); opacity:1; }
   #card .pr i span { border:0; padding:0; margin:0; cursor:auto; }
   #card .pr a { display:inline-block; margin:1px 3px 1px 0; padding:0 5px; border:1px solid var(--line); border-radius:3px; color:var(--fg2); }
   #card .pr a:hover { border-color:#6a6a6a; color:#e8e8e8; }
@@ -94,7 +94,7 @@
   #card div.ch .chh { color:var(--fg2); margin-top:5px; }
   #card div.ch .pr { max-height:none; }
   #card #dgOn { padding:0 6px; }
-  #card #dgOn.on { border-color:#4fb3ff; color:#4fb3ff; }
+  #card #dgOn.on { border-color:var(--fg); color:var(--fg); }
   #card .dim { color:var(--dim); }
   .atis.use b { color:#e8e8e8; font-weight:normal; }
   body.noApt.noCard, body.sideShut:not(.listOpen) { grid-template-columns:1fr; } body.noApt.noCard #side, body.sideShut:not(.listOpen) #side { display:none; }
@@ -233,7 +233,7 @@
   #bdp .lb { display:grid; grid-template-columns:2ch minmax(0, 1fr) 3ch 3ch 4ch 7ch; gap:0 9px; align-items:baseline; padding:4px 16px 4px 10px; border-top:1px solid #2a2a2c; cursor:pointer; }
   #bdp .lb > span:nth-child(n+3) { text-align:right; font-variant-numeric:tabular-nums; color:var(--fg); } #bdp .lb > span:first-child { color:var(--dim); text-align:right; }
   #bdp .lb > span:nth-child(2) { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #bdp .lb b { color:var(--fg); font-weight:600; }
-  #bdp .lb i { font-style:normal; color:var(--dim); font-size:11px; } #bdp .lb:hover { background:var(--alt); } #bdp .lb.me { box-shadow:inset 2px 0 #4fb3ff; }
+  #bdp .lb i { font-style:normal; color:var(--dim); font-size:11px; } #bdp .lb:hover { background:var(--alt); } #bdp .lb.me { box-shadow:inset 2px 0 var(--fg); }
   #bdp .lb.hd { cursor:default; border-top:0; padding-top:2px; padding-bottom:3px; color:var(--dim); } #bdp .lb.hd > * { font-size:10px; letter-spacing:.06em; }   /* the row keeps 12px, so its ch columns match the rows below */ #bdp .lb.hd:hover { background:none; }
   #bdp .lb.hd button { position:relative; overflow:visible; white-space:nowrap; padding:2px 0; font-size:10px; letter-spacing:.06em; text-align:right; color:var(--dim); } #bdp .lb.hd button:hover { background:none; color:var(--fg); } #bdp .lb.hd button.on { color:var(--fg); } #bdp .lb.hd button.on::after { content:attr(data-dir); position:absolute; left:100%; margin-left:1px; }
   #bdp .note { padding:6px 10px 0; font-size:11px; color:var(--dim); white-space:normal; }
@@ -384,7 +384,7 @@ function setOthPct(v) {
   document.querySelectorAll('.othop b').forEach(b => b.textContent = othPct + '%'); mapKey = '';
 }
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
-              alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
+              alert:'#ff3b30', hist:'#8e8e93', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
               final:'#2a2a2a', finalTxt:'#4a4a4a', ctr:'#2c4560', ctrTxt:'#4d6f94',
               asB:'#2f5b94', asC:'#7c3f74', asD:'#2f5b94', asBTxt:'#5a86c0', asCTxt:'#a8669e', asDTxt:'#5a86c0' };
 const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approach:['#555', null], sid:['#262626', [8, 6]] };
