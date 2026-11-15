@@ -2169,7 +2169,7 @@ function pick(a) {
 }
 
 // ------------------------------------------------------------------ data
-let pollT = 0, polling = false, lastAreaKey = '';
+let pollT = 0, polling = false, pollAgain = false, lastAreaKey = '';   // pollAgain: asked for while one was on its way (the view moved): go again as soon as it's back
 async function loadProcs(lat, lon, nm, want) {
   try { const j = await (await fetch(`/api/live/procs?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&nm=${nm.toFixed(0)}` + (want ? '&id=' + encodeURIComponent(want) : ''))).json();
     if (procs.size > 300) procs.clear();
@@ -2181,7 +2181,7 @@ async function loadProcs(lat, lon, nm, want) {
 }
 function schedule(ms) { clearTimeout(pollT); pollT = setTimeout(poll, ms); }
 async function poll() {
-  if (polling) return schedule(300);
+  if (polling) { pollAgain = true; return; }
   if (SITE.idle_min && (document.hidden || idle())) return schedule(1000);
   polling = true;
   const nm = Math.max(10, Math.min(250, viewNm() * 1.05));
@@ -2217,7 +2217,7 @@ async function poll() {
       if (areaAps.size > 4000) areaAps.clear(); for (const a of aps) areaAps.set(a[0], a); mapKey = ''; } catch (e) {}
     if (pr) loadProcs(la, lo, pr); }
   polling = false;
-  schedule(POLL_MS);
+  schedule(pollAgain ? 0 : POLL_MS); pollAgain = false;
 }
 // ------------------------------------------------------------------ arrivals / departures of the picked airport
 // only from a route that fits (the site's filed plan, or the callsign's route): nothing is guessed from the track.
@@ -3087,15 +3087,16 @@ function fhDraw() {                              // the replayed flight's whole 
   const fhq = new URLSearchParams(location.search).get('fh');
   if (has('history') && fhq && !tlq) fhOpen(fhq, +new URLSearchParams(location.search).get('t') || 0, !m && !h);
   if (has('timelapse')) { tlInit(); if (tlq) { const ph = +new URLSearchParams(location.search).get('h') || 0; tlOpen(tlq, !m && !h && !ph, ph); } }
-  poll();
+  if (!want) poll();                       // an airport to open on: the first poll waits until it's found, rather than asking for SFO first
   fetch('/live/lines.json').then(r => r.json()).then(j => { LINES = { coast:prepLines(j.coast), borders:prepLines(j.borders), states:prepLines(j.states) }; mapKey = ''; });
   fetch('/live/ksfo.json').then(r => r.json()).then(j => { KSFO = j; mapKey = ''; });
-  MAJOR = await (await fetch('/live/major.json')).json(); mapKey = '';
+  try { MAJOR = await (await fetch('/live/major.json')).json(); mapKey = ''; } catch (e) {}
   if (want) {
     const id = want[0].toUpperCase();
     let a = MAJOR.find(x => x[0] === id || x[1] === id);
     if (!a) { try { a = (await (await fetch('/api/live/search?q=' + encodeURIComponent(id))).json())[0]; } catch (e) {} }
     if (a) setHome(a, true, want[1] ? +want[1] : 40);
+    schedule(0);
   }
 })();
 </script>
