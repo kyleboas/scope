@@ -1206,7 +1206,7 @@ function drawAircraft() {
   const fOn = fltOn();   // ARR / DEP filter on: only its arrivals / departures are tagged, and always (any zoom, no declutter)
   const pri = a => a.id === sel || a.id === hover || a.emer || lsOn(a.cs) ? 2 : tagWas.has(a.id) ? 1 : 0;
   for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
-    if (a.ground && !L.ground && a.id !== sel) continue;
+    if (a.ground && !L.ground && a.id !== sel && !(lsHeard.size && lsOn(a.cs))) continue;   // on the ground: only with GND on, selected or on the radio
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
     const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer, talk = lsHeard.size > 0 && lsOn(a.cs);   // talk: on the radio (listen)
@@ -3415,8 +3415,9 @@ function lsDone(r) {
   const job = s.job; s.busy = false; s.job = null;
   const text = r.text || '', all = new Set();
   for (const sc of scopes) for (const x of sc.drawn || []) all.add(x.a.cs);
-  if (!all.size && S) for (const a of S.aircraft) all.add(a.cs);
-  const hit = text ? lsMatch(text, [...all].filter(Boolean)) : [];
+  // the aircraft in view first; then every one the feed has (off screen, filtered out, taxiing with GND off)
+  const hit = !text ? [] : lsMatch(text, [...all].filter(Boolean)).concat();
+  if (text && !hit.length && S) hit.push(...lsMatch(text, S.aircraft.map(a => a.cs).filter(Boolean)));
   const until = performance.now() + LS_HOLD_S * 1000 + (job.final ? 0 : 3000);
   for (const cs of hit) { lsHeard.set(cs, until); job.cs.add(cs); }
   if (job.final && text && !/^\[.*\]$|^\(.*\)$/.test(text)) { lsLast = { text, cs: [...job.cs] }; lsRender(); }
