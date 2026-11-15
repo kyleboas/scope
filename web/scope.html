@@ -3940,9 +3940,10 @@ function bdShow() {                      // a new airport picked: its board, if 
   if (!has('board') || !bdOpen()) return;
   if (bdIn && home && (!BD || BD.id !== home[0])) { bdScrolled = ''; bdLoad(); } else bdRender();
 }
-function bdInto(a) {                     // from the list (or the airport card): pick the airport and open its board
+function bdInto(a, fly) {                // from the list (fly: the scope goes there too) or the airport card: pick the airport and open its board
   bdIn = true; bdScrolled = ''; bdPanel(true);
-  if (!home || home[0] !== a[0]) setHome(a, false); else bdLoad();
+  if (!home || home[0] !== a[0]) setHome(a, fly);
+  else { if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = 40; viewChanged(true); } bdLoad(); }
 }
 async function bdList() {                // the main board: the picked airport, then the 50 busiest big airports over the next 12 h
   if (!BDL) BDL = { aps: [], by: new Map() };
@@ -3975,7 +3976,7 @@ function bdListRender(p) {
   $('bdX').onclick = () => bdPanel(false);
   p.querySelectorAll('[data-bs]').forEach(b => b.onclick = () => { const c = b.dataset.bs; bdSort = [c, c === k ? -dir : -1];
     try { localStorage.setItem(KEY + '-bdsort', JSON.stringify(bdSort)); } catch (e) {} bdRender(); });
-  p.querySelectorAll('[data-bap]').forEach(el => el.onclick = () => bdInto(BDL.aps.find(a => a[0] === el.dataset.bap)));
+  p.querySelectorAll('[data-bap]').forEach(el => el.onclick = () => bdInto(BDL.aps.find(a => a[0] === el.dataset.bap), true));
 }
 async function bdLoad() {
   if (!home) return;
