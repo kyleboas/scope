@@ -12,6 +12,12 @@ scope gives every site the page (canvas, no build step), airports and runways, I
 diagrams laid on the map and the rest of the FAA's charts (SIDs, STARs, approaches, minimums; US), OSM ground maps, a street map or satellite background (MAP), ATIS/METAR, split view, measuring, layers, ARR/DEP and altitude filters. See
 [livescope's README](https://github.com/kyleboas/livescope#readme) for the full feature list.
 
+**Play** (▶ in the header, next to the timelapse button; needs a picked airport): takes the aircraft on the screen as they
+are (live, or wherever a timelapse is) and lets you work them yourself, flown in the page. Drag an aircraft and let go in
+open sky for that heading, on a fix for direct, or on one of the airport's extended finals for its approach; the aircraft
+card has heading, altitude, speed, direct and the approaches. Cleared aircraft join the final, fly the 3° path and land (or go
+around if too high); under 3 nm and 900 ft apart is a CA. The bar pauses, runs at 1–8×, restarts, or goes back to live.
+
 ## Run
 
 Check scope out next to a site and point the server at the site's directory:
