@@ -223,7 +223,7 @@
   #bdp .r b { color:var(--fg); font-weight:normal; overflow:hidden; text-overflow:ellipsis; } #bdp .r.past { opacity:.5; } #bdp .r.lv { cursor:pointer; } #bdp .r.lv:hover { background:var(--alt); }
   #bdp .r i { font-style:normal; color:#6ee36e; font-size:10px; } #bdp .s-cancelled { color:var(--bad); } #bdp .s-approach, #bdp .s-taxiing, #bdp .s-taxiingin { color:var(--fg); }
   #bdp .now { margin:2px 12px; border-top:1px solid #636366; font-size:10px; color:var(--dim); text-align:right; line-height:1.2; }
-  #bdp #bdBack { padding:0 8px 0 2px; font-size:15px; line-height:1; color:var(--fg2); }
+  #bdp #bdBack { padding:2px 6px; margin:0 0 4px -6px; color:var(--fg2); }
   #bdp .al { overflow:auto; overscroll-behavior:contain; } #bdp .ap { display:flex; align-items:center; gap:10px; padding:5px 12px; cursor:pointer; border-top:1px solid #2a2a2c; }
   #bdp .ap:hover { background:var(--alt); } #bdp .ap > div { flex:1; min-width:0; } #bdp .ap b { color:var(--fg); }
   #bdp .ap span { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #bdp .ap i { display:block; font-style:normal; font-size:11px; color:var(--dim); }
@@ -3826,24 +3826,25 @@ function bdInto(a) {                     // from the list (or the airport card):
   bdIn = true; bdScrolled = ''; $('bdp').hidden = false;
   if (!home || home[0] !== a[0]) setHome(a, false); else bdLoad();
 }
-function bdNear() {                      // the airports listed: the picked one, then the big ones in view, nearest first
-  const nm = Math.min(viewNm(), 400), out = home ? [home] : [];
-  const near = (MAJOR || []).map(a => [a, gc(view.lat, view.lon, a[5], a[6])]).filter(([a, d]) => d <= nm && a[0] !== (home && home[0]))
-    .sort((x, y) => (x[0][8] === 'L' ? 0 : 1) - (y[0][8] === 'L' ? 0 : 1) || x[1] - y[1]);
-  for (const [a] of near) { if (out.length >= 10 || (a[8] !== 'L' && out.length >= 6)) break; out.push(a); }   // the big ones; smaller ones only to make up a few
-  if (out.length < 3) for (const a of (MAJOR || []).filter(a => a[8] === 'L' && !out.includes(a)).sort((x, y) => gc(view.lat, view.lon, x[5], x[6]) - gc(view.lat, view.lon, y[5], y[6])).slice(0, 8 - out.length)) out.push(a);
-  return out;
-}
-async function bdList() {
-  const aps = bdNear(); BDL = BDL && { ...BDL, aps }; if (!BDL) BDL = { aps, by: new Map() }; bdRender();
-  try { const j = await (await fetch('/api/live/board?a=list&ids=' + aps.map(a => encodeURIComponent(a[0])).join(','))).json();
-    if (j.ok) for (const r of j.apts) BDL.by.set(r.id, r); BDL.now_h = j.now_h; } catch (e) {}
+async function bdList() {                // the main board: the picked airport, then the 30 busiest big airports over the next 12 h
+  if (!BDL) BDL = { aps: [], by: new Map() };
+  const pin = () => { if (home && !BDL.aps.some(a => a[0] === home[0])) BDL.aps.unshift(home); };
+  BDL.aps = BDL.aps.filter(a => a !== BDL.pinned); pin(); BDL.pinned = home && BDL.aps[0] === home ? home : null; bdRender();
+  try {
+    const [top, mine] = await Promise.all([fetch('/api/live/board?a=top').then(r => r.json()),
+      home ? fetch('/api/live/board?a=list&ids=' + encodeURIComponent(home[0])).then(r => r.json()) : null]);
+    const by = new Map((MAJOR || []).map(a => [a[0], a]));
+    BDL.aps = top.apts.map(r => by.get(r.id)).filter(Boolean); BDL.pinned = null;
+    for (const r of top.apts.concat(mine ? mine.apts : [])) BDL.by.set(r.id, r);
+    if (home && !BDL.aps.some(a => a[0] === home[0])) { BDL.aps.unshift(home); BDL.pinned = home; }
+    else if (home) BDL.aps = [home, ...BDL.aps.filter(a => a[0] !== home[0])];
+  } catch (e) {}
   bdRender();
 }
 function bdListRender(p) {
   const bars = up => { if (!up || !up.some(v => v)) return ''; const m = Math.max(...up.map(v => v || 0)), w = 5;
     return `<svg width="${up.length * w}" height="18" aria-hidden="true">${up.map((v, i) => v ? `<rect x="${i * w}" y="${18 - Math.max(1, v / m * 18)}" width="${w - 1}" height="${Math.max(1, v / m * 18)}" rx="1"/>` : '').join('')}</svg>`; };
-  p.innerHTML = `<div class="bh"><b>Boards</b> <span class="dim">airports in view · next 12 h</span><button class="x" id="bdX">✕</button></div><div class="al">` +
+  p.innerHTML = `<div class="bh"><b>Busiest airports</b> <span class="dim">· next 12 h</span><button class="x" id="bdX">✕</button></div><div class="al">` +
     BDL.aps.map(a => { const r = BDL.by.get(a[0]);
       const sub = !r ? 'loading…' : r.src === 'none' ? 'no data yet' : `${r.next ? `this hour ${r.next[0]} dep · ${r.next[1]} arr` : ''}${r.peak ? ` · busiest ${bdZ(r.peak[0]).slice(0, 2)}Z` : ''}`;
       return `<div class="ap" data-bap="${esc(a[0])}"><div><b>${esc(a[0])}</b> <span>${esc(a[2])}</span><i>${esc(sub)}</i></div>${r ? bars(r.up) : ''}</div>`; }).join('') + '</div>';
@@ -3882,7 +3883,7 @@ function bdRender() {
   const p = $('bdp'); if (p.hidden) return;
   if (!bdIn || !home) { bdIn = false; if (!BDL) return bdList(); return bdListRender(p); }
   const sc = p.querySelector('.bl'), top = sc ? sc.scrollTop : 0;
-  const head = `<div class="bh"><button id="bdBack" title="All airports">‹</button><b>${esc(home[0])}</b> <span class="dim">${esc(home[2])}</span><button class="x" id="bdX">✕</button></div>`;
+  const head = `<div class="bh"><button id="bdBack" title="Back to the busiest airports">‹ All airports</button><br><b>${esc(home[0])}</b> <span class="dim">${esc(home[2])}</span><button class="x" id="bdX">✕</button></div>`;
   const wire = () => { $('bdX').onclick = () => { p.hidden = true; }; $('bdBack').onclick = () => { bdIn = false; bdList(); }; };
   if (!BD || BD.id !== home[0]) { p.innerHTML = head + '<div class="note">Loading…</div>'; wire(); return; }
   if (BD.err) { p.innerHTML = head + `<div class="note">${esc(BD.err)}</div>`; wire(); return; }
