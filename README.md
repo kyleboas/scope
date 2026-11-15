@@ -69,6 +69,8 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     `?a=list` may answer `no_rec` with a `note` for a site that only plays recordings, and a recording may carry
     `clock: "elapsed"` with `zero` (the bar counts from it instead of showing the time of day), `speeds`, `speed`,
     `back: [url, label, title]` (a bar button in place of LIVE ✕) and `sub` (its line in the list)),
+    `listen` (a LISTEN header button: the page hears a radio feed through an audio input or, in Chrome / Edge, a shared tab, writes
+    each transmission down with Whisper in the browser and turns the tag of the aircraft whose callsign it heard white),
     `radio` (with `timelapse`: a radio log beside a recording, from a `radio` endpoint: `?id=` returns `{ok, head, lines:[{t,
     who, cs, g, k, a, ao, text}], colors:{who: colour}, groups:[[g, label, on]], talk_s, alert_s, atis:{ident: atis list}, procs:{ident: {arr, dep, sid, star, approach}}}` (`procs`, the runways
     and procedures the recording used, by CIFP name, is drawn instead of what its ATIS reads as in use);

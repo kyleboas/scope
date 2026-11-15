@@ -202,6 +202,15 @@
   #fhprof .tip { position:absolute; top:2px; pointer-events:none; background:#1c1c1e; border:1px solid var(--line); border-radius:5px; padding:1px 7px;
                  font:11px/1.4 var(--mono); color:var(--fg); white-space:nowrap; } #fhprof .tip i { font-style:normal; color:var(--dim); }
   body.tl #gnote { top:calc(var(--top) + 36px); }
+  /* listen (header button): the input picker, and what was heard last */
+  #lsBtn.on { color:var(--fg); } #lsBtn.hear { color:#fff; text-shadow:0 0 6px #fff8; }
+  #lsp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
+         border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
+  #lsp[hidden] { display:none; }
+  #lsp .hd { padding:2px 12px 6px; color:var(--dim); white-space:normal; } #lsp .row { display:flex; gap:6px; align-items:center; padding:3px 12px; }
+  #lsp .row b { flex:1; color:var(--fg); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #lsp select { flex:1; min-width:0; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:12px var(--mono); }
+  #lsp .st, #lsp .tip { padding:4px 12px 0; color:var(--dim); white-space:normal; } #lsp .last { padding:6px 12px 0; white-space:normal; } #lsp .last b { color:#fff; }
   /* ATC (header button): the airports with ATC open and their inbound flights */
   #atcBtn.on { color:#5ac8fa; }
   #atcp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(360px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
@@ -269,6 +278,7 @@
   <span id="status"></span>
   <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
+  <button id="lsBtn" hidden title="Listen to LiveATC (or any radio) and turn the tag of the aircraft on the frequency white">LISTEN</button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
 </header>
@@ -279,6 +289,7 @@
   <div id="gnote"></div>
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
+  <div id="lsp" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
   <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category), or hidden with OTHERS">
@@ -1144,13 +1155,13 @@ function drawAircraft() {
   drawn = [];
   if (!S) return;
   const fOn = fltOn();   // ARR / DEP filter on: only its arrivals / departures are tagged, and always (any zoom, no declutter)
-  const pri = a => a.id === sel || a.id === hover || a.emer ? 2 : tagWas.has(a.id) ? 1 : 0;
+  const pri = a => a.id === sel || a.id === hover || a.emer || lsOn(a.cs) ? 2 : tagWas.has(a.id) ? 1 : 0;
   for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel) continue;
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
-    const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer;
-    const out = !matches(a) && !isSel && !isHov && !emer;   // filtered out: a grey dot and a short tag (altitude and wake category),
+    const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer, talk = lsHeard.size > 0 && lsOn(a.cs);   // talk: on the radio (listen)
+    const out = !matches(a) && !isSel && !isHov && !emer && !talk;   // filtered out: a grey dot and a short tag (altitude and wake category),
     if (out && fOn && fltHide) continue;                     // ARR / DEP filter with the others hidden: not drawn at all
     drawn.push({ a, px, py });
     const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
@@ -1170,20 +1181,20 @@ function drawAircraft() {
       continue;
     }
     const keep = fOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
-    const blend = far && worldShown() && !isSel && !isHov && !emer && !keep;   // zoomed out with the worldwide dots: look like them
-    ctx.fillStyle = emer ? COL.alert : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
+    const blend = far && worldShown() && !isSel && !isHov && !emer && !keep && !talk;   // zoomed out with the worldwide dots: look like them
+    ctx.fillStyle = emer ? COL.alert : talk ? COL.sel : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     if (a.ps && !blend && !far) {        // a.ps [letter, colour]: the STARS position symbol (the controlling position) instead of the dot
       ctx.font = FONT(TAG(a.ground ? 9 : 11)); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.ps[0], px, py + .5*d);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     } else { ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill(); }
-    if ((far || !L.tags) && !isSel && !isHov && !emer && !keep) continue;
-    if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer) continue;
-    if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
+    if ((far || !L.tags) && !isSel && !isHov && !emer && !keep && !talk) continue;
+    if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer && !talk) continue;
+    if (a.ground && !L.aprontags && !isSel && !isHov && !emer && !talk && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
-    const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
+    const col = emer ? COL.alert : isSel || talk ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     const l3 = !a.ground && a.l3 ? a.l3 : '';                // a.l3: the site's third line (sim replays: assigned heading and altitude)
-    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep)) continue;
+    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep || talk)) continue;
     tagNow.add(a.id);
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
@@ -3164,6 +3175,249 @@ function fhDraw() {                              // the replayed flight's whole 
   for (const p of [P[0], P[P.length - 1]]) { const [x, y, z] = proj(p[1], p[2]); if (z < 0) continue; ctx.fillStyle = '#ff9f0a'; ctx.fillRect(x - 2 * dpr(), y - 2 * dpr(), 4 * dpr(), 4 * dpr()); }
 }
 
+// ------------------------------------------------------------------ listen (SITE feature 'listen'): white tags for the aircraft on the radio
+// The page hears LiveATC through an audio input (any browser, Safari too: the mic hearing the speakers, or a loopback
+// device such as BlackHole carrying the Mac's sound) or, in Chrome / Edge, a tab shared with its audio.
+// Nothing leaves the browser. The audio is cut into transmissions at the pauses, and Whisper (transformers.js, in a worker;
+// WebGPU where there is one) writes each one down, a partial one every second and a half while it goes on. An aircraft
+// whose callsign is in it gets a white tag for LS_HOLD_S after its last mention.
+const LS_ASR = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js', LS_MODEL = 'onnx-community/whisper-base.en';
+const LS_HOLD_S = 6;
+const LS_WORKER = `import { pipeline } from '${LS_ASR}';
+let asr = null;
+const ready = (async () => {
+  const gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null));
+  const opt = gpu ? { device:'webgpu', dtype:{ encoder_model:'fp32', decoder_model_merged:'q4' } } : { device:'wasm', dtype:'q8' };
+  asr = await pipeline('automatic-speech-recognition', '${LS_MODEL}', { ...opt, progress_callback: p => p.status === 'progress' && postMessage({ progress: [p.file, p.loaded, p.total] }) });
+  await asr(new Float32Array(16000));      // the first run compiles the model: done now, not on the first transmission
+  postMessage({ ready: gpu ? 'WebGPU' : 'CPU' });
+})().catch(e => postMessage({ error: String(e && e.message || e) }));
+onmessage = async ({ data }) => {
+  await ready; if (!asr) return;
+  try { const r = await asr(data.audio); postMessage({ id: data.id, text: (r.text || '').trim() }); }
+  catch (e) { postMessage({ id: data.id, text: '', error: String(e && e.message || e) }); }
+};`;
+const lsHeard = new Map();                 // cs -> when its tag stops being white (performance.now() ms)
+const lsOn = cs => (lsHeard.get(cs) || 0) > performance.now();
+let LS = null;                             // the running listener: {stream, ctx, worker, ...}
+let lsMsg = '', lsLast = null;             // the panel's status line; the last transmission {text, cs}
+const lsSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
+const lsTabOk = !lsSafari && !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !/android|iphone|ipad/i.test(navigator.userAgent);
+let lsDev = (() => { try { return localStorage.getItem(KEY + '-listen-dev') || ''; } catch (e) { return ''; } })();
+let lsDevs = [];
+async function lsDevices() {
+  try { lsDevs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch (e) { lsDevs = []; }
+}
+function lsRender() {
+  const b = $('lsBtn'); b.classList.toggle('on', !!LS); b.classList.toggle('hear', !!(LS && LS.speech));
+  b.textContent = LS ? 'LISTEN ●' : 'LISTEN';
+  const p = $('lsp'); if (p.hidden) return;
+  const opts = `<option value="">Default input</option>` + lsDevs.map(d => `<option value="${esc(d.deviceId)}"${d.deviceId === lsDev ? ' selected' : ''}>${esc(d.label || 'Input ' + d.deviceId.slice(0, 6))}</option>`).join('');
+  p.innerHTML = `<div class="hd">Tags turn white while their aircraft is on the radio. Play LiveATC, then let the page hear it. The audio stays on this computer.</div>` +
+    (LS ? `<div class="row"><b>${esc(LS.label)}</b><button data-ls="stop">Stop</button></div>`
+        : `<div class="row"><select id="lsDev" title="The microphone, hearing LiveATC from the speakers, or a loopback device (BlackHole) carrying the Mac's sound">${opts}</select><button data-ls="mic">Listen</button></div>` +
+          (lsTabOk ? `<div class="row"><button data-ls="tab" title="Pick LiveATC's tab and tick “Share tab audio”">Share a tab's audio…</button></div>` : '')) +
+    `<div class="st">${esc(lsMsg)}</div>` +
+    (lsLast ? `<div class="last"><b>${esc(lsLast.cs.join(' ') || '—')}</b> ${esc(lsLast.text)}</div>` : '') +
+    (lsSafari && !LS ? `<div class="tip">Safari can't hear another tab, so play LiveATC through the speakers and pick the microphone, or for a clean feed install BlackHole and send the Mac's sound to it (Audio MIDI Setup → Multi-Output Device) and pick BlackHole here.</div>` : '');
+}
+$('lsBtn').onclick = async () => {
+  const p = $('lsp'); p.hidden = !p.hidden; if (p.hidden) return;
+  await lsDevices(); lsRender();
+};
+$('lsp').onclick = e => {
+  const k = e.target.dataset && e.target.dataset.ls; if (!k) return;
+  if (k === 'stop') return lsStop();
+  if (k === 'mic') { lsDev = $('lsDev').value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} }
+  lsStart(k);
+};
+$('lsp').onchange = e => { if (e.target.id === 'lsDev') { lsDev = e.target.value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} } };
+function lsStop(msg) {
+  if (LS) { try { LS.stream.getTracks().forEach(t => t.stop()); } catch (e) {} try { LS.ctx.close(); } catch (e) {} }
+  LS = null; lsMsg = msg || ''; lsRender();
+}
+let lsWorker = null, lsReady = '', lsProg = new Map();
+function lsWorkerUp() {                    // one worker for the page: the model loads once, and stays loaded after Stop
+  if (lsWorker) return lsWorker;
+  lsWorker = new Worker(URL.createObjectURL(new Blob([LS_WORKER], { type: 'text/javascript' })), { type: 'module' });
+  lsWorker.onmessage = ({ data }) => {
+    if (data.progress) {
+      const [f, a, t] = data.progress; lsProg.set(f, [a, t]);
+      let A = 0, T = 0; for (const [x, y] of lsProg.values()) { A += x; T += y || 0; }
+      if (!lsReady) { lsMsg = `loading the speech model… ${T ? Math.round(A / T * 100) : 0}% of ${Math.round(T / 1e6)} MB (once; it's kept for next time)`; lsRender(); }
+    } else if (data.ready) { lsReady = data.ready; lsMsg = LS ? `listening (speech model on ${lsReady})` : ''; lsRender(); }
+    else if (data.error && data.id == null) { lsWorker = null; lsStop('the speech model failed to load: ' + data.error); }
+    else if (data.id != null) lsDone(data);
+  };
+  lsWorker.onerror = e => { lsWorker = null; lsStop('the speech model failed to load' + (e.message ? ': ' + e.message : '')); };
+  return lsWorker;
+}
+async function lsStart(src) {
+  if (LS) lsStop();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();                    // made in the click, so Safari lets it run
+  const raw = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  let stream, label;
+  try {
+    if (src === 'tab') {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: raw, selfBrowserSurface: 'exclude', systemAudio: 'include', preferCurrentTab: false });
+      if (!stream.getAudioTracks().length) { stream.getTracks().forEach(t => t.stop()); ctx.close(); lsMsg = 'no sound in that share: pick the tab again and tick “Share tab audio”'; return lsRender(); }
+      stream.getVideoTracks().forEach(t => t.enabled = false);
+      label = 'a shared tab';
+    } else {
+      const ask = id => navigator.mediaDevices.getUserMedia({ audio: { ...raw, ...(id ? { deviceId: { exact: id } } : {}) } });
+      stream = await ask(lsDev).catch(e => { if (lsDev && e && e.name === 'OverconstrainedError') { lsDev = ''; return ask(''); } throw e; });   // that input gone (Safari renames them)
+      label = stream.getAudioTracks()[0].label || 'microphone';
+      await lsDevices();                   // the inputs' names, now that the page may see them
+    }
+  } catch (e) { ctx.close(); lsMsg = e && e.name === 'NotAllowedError' ? 'not allowed: the browser was told no' : 'no audio: ' + (e && e.message || e); return lsRender(); }
+  stream.getAudioTracks()[0].onended = () => LS && LS.stream === stream && lsStop('the audio ended');
+  if (ctx.state === 'suspended') ctx.resume();
+  const node = ctx.createScriptProcessor(4096, 1, 1), mute = ctx.createGain(); mute.gain.value = 0;
+  ctx.createMediaStreamSource(stream).connect(node); node.connect(mute); mute.connect(ctx.destination);
+  LS = { stream, ctx, label, step: ctx.sampleRate / 16000, acc: 0, n: 0, pos: 0, frame: [], floor: null, speech: false, quiet: 0,
+         pre: [], seg: [], segN: 0, partT: 0, id: 0, busy: false, queue: [] };
+  node.onaudioprocess = e => LS && LS.ctx === ctx && lsAudio(e.inputBuffer.getChannelData(0));
+  lsMsg = lsReady ? `listening (speech model on ${lsReady})` : 'loading the speech model…';
+  lsWorkerUp(); lsRender();
+}
+// 16 kHz in 30 ms frames; a frame is speech when it is well over the noise floor (followed down fast, up slowly between
+// transmissions). A transmission ends after LS_GAP of quiet, or at LS_MAX; it keeps 300 ms from before it started.
+const LS_FR = 480, LS_GAP = 20, LS_MIN = 15, LS_MAX = 600;      // in frames: 0.6 s, 0.45 s, 18 s
+function lsAudio(x) {
+  const s = LS;
+  for (let i = 0; i < x.length; i++) {     // to 16 kHz, averaging the samples that make each one
+    s.acc += x[i]; s.n++;
+    if (++s.pos >= s.step) { s.frame.push(s.acc / s.n); s.acc = 0; s.n = 0; s.pos -= s.step; if (s.frame.length === LS_FR) { lsFrame(Float32Array.from(s.frame)); s.frame = []; } }
+  }
+}
+function lsFrame(f) {
+  const s = LS;
+  let e = 0; for (const v of f) e += v * v; const rms = Math.sqrt(e / f.length);
+  if (s.floor == null) s.floor = rms;
+  const loud = rms > Math.max(s.floor * 3, 0.004);
+  if (!s.speech) {
+    s.floor += (rms - s.floor) * (rms < s.floor ? 0.2 : 0.01);
+    s.pre.push(f); if (s.pre.length > 10) s.pre.shift();
+    if (loud) { s.speech = true; s.seg = s.pre.slice(); s.pre = []; s.quiet = 0; s.segN = 0; s.partT = performance.now(); s.cs = new Set(); lsRender(); }
+    return;
+  }
+  s.seg.push(f); s.segN++;
+  s.quiet = rms > Math.max(s.floor * 2, 0.003) ? 0 : s.quiet + 1;
+  if (s.quiet >= LS_GAP || s.seg.length >= LS_MAX) {
+    s.speech = false; lsRender();
+    if (s.segN >= LS_MIN) lsSend(s.seg, true, s.cs);
+    s.seg = []; return;
+  }
+  if (performance.now() - s.partT > 1500 && !s.busy) { s.partT = performance.now(); lsSend(s.seg, false, s.cs); }   // a partial one: the tag goes white before the transmission ends
+}
+function lsSend(frames, final, cs) {
+  const s = LS, n = frames.reduce((a, f) => a + f.length, 0), audio = new Float32Array(n);
+  let o = 0; for (const f of frames) { audio.set(f, o); o += f.length; }
+  const job = { id: ++s.id, audio, final, cs };
+  if (s.busy) { if (final) { s.queue = s.queue.filter(j => j.final).slice(-3); s.queue.push(job); } return; }
+  s.busy = true; lsWorkerUp().postMessage({ id: job.id, audio }, [audio.buffer]); s.job = job;
+}
+function lsDone(r) {
+  const s = LS; if (!s || !s.job || s.job.id !== r.id) return;
+  const job = s.job; s.busy = false; s.job = null;
+  const text = r.text || '', all = new Set();
+  for (const sc of scopes) for (const x of sc.drawn || []) all.add(x.a.cs);
+  if (!all.size && S) for (const a of S.aircraft) all.add(a.cs);
+  const hit = text ? lsMatch(text, [...all].filter(Boolean)) : [];
+  const until = performance.now() + LS_HOLD_S * 1000 + (job.final ? 0 : 3000);
+  for (const cs of hit) { lsHeard.set(cs, until); job.cs.add(cs); }
+  if (job.final && text && !/^\[.*\]$|^\(.*\)$/.test(text)) { lsLast = { text, cs: [...job.cs] }; lsRender(); }
+  const next = s.queue.shift();
+  if (next) { s.busy = true; s.job = next; lsWorkerUp().postMessage({ id: next.id, audio: next.audio }, [next.audio.buffer]); }
+}
+// which aircraft a transmission is from or to: the words Whisper wrote down are turned into spoken callsigns (airline
+// telephony + number, "november" + letters and digits, a bare group like "three alpha bravo") and matched against the
+// callsigns on the scope. Exact matches win; else a near one (a digit off, a GA callsign shortened to its last three),
+// and only if no other aircraft matches as well.
+const LS_TEL = Object.fromEntries(Object.entries({
+  AAL:'american', DAL:'delta', UAL:'united', SWA:'southwest', JBU:'jetblue', ASA:'alaska', NKS:'spirit wings', FFT:'frontier flight',
+  HAL:'hawaiian', SKW:'skywest', RPA:'brickyard', ENY:'envoy', EDV:'endeavor', JIA:'blue streak', PDT:'piedmont', GJS:'lindbergh',
+  AWI:'wisconsin', CPZ:'compass', QXE:'horizon', SCX:'sun country', AAY:'allegiant', MXY:'moxy', UCA:'commutair', ASH:'air shuttle',
+  FDX:'fedex', UPS:'ups', GTI:'giant', ABX:'abex', ATN:'air transport', CKS:'connie', PAC:'polar', AJT:'amerijet', SOO:'southern air',
+  WGN:'western global', CLX:'cargolux', GEC:'lufthansa cargo', BOX:'german cargo', AMF:'ameriflight', CFS:'empire', MTN:'mountain',
+  EJA:'execjet', LXJ:'flexjet', EJM:'jet speed', RCH:'reach', SAM:'sam', CNS:'cobra', KAL:'korean air', AAR:'asiana', JAL:'japan air',
+  ANA:'all nippon', CPA:'cathay', CCA:'air china', CES:'china eastern', CSN:'china southern', SIA:'singapore', QFA:'qantas',
+  ANZ:'new zealand', ACA:'air canada', JZA:'jazz', WJA:'westjet', ROU:'rouge', TSC:'air transat', POE:'porter', BAW:'speedbird',
+  VIR:'virgin', EZY:'easy', RYR:'ryanair', DLH:'lufthansa', AFR:'air france', KLM:'klm', IBE:'iberia', ITY:'itarrow', SWR:'swiss',
+  AUA:'austrian', SAS:'scandinavian', FIN:'finnair', ICE:'iceair', EIN:'shamrock', TAP:'air portugal', THY:'turkish', UAE:'emirates',
+  QTR:'qatari', ETD:'etihad', SVA:'saudia', ELY:'el al', AMX:'aeromexico', VOI:'volaris', VIV:'aerobus', CMP:'copa', AVA:'avianca',
+  LAN:'lan', TAM:'tam', AZU:'azul', ARG:'argentina', AIC:'air india', PAL:'philippine', EVA:'eva', CAL:'dynasty', THA:'thai',
+  MAS:'malaysian', GIA:'indonesia', HVN:'vietnam airlines', ETH:'ethiopian', MSR:'egyptair', RAM:'royal air maroc', SAA:'springbok',
+  KQA:'kenya', WZZ:'wizz air', NAX:'nor shuttle', VLG:'vueling', EWG:'eurowings', BEL:'beeline', LOT:'pollot', AEE:'aegean',
+  BTI:'air baltic', CJT:'cargojet', FLE:'flair', SWG:'sunwing', NOK:'nok air', TVF:'france soleil', EXS:'channex', TOM:'tomjet',
+}).map(([k, v]) => [v.replace(/ /g, ''), k]));
+LS_TEL.fedexpress = 'FDX';
+const LS_NUM = { zero:0, oh:0, one:1, two:2, to:null, too:null, three:3, tree:3, four:4, for:null, fower:4, five:5, fife:5, six:6, seven:7, eight:8, nine:9, niner:9 };
+const LS_TEEN = { ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19 };
+const LS_TENS = { twenty:2, thirty:3, forty:4, fourty:4, fifty:5, sixty:6, seventy:7, eighty:8, ninety:9 };
+const LS_NATO = { alpha:'A', alfa:'A', bravo:'B', charlie:'C', delta:'D', echo:'E', foxtrot:'F', fox:'F', golf:'G', hotel:'H', india:'I',
+  juliet:'J', juliett:'J', kilo:'K', lima:'L', mike:'M', november:'N', oscar:'O', papa:'P', quebec:'Q', romeo:'R', sierra:'S', tango:'T',
+  uniform:'U', victor:'V', whiskey:'W', whisky:'W', xray:'X', yankee:'Y', zulu:'Z' };
+function lsSpoken(text) {                // -> [{tel, n, g}]: each group of letters/digits, with the airline (or 'november') said before it
+  const w = String(text).toLowerCase().replace(/(\d)[,.](?=\d)/g, '$1').replace(/x-ray/g, 'xray').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const tok = [];                          // {v: digits / a letter / an alphanumeric, tel: an airline code, word}
+  const unit = s => s in LS_NUM && LS_NUM[s] != null && LS_NUM[s] > 0 ? LS_NUM[s] : null;
+  for (let i = 0; i < w.length; i++) {
+    const s = w[i];
+    let tel = null, k = 0;                 // the longest airline name starting here, up to three words ("air canada", "jet blue", "south west")
+    for (let n = 3; n >= 1 && !tel; n--) if (i + n <= w.length) { const c = LS_TEL[w.slice(i, i + n).join('')]; if (c) { tel = c; k = n; } }
+    const next = w[i + k];
+    if (tel && next && (/^\d/.test(next) || next in LS_NUM && LS_NUM[next] != null || next in LS_TEEN || next in LS_TENS)) { tok.push({ tel }); i += k - 1; continue; }
+    if (s in LS_NUM && LS_NUM[s] != null) tok.push({ v: String(LS_NUM[s]) });
+    else if (s in LS_TEEN) tok.push({ v: String(LS_TEEN[s]) });
+    else if (s in LS_TENS) { const u = unit(w[i + 1]); tok.push({ v: String(LS_TENS[s] * 10 + (u || 0)) }); if (u) i++; }
+    else if (s === 'hundred' && tok.length && tok[tok.length - 1].v && /^\d$/.test(tok[tok.length - 1].v)) tok[tok.length - 1].v += '00';
+    else if (s in LS_NATO) tok.push({ v: LS_NATO[s], nato: true, word: s });
+    else if (/^\d+[a-z]{0,3}$/.test(s) || /^[a-z]\d+[a-z]{0,3}$/.test(s) && s.length >= 3) tok.push({ v: s.toUpperCase() });
+    else tok.push({ word: s });
+  }
+  const out = [];
+  for (let i = 0; i < tok.length; i++) {
+    if (!tok[i].v) continue;
+    const before = tok[i - 1] || {};
+    let j = i, g = '';
+    while (j < tok.length && tok[j].v) g += tok[j++].v;
+    const nov = tok[i].word === 'november' && g.length > 1;   // "november one two three ..." (the N itself is in g)
+    out.push({ tel: before.tel || null, n: nov, g: nov ? g.slice(1) : g, raw: g });
+    // a NATO letter that started it may be an airline-free group's first character, or not part of it at all ("delta 12" without telephony)
+    if (tok[i].nato && !nov && g.length > 1) out.push({ tel: before.tel || null, n: false, g: g.slice(1), raw: g.slice(1) });
+    i = j - 1;
+  }
+  return out;
+}
+function lsLev1(a, b) {                   // whether a and b are at most one edit apart
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0; while (i < a.length && a[i] === b[i]) i++;
+  return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i);
+}
+function lsScore(cs, sp) {                // how well one spoken group fits callsign cs (0: not at all, 3: exactly)
+  const m = cs.match(/^([A-Z]{3})(\d[0-9A-Z]*)$/);
+  if (m) {                                 // an airline's: code + flight number
+    if (sp.tel === m[1]) return sp.g === m[2] ? 3 : m[2].length >= 2 && lsLev1(sp.g, m[2]) ? 2 : 0;
+    return !sp.tel && sp.g === m[2] && m[2].length >= 3 ? 1 : 0;    // the airline's name missed, the number heard
+  }
+  if (sp.tel) return 0;
+  const g = sp.n ? 'N' + sp.g : sp.raw;    // a registration: N123AB, C-GABC sent as CGABC, ...
+  if (g === cs || cs[0] === 'N' && sp.g === cs.slice(1)) return 3;
+  if (sp.g.length >= 3 && /[A-Z]/.test(sp.g) && cs.endsWith(sp.g)) return 2;      // shortened: "three alpha bravo"
+  return 0;
+}
+function lsMatch(text, css) {             // -> the callsigns among css the transmission is about
+  const sp = lsSpoken(text);
+  const best = new Map();
+  for (const cs of new Set(css)) { let b = 0; for (const s of sp) b = Math.max(b, lsScore(cs, s)); if (b) best.set(cs, b); }
+  const top = Math.max(0, ...best.values());
+  const hits = [...best].filter(([, v]) => v === top).map(([cs]) => cs);
+  return top === 3 ? hits : hits.length === 1 ? hits : [];
+}
+
 // ------------------------------------------------------------------ start: #KSFO, #KSFO/40 or #lat,lon,half
 (async () => {
   makeScope({ lat:37.62, lon:-122.38, half:52 }); makeScope({ lat:37.62, lon:-122.38, half:3 }); use(scopes[0]);
@@ -3180,6 +3434,7 @@ function fhDraw() {                              // the replayed flight's whole 
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
   if (has('atc')) atcInit();
+  if (has('listen')) $('lsBtn').hidden = false;
   const tlq = new URLSearchParams(location.search).get('tl');
   const fhq = new URLSearchParams(location.search).get('fh');
   if (has('history') && fhq && !tlq) fhOpen(fhq, +new URLSearchParams(location.search).get('t') || 0, !m && !h);
