@@ -89,7 +89,12 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     from a `history` endpoint: `?hex=` returns `{ok, every_s, keep_h, flights:[{t0, t1, cs, from, to, top, gnd, live,
     pts:[[t, lat, lon, alt ft, gs, track, k: 0 air / 1 ground / 2 estimated]]}]}`; `?a=around&hex=&t0=&t1=&nm=` returns
     `{ok, every_s, frames:[[t, OpenSky compact rows, estimate rows]]}`, the other aircraft within nm of it, for the replay's
-    TRAFFIC; the replay also charts altitude and ground speed (PROFILE); see livescope's `history.py`) and
+    TRAFFIC; the replay also charts altitude and ground speed (PROFILE); see livescope's `history.py`),
+    `board` (a BOARD header button and a link in the airport card: the picked airport's departures and arrivals, and a
+    chart of its movements hour by hour, 12 h back to 12 h ahead, with the usual for each hour and the busiest one ahead,
+    from a `board` endpoint: `?id=` returns `{ok, id, now_h, hours:[{h, dep, arr, src seen / filed / none}],
+    typical:[{h, dep, arr}], dep:[{cs, apt, t, st, src, sched}], arr:[...], filed, seen_h}`; the aircraft on the scope add
+    their ETA or taxiing; see livescope's `board.py`) and
     `boats` (a Boats layer, off by default, from a `boats` endpoint: `?lat=&lon=&nm=` returns `{ok, t, src, v:[[mmsi, lat,
     lon, sog kt, cog, heading or -1, ts, name, AIS ship type, destination, nav status]]}`; see livescope's `boats.py`).
   - `endpoints` (optional): `{name: fn(s)}` for `/api/live/<name>`, where `s(key, maxlen)` reads the

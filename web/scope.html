@@ -205,6 +205,24 @@
   body.tl #gnote { top:calc(var(--top) + 36px); }
   /* listen (header button): the input picker, and what was heard last */
   #lsBtn.on { color:var(--fg); } #lsBtn.hear { color:#fff; text-shadow:0 0 6px #fff8; }
+  /* the airport's board (feature 'board'): departures and arrivals, and its hours (arrivals #3987e5, departures #d95926) */
+  #bdp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(460px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); display:flex; flex-direction:column; background:var(--bg);
+         border:1px solid var(--line); border-radius:10px; padding:8px 0 6px; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
+  #bdp[hidden] { display:none; } #bdp .dim { color:var(--dim); } #bdp .bh { padding:0 8px 4px 12px; } #bdp .bh b { color:var(--fg); font-size:13px; } #bdp .x { float:right; padding:0 4px; }
+  #bdp .pk { padding:0 12px 4px; white-space:normal; } #bdp .pk b { color:var(--fg); font-weight:600; }
+  #bdp .bc { position:relative; flex:none; height:150px; margin:0 6px; touch-action:none; } #bdp .bc canvas { display:block; width:100%; height:100%; }
+  #bdp .tip { position:absolute; top:2px; pointer-events:none; background:#1c1c1e; border:1px solid var(--line); border-radius:5px; padding:2px 7px; font:11px/1.4 var(--mono); color:var(--fg); white-space:nowrap; }
+  #bdp .tip[hidden] { display:none; } #bdp .tip i { font-style:normal; color:var(--dim); }
+  #bdp .lg { display:flex; flex-wrap:wrap; gap:2px 12px; padding:4px 12px 6px; font-size:11px; color:var(--dim); } #bdp .lg span { display:inline-flex; align-items:center; gap:5px; }
+  #bdp .lg i { display:inline-block; width:10px; height:10px; border-radius:2px; } #bdp .lg i.ty { height:0; width:14px; border-top:2px dashed #c7c7cc; border-radius:0; }
+  #bdp .lg i.fa { background:linear-gradient(90deg, #3987e559 50%, #d9592659 50%); }
+  #bdp .tb { display:flex; gap:2px; padding:2px 8px; border-top:1px solid var(--line); } #bdp .tb button { flex:1; } #bdp .tb button.on { color:var(--fg); background:var(--alt); } #bdp .tb i { font-style:normal; color:var(--dim); }
+  #bdp .rh, #bdp .r { display:grid; grid-template-columns:6ch 9ch 6ch 1fr; gap:0 10px; padding:2px 12px; } #bdp .rh { font-size:10px; color:var(--dim); letter-spacing:.06em; padding-top:4px; }
+  #bdp .bl { flex:1 1 auto; min-height:80px; max-height:300px; overflow:auto; overscroll-behavior:contain; }
+  #bdp .r b { color:var(--fg); font-weight:normal; overflow:hidden; text-overflow:ellipsis; } #bdp .r.past { opacity:.5; } #bdp .r.lv { cursor:pointer; } #bdp .r.lv:hover { background:var(--alt); }
+  #bdp .r i { font-style:normal; color:#6ee36e; font-size:10px; } #bdp .s-cancelled { color:var(--bad); } #bdp .s-approach, #bdp .s-taxiing, #bdp .s-taxiingin { color:var(--fg); }
+  #bdp .now { margin:2px 12px; border-top:1px solid #636366; font-size:10px; color:var(--dim); text-align:right; line-height:1.2; }
+  #bdp .note { padding:6px 12px 0; font-size:11px; color:var(--dim); white-space:normal; }
   #lsp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
   #lsp[hidden] { display:none; } #lsp label { display:flex; gap:6px; align-items:center; padding:3px 12px; cursor:pointer; } #lsp label input { margin:0; }
@@ -288,6 +306,7 @@
   <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
   <button id="lsBtn" hidden title="Listen to LiveATC (or any radio) and turn the tag of the aircraft on the frequency white">LISTEN</button>
+  <button id="bdBtn" hidden title="Departures and arrivals at the picked airport, and when it's busiest">BOARD</button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
   <button id="playBtn"></button>
@@ -300,6 +319,7 @@
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
   <div id="lsp" hidden></div>
+  <div id="bdp" hidden></div>
   <div id="cc" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
@@ -1951,7 +1971,7 @@ function setHome(a, fly, half) {
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
   if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = half || 40; }
   for (const s of scopes.slice(1)) { if (!s.apt) Object.assign(s.view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 }); s.aptShow(); }
-  renderCard(); viewChanged(true);
+  renderCard(); viewChanged(true); bdShow();
 }
 // the side panel holds the airport card (or the selected aircraft's): nothing picked, no side panel
 function updateSide() {
@@ -2037,7 +2057,7 @@ function renderCard1() {
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
       (fq.length || ils.length ? `<div class="fq">${fq.map(f => `<span>${esc(f[0])}</span><span>${f[2].toFixed(3)}</span><span>${esc(f[1] && f[1] !== f[0] ? f[1] : '')}</span>`).join('')}` +
         `${ils.map(([e, l]) => `<span>${esc(l[0] + ' ' + e)}</span><span>${l[2].toFixed(2)}</span><span>${esc(l[1])} · ${Math.round(l[3])}° true${l[6] ? ` · glideslope ${l[6]}°` : ''}</span>`).join('')}</div>` : '') +
-      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + atisCard() + procCard() + chartCard();
+      radioCard() + `<a href="${lwUrl(home[0])}" target="_blank" id="lwLink" title="Opens LiveATC.net's page for this airport in a new tab, which follows the airport you pick">${lwOpen() ? (lwId === home[0] ? 'In the LiveATC tab' : 'Show in the LiveATC tab') : 'Listen on LiveATC.net'} ↗</a>` + (has('board') ? '<br><a href="#" id="bdLink" title="Its departures and arrivals, and its traffic hour by hour">Departures and arrivals board</a>' : '') + atisCard() + procCard() + chartCard();
     if (lwOpen() && lwId !== home[0]) lwGo(home[0]);
   } else { card.style.display = 'none'; return; }
   card.style.display = 'block';
@@ -2050,6 +2070,7 @@ function renderCard1() {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
     procSel = procSel && procSel.join('|') === k.join('|') ? null : k; mapKey = ''; renderCard();
   });
+  if ($('bdLink')) $('bdLink').onclick = e => { e.preventDefault(); $('bdp').hidden = false; bdScrolled = ''; bdLoad(); };
   if ($('dgOn')) $('dgOn').onclick = () => setDiagram(!scopes[0].L.diagram);
   $('cardX').onclick = () => { if (sel) select(null); else { homeCardShut = true; document.body.classList.remove('listOpen'); renderCard(); } };
 }
@@ -3657,6 +3678,153 @@ function lsFormat(text, hits) {
   return o;
 }
 
+// ------------------------------------------------------------------ the airport's board (feature 'board'): its departures and
+// arrivals, and its traffic by the hour, 12 h back to 12 h ahead (when it's busiest). The server's /api/live/board gives the hours
+// (movements seen in the world recording, OpenSky; flights filed with the FAA ahead, US) and the rows (FAA TFMS, else seen); the
+// aircraft on the scope add what they're doing now (inbound and its ETA, taxiing).
+let BD = null, bdTab = 'dep', bdHover = null, bdScrolled = '';
+const BD_ARR = '#3987e5', BD_DEP = '#d95926';
+const bdOpen = () => !$('bdp').hidden;
+const bdZ = t => { const d = new Date(t * 1000); return String(d.getUTCHours()).padStart(2, '0') + String(d.getUTCMinutes()).padStart(2, '0') + 'Z'; };
+const bdLocal = t => new Date(t * 1000).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+function bdInit() {
+  const b = $('bdBtn');
+  b.onclick = () => { const p = $('bdp'); p.hidden = !p.hidden; if (!p.hidden) { bdScrolled = ''; bdLoad(); } };
+  setInterval(() => { if (bdOpen()) bdLoad(); }, 60000);
+  setInterval(() => { if (bdOpen() && !$('bdp').matches(':hover')) bdRender(); }, 5000);
+}
+function bdShow() {                      // the header button, while an airport is picked
+  if (!has('board')) return;
+  $('bdBtn').hidden = !home; if (!home) $('bdp').hidden = true;
+  else if (bdOpen() && (!BD || BD.id !== home[0])) bdLoad();
+}
+async function bdLoad() {
+  if (!home) return;
+  const id = home[0];
+  if (BD && BD.id !== id) { BD = null; bdRender(); }
+  try { const j = await (await fetch('/api/live/board?id=' + encodeURIComponent(id))).json(); if (home && home[0] === id) { BD = j.ok ? j : { id, err: j.error || 'no board' }; } }
+  catch (e) { if (!BD) BD = { id, err: 'server unreachable' }; }
+  bdRender();
+}
+function bdRows(k) {                     // the server's rows for one side, with the aircraft on the scope merged in
+  const now = Date.now() / 1000, rows = (BD[k] || []).map(r => ({ ...r })), by = new Map(rows.map(r => [r.cs.trim().toUpperCase(), r]));
+  if (S && home) for (const a of S.aircraft) {
+    const cs = a.cs.trim().toUpperCase(); if (!cs) continue;
+    const d = gc(a.lat, a.lon, home[5], home[6]), f = flowOf(a), r = by.get(cs), rt = routeOf(a);
+    if (k === 'arr' && f === 'arr' && !a.ground) {
+      const eta = now + d / Math.max(a.gs || 0, 140) * 3600 + 120;
+      const st = d < 40 ? 'approach' : 'inbound';
+      if (r) { if (r.st !== 'landed') { r.t = eta; r.st = st; r.live = a.id; } }
+      else rows.push({ cs: a.cs.trim(), apt: rt && rt[3] === home[0] ? rt[0] : '', t: eta, st, src:'live', live: a.id });
+    } else if (a.ground && d < 4) {
+      const moving = a.gs > 4;
+      if (k === 'arr' && r && (r.st === 'en route' || r.st === 'approach' || r.st === 'inbound' || r.st === 'landed')) { r.st = moving ? 'taxiing in' : 'landed'; r.live = a.id; if (r.t > now) r.t = now; }
+      else if (k === 'dep' && r && r.st === 'scheduled') { r.st = moving ? 'taxiing' : 'at the gate'; r.live = a.id; }
+      else if (k === 'dep' && !r && moving && rt && rt[0] === home[0] && !by.has(cs) && !(BD.arr || []).some(x => x.cs.trim().toUpperCase() === cs))
+        rows.push({ cs: a.cs.trim(), apt: rt[3], t: now, st: 'taxiing', src:'live', live: a.id });
+    } else if (r) r.live = a.id;
+  }
+  return rows.sort((p, q) => p.t - q.t);
+}
+function bdRender() {
+  const p = $('bdp'); if (p.hidden) return;
+  if (!home) { p.hidden = true; return; }
+  const sc = p.querySelector('.bl'), top = sc ? sc.scrollTop : 0;
+  const head = `<div class="bh"><b>${esc(home[0])}</b> <span class="dim">${esc(home[2])}</span><button class="x" id="bdX">✕</button></div>`;
+  if (!BD || BD.id !== home[0]) { p.innerHTML = head + '<div class="note">Loading…</div>'; $('bdX').onclick = () => { p.hidden = true; }; return; }
+  if (BD.err) { p.innerHTML = head + `<div class="note">${esc(BD.err)}</div>`; $('bdX').onclick = () => { p.hidden = true; }; return; }
+  const now = Date.now() / 1000, rows = bdRows(bdTab), arrive = bdTab === 'arr';
+  const fc = bdForecast(), pk = fc.peak;
+  const busy = pk ? `Busiest in the next 12 h: <b>${bdZ(pk.h).slice(0, 2)}–${bdZ(pk.h + 3600).slice(0, 2)}Z</b> <span class="dim">(${bdLocal(pk.h)} your time)</span>, about <b>${Math.round(pk.v)}</b> movements` +
+    `<span class="dim"> · ${pk.how}</span>` : '<span class="dim">Not enough seen yet to say when it’s busiest.</span>';
+  const st = r => {
+    const live = r.live && S && S.aircraft.find(a => a.id === r.live);
+    const word = { scheduled:'scheduled', departed:'departed', 'en route':'en route', landed:'landed', cancelled:'cancelled', approach:'on approach', inbound:'inbound', taxiing:'taxiing', 'taxiing in':'taxiing in', 'at the gate':'at the gate' }[r.st] || r.st;
+    const mins = r.t > now && (r.st === 'approach' || r.st === 'inbound') ? ` ${Math.max(1, Math.round((r.t - now) / 60))} min` : '';
+    return `<span class="s-${r.st.replace(/ /g, '')}">${esc(word)}${mins}</span>${live ? ' <i>on scope</i>' : ''}`;
+  };
+  let nowAt = rows.findIndex(r => r.t >= now - 300); if (nowAt < 0) nowAt = rows.length;
+  const list = rows.length ? rows.map((r, i) => (i === nowAt ? '<div class="now">now</div>' : '') +
+      `<div class="r${r.t < now - 300 ? ' past' : ''}${r.live ? ' lv' : ''}"${r.live ? ` data-bsel="${esc(r.live)}"` : ''} title="${r.sched && Math.abs(r.sched - r.t) > 300 ? 'planned ' + bdZ(r.sched) + ' · ' : ''}${r.src === 'filed' ? 'FAA flight plan (TFMS)' : r.src === 'seen' ? 'seen by OpenSky' : 'on the scope now'}">` +
+      `<span>${bdZ(r.t)}</span><b>${esc(r.cs || (r.hex || '').toUpperCase())}</b><span>${esc(r.apt || '')}</span><span>${st(r)}</span></div>`).join('') + (nowAt === rows.length ? '<div class="now">now</div>' : '')
+    : `<div class="note">No ${arrive ? 'arrivals' : 'departures'} ${BD.filed ? 'filed or seen' : 'seen'} from an hour ago to 12 h ahead.</div>`;
+  const nd = (BD.dep || []).filter(r => r.t >= now).length, na = (BD.arr || []).filter(r => r.t >= now).length;
+  p.innerHTML = head + `<div class="pk">${busy}</div>` +
+    `<div class="bc"><canvas aria-label="Departures and arrivals each hour, 12 hours back to 12 ahead"></canvas><div class="tip" hidden></div></div>` +
+    `<div class="lg"><span><i style="background:${BD_ARR}"></i>Arrivals</span><span><i style="background:${BD_DEP}"></i>Departures</span><span><i class="ty"></i>Usual (the same hours, last 2 days)</span><span><i class="fa"></i>Faded: the usual, few filed yet</span></div>` +
+    `<div class="tb"><button data-bt="dep" class="${arrive ? '' : 'on'}">DEPARTURES${nd ? ` <i>${nd}</i>` : ''}</button><button data-bt="arr" class="${arrive ? 'on' : ''}">ARRIVALS${na ? ` <i>${na}</i>` : ''}</button></div>` +
+    `<div class="rh"><span>TIME</span><span>FLIGHT</span><span>${arrive ? 'FROM' : 'TO'}</span><span>STATUS</span></div><div class="bl">${list}</div>` +
+    `<div class="note">${BD.filed ? 'Times ahead are the FAA’s filed flight plans (wheels off and on); airlines file a few hours ahead, so later hours fill in as they do. ' : 'No filed flight plans here (the FAA’s only cover the US), so the hours ahead are what’s usual: the same hours on the last two days. '}` +
+    `Hours behind are takeoffs and landings OpenSky saw (every 90 s, not every airport’s ground), each about 20 min after the hour ends${BD.seen_h < 48 ? ` (${BD.seen_h} of 48 h so far)` : ''}.</div>`;
+  $('bdX').onclick = () => { p.hidden = true; };
+  p.querySelectorAll('[data-bt]').forEach(b => b.onclick = () => { bdTab = b.dataset.bt; bdScrolled = ''; bdRender(); });
+  p.querySelectorAll('[data-bsel]').forEach(el => el.onclick = () => select(el.dataset.bsel));
+  const bl = p.querySelector('.bl'), key = home[0] + bdTab;
+  if (bdScrolled !== key) { const n = bl.querySelector('.now'); bl.scrollTop = n ? Math.max(0, n.offsetTop - bl.offsetTop - 40) : 0; bdScrolled = key; } else bl.scrollTop = top;
+  bdChart();
+}
+function bdForecast() {                  // each hour's bars, and the busiest hour ahead
+  const hs = BD.hours.map((x, i) => {
+    const ty = BD.typical[i], tyv = ty && ty.dep != null ? ty.dep + ty.arr : null, ahead = x.h >= BD.now_h;
+    let arr = x.arr, dep = x.dep, src = x.src;
+    if (ahead && tyv != null && (arr == null || arr + dep < tyv * .5)) { arr = ty.arr; dep = ty.dep; src = 'usual'; }   // little filed yet: show the usual
+    return { h: x.h, arr, dep, src, ty: tyv, ahead, filed: x.src === 'filed' ? x.arr + x.dep : null };
+  });
+  let peak = null;
+  for (const x of hs) if (x.ahead && x.arr != null) { const v = Math.max(x.arr + x.dep, x.ty || 0); if (v > 0 && (!peak || v > peak.v)) peak = { h: x.h, v, how: x.src === 'usual' ? 'as usual at this hour' : x.ty != null && x.ty > x.arr + x.dep ? 'as usual at this hour (fewer filed so far)' : 'filed with the FAA' }; }
+  return { hs, peak };
+}
+function bdChart() {
+  const box = $('bdp').querySelector('.bc'), cv2 = box.querySelector('canvas'), r = cv2.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (!r.width) return;
+  cv2.width = Math.round(r.width * d); cv2.height = Math.round(r.height * d);
+  const c = cv2.getContext('2d'), W = r.width, H = r.height, { hs } = bdForecast(), n = hs.length;
+  c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, H);
+  const L0 = 28, R0 = 6, T0 = 8, B0 = 18, cw = (W - L0 - R0) / n, bw = Math.max(3, Math.min(18, cw - 2));
+  const max0 = Math.max(4, ...hs.map(x => Math.max((x.arr || 0) + (x.dep || 0), x.ty || 0)));
+  const e = 10 ** Math.floor(Math.log10(max0)), m = max0 / e, max = (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e;
+  const y = v => H - B0 - v / max * (H - B0 - T0), X = i => L0 + i * cw + cw / 2;
+  c.font = '10px ui-monospace, Menlo, Consolas, monospace'; c.textBaseline = 'middle'; c.textAlign = 'right'; c.lineWidth = 1;
+  for (const v of [0, max / 2, max]) { const yy = Math.round(y(v)) + .5; c.strokeStyle = 'rgba(255,255,255,.08)'; c.beginPath(); c.moveTo(L0, yy); c.lineTo(W - R0, yy); c.stroke(); c.fillStyle = '#98989f'; c.fillText(String(Math.round(v)), L0 - 5, yy); }
+  const bg = getComputedStyle($('bdp')).backgroundColor;
+  const seg = (x0, v0, v1, col, alpha, roundTop) => {       // one stacked segment, 2px surface gap above the one below
+    if (v1 <= v0) return; const yt = y(v1), yb = y(v0) - (v0 > 0 ? 2 : 0); if (yb - yt < .5) return;
+    c.globalAlpha = alpha; c.fillStyle = col; c.beginPath();
+    if (roundTop && c.roundRect) c.roundRect(x0, yt, bw, yb - yt, [Math.min(4, bw / 2, yb - yt), Math.min(4, bw / 2, yb - yt), 0, 0]); else c.rect(x0, yt, bw, yb - yt);
+    c.fill(); c.globalAlpha = 1; };
+  hs.forEach((x, i) => {
+    if (x.arr == null) return;
+    const x0 = X(i) - bw / 2, a = x.src === 'usual' ? .35 : x.ahead ? .8 : 1, hov = bdHover === i;
+    seg(x0, 0, x.arr, BD_ARR, hov ? 1 : a, !x.dep); seg(x0, x.arr, x.arr + x.dep, BD_DEP, hov ? 1 : a, true);
+  });
+  // the usual: a dashed step line along the hours' totals on the last two days
+  c.setLineDash([3, 3]); c.strokeStyle = '#c7c7cc'; c.lineWidth = 1.5; c.beginPath(); let pen = false;
+  hs.forEach((x, i) => { if (x.ty == null) { pen = false; return; } const yy = y(x.ty), xl = L0 + i * cw + 1, xr = L0 + (i + 1) * cw - 1;
+    if (!pen) c.moveTo(xl, yy); else c.lineTo(xl, yy); c.lineTo(xr, yy); pen = true; });
+  c.stroke(); c.setLineDash([]);
+  // now, and the hour labels
+  const now = Date.now() / 1000, i0 = hs.findIndex(x => x.h === BD.now_h), xn = L0 + (i0 + (now - BD.now_h) / 3600) * cw;
+  c.strokeStyle = 'rgba(242,242,247,.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(xn) + .5, T0 - 4); c.lineTo(Math.round(xn) + .5, H - B0); c.stroke();
+  c.fillStyle = '#f2f2f7'; c.textAlign = 'left'; c.fillText('now', Math.min(W - R0 - 22, xn + 4), T0);
+  c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = '#98989f';
+  hs.forEach((x, i) => { const hh = new Date(x.h * 1000).getUTCHours(); if (hh % 3 === 0) c.fillText(String(hh).padStart(2, '0') + 'Z', X(i) - cw / 2, H - 4); });
+  const tip = box.querySelector('.tip');
+  if (bdHover == null || !hs[bdHover]) { tip.hidden = true; return; }
+  const x = hs[bdHover];
+  tip.innerHTML = `<i>${bdZ(x.h).slice(0, 2)}–${bdZ(x.h + 3600).slice(0, 2)}Z · ${bdLocal(x.h)} your time</i><br>` +
+    (x.arr == null ? 'not seen' : `<span style="color:${BD_ARR}">■</span> ${Math.round(x.arr)} arrivals · <span style="color:${BD_DEP}">■</span> ${Math.round(x.dep)} departures` +
+      ` <i>· ${x.src === 'seen' ? 'seen' : x.src === 'filed' ? 'filed' : 'usual'}</i>`) +
+    (x.src === 'usual' && x.filed != null ? `<br><i>${x.filed} filed so far</i>` : '') + (x.ty != null && x.src !== 'usual' ? `<br><i>usually ${Math.round(x.ty)}</i>` : '');
+  tip.hidden = false; const tw = tip.offsetWidth, xc = X(bdHover); tip.style.left = Math.max(2, Math.min(W - tw - 2, xc + 12 > W - tw - 2 ? xc - tw - 12 : xc + 12)) + 'px';
+}
+{
+  const p = $('bdp');
+  const at = e => { const box = p.querySelector('.bc'); if (!box || !BD || !BD.hours) return null; const r = box.getBoundingClientRect(), cw = (r.width - 34) / BD.hours.length, i = Math.floor((e.clientX - r.left - 28) / cw); return i >= 0 && i < BD.hours.length ? i : null; };
+  p.addEventListener('pointermove', e => { const i = e.target.closest('.bc') ? at(e) : null; if (i !== bdHover) { bdHover = i; if (BD && BD.hours) bdChart(); } });
+  p.addEventListener('pointerleave', () => { if (bdHover != null) { bdHover = null; if (BD && BD.hours) bdChart(); } });
+  addEventListener('resize', () => { if (bdOpen() && BD && BD.hours) bdChart(); });
+}
+
 // ------------------------------------------------------------------ start: #KSFO, #KSFO/40 or #lat,lon,half
 (async () => {
   makeScope({ lat:37.62, lon:-122.38, half:52 }); makeScope({ lat:37.62, lon:-122.38, half:3 }); use(scopes[0]);
@@ -3674,6 +3842,7 @@ function lsFormat(text, hits) {
   if (has('servers')) { renderServers(); loadServers(); }
   if (has('atc')) atcInit();
   if (has('listen')) $('lsBtn').hidden = false;
+  if (has('board')) bdInit();
   const tlq = new URLSearchParams(location.search).get('tl');
   const fhq = new URLSearchParams(location.search).get('fh');
   if (has('history') && fhq && !tlq) fhOpen(fhq, +new URLSearchParams(location.search).get('t') || 0, !m && !h);
