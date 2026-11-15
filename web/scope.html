@@ -207,7 +207,14 @@
   #lsBtn.on { color:var(--fg); } #lsBtn.hear { color:#fff; text-shadow:0 0 6px #fff8; }
   #lsp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
          border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
-  #lsp[hidden] { display:none; }
+  #lsp[hidden] { display:none; } #lsp label { display:flex; gap:6px; align-items:center; padding:3px 12px; cursor:pointer; } #lsp label input { margin:0; }
+  /* captions: what LISTEN heard, along the bottom of the scope */
+  #cc { position:absolute; left:50%; transform:translateX(-50%); bottom:40px; z-index:3; width:max-content; max-width:min(760px, calc(100% - 220px)); pointer-events:none;
+        display:flex; flex-direction:column; align-items:center; gap:3px; font:13px/1.4 var(--mono); }
+  #cc[hidden] { display:none; } body.tlStrip #cc { bottom:86px; }
+  #cc div { background:rgba(0,0,0,.72); color:#c8c8c8; padding:2px 9px; border-radius:4px; text-align:center; transition:opacity .6s; }
+  #cc div b { color:#fff; font-weight:600; } #cc div.live { color:#8e8e93; } #cc div.old { opacity:.55; }
+  @media (max-width: 820px) { #cc { max-width:calc(100% - 16px); bottom:76px; font-size:12px; } }
   #lsp .hd { padding:2px 12px 6px; color:var(--dim); white-space:normal; } #lsp .row { display:flex; gap:6px; align-items:center; padding:3px 12px; }
   #lsp .row b { flex:1; color:var(--fg); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #lsp select { flex:1; min-width:0; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:12px var(--mono); }
@@ -292,6 +299,7 @@
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
   <div id="lsp" hidden></div>
+  <div id="cc" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
   <div class="flt" id="flt" title="Pick an airport, then show only its arrivals and/or departures; the rest are greyed out with a short tag (altitude and wake category), or hidden with OTHERS">
@@ -3282,6 +3290,18 @@ onmessage = async ({ data }) => {   // what it writes is capped at 96 tokens: on
   try { const r = await asr(data.audio, { max_new_tokens: 96 }); postMessage({ id: data.id, text: (r.text || '').trim() }); }
   catch (e) { postMessage({ id: data.id, text: '', error: String(e && e.message || e) }); }
 };`;
+let lsCCOn = (() => { try { return localStorage.getItem(KEY + '-listen-cc') !== '0'; } catch (e) { return true; } })();
+let lsCC = [], lsCCLive = null;            // captions: the last transmissions [{parts, t}], and the one still being heard
+const LS_CC_S = 20;
+function lsCCRender() {
+  const box = $('cc'), now = performance.now();
+  lsCC = lsCC.filter(c => now - c.t < LS_CC_S * 1000).slice(-2);
+  const line = (p, cls) => `<div class="${cls}">${p.map(([t, b]) => b ? `<b>${esc(t)}</b>` : esc(t)).join(' ')}</div>`;
+  const rows = lsCC.map((c, i) => line(c.parts, i < lsCC.length - 1 || lsCCLive ? 'old' : '')).concat(lsCCLive ? [line(lsCCLive, 'live')] : []);
+  box.hidden = !LS || !lsCCOn || !rows.length;
+  const h = rows.join(''); if (box.innerHTML !== h) box.innerHTML = h;
+}
+setInterval(() => LS && lsCCRender(), 1000);
 const lsHeard = new Map();                 // cs -> when its tag stops being white (performance.now() ms)
 const lsOn = cs => (lsHeard.get(cs) || 0) > performance.now();
 let LS = null;                             // the running listener: {stream, ctx, worker, ...}
@@ -3304,6 +3324,7 @@ function lsRender() {
     (LS ? `<div class="row"><b>${esc(LS.label)}</b><button data-ls="stop">Stop</button></div>`
         : `<div class="row"><select id="lsDev" title="The microphone, hearing LiveATC from the speakers, or a loopback device (BlackHole) carrying the Mac's sound">${opts}</select><button data-ls="mic">Listen</button></div>` +
           (lsTabOk ? `<div class="row"><button data-ls="tab" title="Pick LiveATC's tab and tick “Share tab audio”">Share a tab's audio…</button></div>` : '')) +
+    `<label><input type="checkbox" id="lsCC"${lsCCOn ? ' checked' : ''}> Captions along the bottom</label>` +
     `<div class="st">${esc(lsMsg)}</div>` +
     (lsLast ? `<div class="last"><b>${esc(lsLast.cs.join(' ') || '—')}</b> ${esc(lsLast.text)}</div>` : '') +
     (lsSafari && !LS ? `<div class="tip">Safari can't hear another tab. For a clean feed, not the microphone: install BlackHole (brew install --cask blackhole-2ch), then make a Multi-Output Device of your speakers and BlackHole in Audio MIDI Setup and switch the Mac's sound to it (livescope's tools/listen-setup.swift does both steps). BlackHole is then picked here by itself.</div>` : '');
@@ -3318,10 +3339,10 @@ $('lsp').onclick = e => {
   if (k === 'mic') { lsDev = $('lsDev').value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} }
   lsStart(k);
 };
-$('lsp').onchange = e => { if (e.target.id === 'lsDev') { lsDev = e.target.value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} } };
+$('lsp').onchange = e => { if (e.target.id === 'lsCC') { lsCCOn = e.target.checked; try { localStorage.setItem(KEY + '-listen-cc', lsCCOn ? '1' : '0'); } catch (er) {} lsCCRender(); return; } if (e.target.id === 'lsDev') { lsDev = e.target.value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} } };
 function lsStop(msg) {
   if (LS) { try { LS.stream.getTracks().forEach(t => t.stop()); } catch (e) {} try { LS.ctx.close(); } catch (e) {} }
-  LS = null; lsMsg = msg || ''; lsRender();
+  LS = null; lsMsg = msg || ''; lsCC = []; lsCCLive = null; lsCCRender(); lsRender();
 }
 let lsWorker = null, lsReady = '', lsProg = new Map();
 function lsWorkerUp() {                    // one worker for the page: the model loads once, and stays loaded after Stop
@@ -3401,7 +3422,7 @@ function lsFrame(f) {
     if (s.segN >= LS_MIN) lsSend(s.seg, true, s.cs);
     s.seg = []; return;
   }
-  if (performance.now() - s.partT > 1500 && !s.busy) { s.partT = performance.now(); lsSend(s.seg, false, s.cs); }   // a partial one: the tag goes white before the transmission ends
+  if (performance.now() - s.partT > 1500 && !s.busy && lsReady !== 'CPU') { s.partT = performance.now(); lsSend(s.seg, false, s.cs); }   // a partial one: the tag goes white before the transmission ends (not on the CPU: too slow for both)
 }
 function lsSend(frames, final, cs) {
   const s = LS, n = frames.reduce((a, f) => a + f.length, 0), audio = new Float32Array(n);
@@ -3420,7 +3441,10 @@ function lsDone(r) {
   if (text && !hit.length && S) hit.push(...lsMatch(text, S.aircraft.map(a => a.cs).filter(Boolean)));
   const until = performance.now() + LS_HOLD_S * 1000 + (job.final ? 0 : 3000);
   for (const cs of hit) { lsHeard.set(cs, until); job.cs.add(cs); }
-  if (job.final && text && !/^\[.*\]$|^\(.*\)$/.test(text)) { lsLast = { text, cs: [...job.cs] }; lsRender(); }
+  const real = text && !/^\[.*\]$|^\(.*\)$/.test(text);   // not Whisper's [BLANK_AUDIO] and the like
+  if (job.final) { if (real) { lsLast = { text, cs: [...job.cs] }; lsCC.push({ parts: lsFormat(text, [...job.cs]), t: performance.now() }); } if (lsCCLive && job.id >= (s.liveId || 0)) lsCCLive = null; lsRender(); }
+  else if (real && LS.speech) { lsCCLive = lsFormat(text, [...job.cs]); s.liveId = job.id; }
+  lsCCRender();
   const next = s.queue.shift();
   if (next) { s.busy = true; s.job = next; lsWorkerUp().postMessage({ id: next.id, audio: next.audio }, [next.audio.buffer]); }
 }
@@ -3513,6 +3537,59 @@ function lsMatch(text, css) {             // -> the callsigns among css the tran
   const top = Math.max(0, ...best.values());
   const hits = [...best].filter(([, v]) => v === top).map(([cs]) => cs);
   return top === 3 ? hits : hits.length === 1 ? hits : [];
+}
+
+// a transmission in ATC shorthand for the captions: callsigns as the scope writes them (DAL1234, N123AB), numbers as
+// digits, RWY 22L, FL350, HDG 270, 121.0. -> [[text, bold], ...]: bold = a callsign that was matched
+function lsFormat(text, hits) {
+  const w = String(text).replace(/x-ray/gi, 'xray').replace(/(\d),(?=\d{3}\b)/g, '$1').split(/\s+/).map(r => ({ r: r.replace(/[,;:!?]+$|\.$/g, ''), k: r.toLowerCase().replace(/[^a-z0-9.]/g, '').replace(/\.$/, '') })).filter(x => x.k);
+  const isNum = (i, first) => { const k = w[i] && w[i].k; if (!k) return false;
+    if (k === 'oh' || k === 'zero') return !first || isNum(i + 1, false);
+    return (k in LS_NUM && LS_NUM[k] != null) || k in LS_TEEN || k in LS_TENS || /^\d+(\.\d+)?$/.test(k); };
+  const num = i => {                       // the number said from i on -> [digits, next i]
+    let cur = '', total = 0, big = false;
+    while (i < w.length) {
+      const k = w[i].k;
+      if (k in LS_NUM && LS_NUM[k] != null && isNum(i, !cur)) cur += LS_NUM[k];
+      else if (k in LS_TEEN) cur += LS_TEEN[k];
+      else if (k in LS_TENS) { const u = w[i + 1] && LS_NUM[w[i + 1].k]; cur += LS_TENS[k] + (u > 0 ? String(u) : '0'); if (u > 0) i++; }
+      else if (/^\d+(\.\d+)?$/.test(k)) cur += k;
+      else if ((k === 'thousand' || k === 'hundred') && cur) { total += +cur * (k === 'thousand' ? 1000 : 100); cur = ''; big = true; }
+      else if ((k === 'point' || k === 'decimal') && cur && isNum(i + 1, false) && !cur.includes('.')) cur += '.';
+      else break;
+      i++;
+    }
+    return [big ? String(total + (cur ? +cur : 0)) : cur, i];
+  };
+  const group = i => {                     // a callsign's letters and digits from i on
+    let g = '';
+    while (i < w.length) { if (isNum(i, !g)) { const [d, j] = num(i); g += d; i = j; } else if (w[i].k in LS_NATO) { g += LS_NATO[w[i].k]; i++; } else break; }
+    return [g, i];
+  };
+  const out = [], put = (s, b) => out.push([s, !!b]);
+  const hit = s => hits.find(cs => cs === s || cs === 'N' + s || s.length >= 3 && /[A-Z]/.test(s) && cs.endsWith(s));
+  for (let i = 0; i < w.length;) {
+    const k = w[i].k;
+    let tel = null, n = 0;
+    for (let m = 3; m >= 1 && !tel; m--) if (i + m <= w.length) { const c = LS_TEL[w.slice(i, i + m).map(x => x.k).join('')]; if (c && isNum(i + m, true)) { tel = c; n = m; } }
+    if (tel) { const [g, j] = group(i + n); put(tel + g, hits.includes(tel + g)); i = j; continue; }
+    if (k === 'november' && (isNum(i + 1, true) || w[i + 1] && w[i + 1].k in LS_NATO)) { const [g, j] = group(i + 1); { const h = hit('N' + g); put(h || 'N' + g, h); } i = j; continue; }
+    if (k === 'runway' && isNum(i + 1, true)) {
+      let [d, j] = num(i + 1); const s = w[j] && { left: 'L', right: 'R', center: 'C', centre: 'C' }[w[j].k];
+      put('RWY ' + d + (s || '')); i = j + (s ? 1 : 0); continue;
+    }
+    if (k === 'flight' && w[i + 1] && w[i + 1].k === 'level' && isNum(i + 2, true)) { const [d, j] = num(i + 2); put('FL' + d); i = j; continue; }
+    if (k === 'heading' && isNum(i + 1, true)) { const [d, j] = num(i + 1); put('HDG ' + d); i = j; continue; }
+    if (k in LS_NATO && (w[i + 1] && (w[i + 1].k in LS_NATO || isNum(i + 1, false)))) { const [g, j] = group(i); const h = hit(g); put(h || g, h); i = j; continue; }   // spelled out: OKPRM, 3AB
+    if (k in LS_NATO && w[i - 1] && /^(information|taxiway|via|atis|on|and)$/.test(w[i - 1].k)) { put(LS_NATO[k]); i++; continue; }
+    if (isNum(i, true)) { const [d, j] = num(i); let g = d, m = j;     // digits then letters: a shortened GA callsign
+      while (w[m] && w[m].k in LS_NATO) g += LS_NATO[w[m++].k];
+      const h = m > j && hit(g); if (h) { put(h, true); i = m; } else { const h2 = hit(d); put(h2 || d, h2); i = j; } continue; }
+    put(w[i].r); i++;
+  }
+  const o = [];                            // neighbours that aren't callsigns joined into one run
+  for (const [s, b] of out) if (o.length && !b && !o[o.length - 1][1]) o[o.length - 1][0] += ' ' + s; else o.push([s, b]);
+  return o;
 }
 
 // ------------------------------------------------------------------ start: #KSFO, #KSFO/40 or #lat,lon,half
