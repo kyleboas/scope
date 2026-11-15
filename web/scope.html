@@ -49,7 +49,7 @@
   #pick div:hover { background:var(--soft); } #pick [data-pa] + .ac { border-top:1px solid var(--line); } #pick .more { color:var(--dim); cursor:default; }
   #wxpop { position:fixed; z-index:20; width:min(460px, calc(100vw - 8px)); max-height:60vh; overflow:auto; padding:2px 0; background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px #0008; font:12px var(--mono); color:var(--fg2); }
   #wxpop > div { padding:7px 10px; } #wxpop > div + div { border-top:1px solid var(--line); }
-  #wxpop b { font-weight:normal; } #wxpop .wh { display:flex; gap:8px; align-items:baseline; } #wxpop .wh span { color:var(--dim); margin-left:auto; white-space:nowrap; }
+  #wxpop b { font-weight:normal; } #wxpop a { color:#5ac8fa; } #wxpop .wh { display:flex; gap:8px; align-items:baseline; } #wxpop .wh span { color:var(--dim); margin-left:auto; white-space:nowrap; }
   #wxpop .wm { color:var(--fg); margin-top:2px; } #wxpop pre { margin:4px 0 0; white-space:pre-wrap; word-break:break-word; color:var(--dim); font:11px var(--mono); }
   button { background:none; border:0; color:var(--dim); font:12px var(--mono); padding:5px 7px; border-radius:4px; cursor:pointer; }
   button:hover { color:var(--fg); background:var(--alt); }
@@ -269,6 +269,7 @@
   #atcp .inb .none { grid-column:1 / span 4; color:var(--dim); cursor:default; }
   #atcp .err { color:var(--dim); padding:8px 12px 0; }
   #atcp .ctrhd { padding-top:10px; }
+  #card .atc .lk { cursor:pointer; color:#5ac8fa; } #card .atc .lk:hover { text-decoration:underline; }
   /* phones and small tablets, either way up: the side panel becomes a drawer (landscape) or a bottom sheet (portrait) */
   @media (max-width: 820px), (max-height: 500px) {
     body { grid-template-columns:1fr; }
@@ -611,6 +612,38 @@ function inRings(rings, la, lo) {
     const ax = r[i], ay = r[i + 1], bx = r[j], by = r[j + 1]; if ((ay > la) !== (by > la) && lo < ax + (la - ay) * (bx - ax) / (by - ay)) n++; }
   return n % 2 === 1;
 }
+// the Center name drawn under a click (the Center airspaces layer with its names), as its boundary
+function hitCenter(mx, my) {
+  if (!CENTERS || !L.centers || !L.ctrnames || view.half < 8 || view.half > 1500) return null;
+  const d = dpr(); let best = null, bd = 1e9;
+  for (const [id, la, lo] of CENTERS.names) { const [x, y, z] = proj(la, lo); if (z < 0) continue;
+    const dx = Math.abs(x - mx), dy = Math.abs(y - 4 * d - my); if (dx < 30 * d && dy < 12 * d && dx + dy < bd) { bd = dx + dy; best = id; } }
+  return best && CENTERS.all.find(c => c.id === best && !c.oc) || best && CENTERS.all.find(c => c.id === best) || null;
+}
+function setCtrHi(a) { if (ctrHi === a) return; ctrHi = a; mapKey = ''; for (const s of scopes) s.key = ''; }
+// a Center's popup (its name tapped on the map): who works it and on what frequency, and how many aircraft are in it
+let ctrPop = null;                     // the Center popup's [x, y, boundary], redrawn when the ATC list comes in
+function centerOpen(x, y, area) {
+  setCtrHi(area); if (has('atc')) loadAtc();
+  const cs = has('atc') ? atcCenters().filter(c => c.area === area) : [], since = t => t ? ' · since ' + new Date(t * 1000).toISOString().slice(11, 16) + 'Z' : '';
+  const n = (centerTraffic({ area }) || []).length;
+  const m = $('wxpop');
+  m.innerHTML = `<div><div class="wh"><b style="color:#5ac8fa">${esc(area.id)}</b>${area.oc ? 'Oceanic ' : ''}Center airspace<span>${n} aircraft in it</span></div>` +
+    (has('atc') ? (cs.length ? cs.map(c => c.fs.map(f => `<div class="wm">${esc(f.user || 'controller')}<span style="color:var(--dim)">${since(f.since)}</span></div>`).join('') +
+        `<div class="wm"><a href="#" data-ctrlist="${esc(c.key)}">${esc(c.key)} in the ATC list →</a></div>`).join('')
+      : `<div class="wm" style="color:var(--dim)">No controller on duty here on ${esc(srvName())}.</div>`) : '') + '</div>';
+  wxSel = null; ctrPop = [x, y, area]; m.hidden = false; m.scrollTop = 0;
+  const b = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x + 8, innerWidth - b.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(y + 8, innerHeight - b.height - 4)) + 'px';
+}
+// the ATC list, opened on a Center (its traffic listed)
+function centerInList(key) {
+  const p = $('atcp'); p.hidden = false; $('atcBtn').classList.add('on'); $('tlp').hidden = true; atcOpenAp = 'ctr:' + key;
+  if (!WORLD) { worldFetchT = 0; loadWorld(); }
+  atcPanel(); const r = p.querySelector(`[data-ctr="${CSS.escape(key)}"]`); if (r) r.scrollIntoView({ block: 'start' });
+}
+$('wxpop').addEventListener('click', e => { const a = e.target.closest('[data-ctrlist]'); if (!a) return; e.preventDefault(); wxClose(); centerInList(a.dataset.ctrlist); });
 function centerArea(name, la, lo) {
   if (!CENTERS) return null;
   const nm = String(name || '').toUpperCase(), exact = nm && CENTERS.all.find(c => c.id === nm && !c.oc);
@@ -1692,12 +1725,12 @@ function wxOpen(x, y, items) {
     return `<div><div class="wh"><b style="color:${wxCol(it)}">${esc(WX_KIND[it.k])}</b>${esc(it.name.replace(/^(SIGMET|G-AIRMET|CWA) /, ''))}<span>${esc(when)}</span></div>` +
       `<div class="wm">${esc([it.hz, it.alt].filter(Boolean).join(' · '))}</div>` + (it.text ? `<pre>${esc(it.text)}</pre>` : '') + '</div>';
   }).join('');
-  wxSel = items; m.hidden = false; m.scrollTop = 0;
+  wxSel = items; ctrPop = null; m.hidden = false; m.scrollTop = 0;
   const b = m.getBoundingClientRect();
   m.style.left = Math.max(4, Math.min(x + 8, innerWidth - b.width - 4)) + 'px';
   m.style.top = Math.max(4, Math.min(y + 8, innerHeight - b.height - 4)) + 'px';
 }
-function wxClose() { const m = $('wxpop'); if (!m.hidden) { m.hidden = true; wxSel = null; } }
+function wxClose() { const m = $('wxpop'); if (!m.hidden) { m.hidden = true; wxSel = null; ctrPop = null; } }
 
 // ------------------------------------------------------------------ the selected flight's filed plan and flown route
 // (infinitescope: /api/live/flight; a site with the 'fplan' feature, livescope: /api/live/fplan by callsign, real
@@ -1989,6 +2022,8 @@ function endPointer(e) {
   // zoomed out, the dots are the worldwide picture (no live feed): one zooms in on it and selects it once the feed has it
   const w = worldPts.length && worldDrawn() ? hitWorld(mx, my) : null; if (w) { pick({ ac: true, id: w.r[0], lat: w.p[0], lon: w.p[1] }); return; }
   select(null);
+  const ca = hitCenter(mx, my); if (ca) { centerOpen(e.clientX, e.clientY, ca); return; }
+  setCtrHi(null);
   const wx = hitWx(mx, my, touch ? 20 : 10); if (wx.length) wxOpen(e.clientX, e.clientY, wx);
 }
 onCv('pointerup', endPointer); onCv('pointercancel', endPointer);
@@ -2137,7 +2172,8 @@ function renderCard1() {
     const since = t => t ? new Date(t * 1000).toISOString().slice(11, 16) + 'Z' : '';
     card.innerHTML = `<button class="x" id="cardX">✕</button><b>${esc(home[0])}</b>${home[1] ? ' / ' + esc(home[1]) : ''} · ${esc(home[2])}<br>` +
       `${esc([home[3], home[4]].filter(Boolean).join(', '))} · elev ${home[7].toLocaleString()} ft · rings every 10 nm<br>` +
-      (fs.length || ctr.length ? `<div class="atc">${fs.concat(ctr).map(f => `<span>${esc(f.type)}</span><span>${esc(f.user || 'controller')}</span><span>since ${since(f.since)}</span>`).join('')}</div>`
+      (fs.length || ctr.length ? `<div class="atc">${fs.concat(ctr).map(f => { const c = f.type === 'Center' ? ` data-cctr="${esc(f.icao || f.user || 'Center')}" class="lk" title="Show this Center's airspace and traffic"` : '';
+          return `<span${c}>${esc(f.type)}${c ? ' →' : ''}</span><span${c}>${esc(f.user || 'controller')}</span><span${c}>since ${since(f.since)}</span>`; }).join('')}</div>`
         : `<span style="color:var(--dim)">No ATC here on ${esc(srvName())}.</span>`) + atisCard() + procCard() + chartCard();
   } else if (home && !homeCardShut) {
     // its radio frequencies (OurAirports), its live audio feeds (SITE.audio) and a link to listen on LiveATC.net
@@ -2156,6 +2192,8 @@ function renderCard1() {
     : AD && AD.id === a.id && photoEl(a.hex, AD.photo)); if (pe) ph.replaceWith(pe);
   if ($('lwLink')) $('lwLink').onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true); };
   card.querySelectorAll('[data-fq]').forEach(el => el.onclick = e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); lwGo(home[0], true, el.dataset.fq); });
+  card.querySelectorAll('[data-cctr]').forEach(el => el.onclick = () => { const k = el.dataset.cctr, c = atcCenters().find(x => x.key === k);
+    if (c) { setCtrHi(c.area); centerInList(k); } });
   card.querySelectorAll('[data-au]').forEach(el => el.onclick = () => { const [lb, u] = radioFeeds(home[0])[+el.dataset.au]; radioPlay([home[0], lb, u]); });
   card.querySelectorAll('[data-pk]').forEach(el => el.onclick = () => {
     const k = [home[0], el.dataset.pk, el.dataset.pn];
@@ -2782,7 +2820,7 @@ function centerTraffic(c) {
   return rows.filter(r => !r.ground && r.lat >= a && r.lat <= b && r.lon >= lo1 && r.lon <= lo2 && inRings(c.area.rings, r.lat, r.lon)).sort((p, q) => q.alt - p.alt);
 }
 function centerGo(c) {
-  ctrHi = c.area; mapKey = ''; for (const s of scopes) s.key = '';
+  setCtrHi(c.area);
   if (c.area) { const [a, b, lo1, lo2] = c.area.bb; view.lat = (a + b) / 2; view.lon = (lo1 + lo2) / 2;
     view.half = Math.min(HALF_GLOBE, Math.max(60, gc(a, lo1, b, lo2) / 2 * 1.1)); }
   else if (c.lat != null) { view.lat = c.lat; view.lon = c.lon; view.half = 250; }
@@ -2864,7 +2902,7 @@ async function loadAtc() {
   if (!has('atc') || Date.now() - atcT < 60000) return; atcT = Date.now();
   try { const j = await (await fetch(`/api/live/atc?${srvQ()}`)).json(); if (!j.ok) { atcT = Date.now() - 45000; return; }
     const m = new Map(); for (const f of j.atc) { const k = f.type === 'Center' ? '' : f.icao; if (!m.has(k)) m.set(k, []); m.get(k).push(f); }
-    atcBy = m; atcGen++; mapKey = ''; ATC_APS = j.airports || []; atcPanel(); if (home && !sel) renderCard();
+    atcBy = m; atcGen++; mapKey = ''; ATC_APS = j.airports || []; atcPanel(); if (ctrPop) centerOpen(...ctrPop); if (home && !sel) renderCard();
   } catch (e) { atcT = Date.now() - 45000; }
 }
 // SITE.idle_min: stop downloading after that long without input (infinitescope: Infinite Flight's API rules), until there is some
