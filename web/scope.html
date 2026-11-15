@@ -65,7 +65,8 @@
   #tiles:not(.one) ~ .flt { bottom:auto; top:var(--top); }
   .views [data-layout] { display:flex; align-items:center; } .views [data-layout] svg { width:14px; height:14px; }
   /* a split scope's own airport: its button in the view bar, and a search box over the scope */
-  #tiles.one .views [data-apt] { display:none; } .views [data-apt].on { color:#bbb; }
+  #tiles.one .views [data-apt] { display:none; }
+  .views [data-apt] { color:#bbb; border:1px solid #444; margin:0 4px; padding:3px 7px; } .views [data-apt]:hover { border-color:#777; } .views [data-apt].on { color:#4fb3ff; border-color:#4fb3ff; }
   .tapt { position:absolute; left:8px; bottom:38px; z-index:4; width:min(300px, calc(100% - 16px)); background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 24px #0008; }
   .tapt[hidden] { display:none; } .tapt input { width:100%; box-sizing:border-box; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); font:12px var(--mono); padding:8px 10px; outline:none; }
   .tapt .r { max-height:min(40vh, 240px); overflow:auto; } .tapt .r div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -400,7 +401,7 @@ function makeScope(v) {
 function aptPicker(s) {
   const b = s.el.querySelector('[data-apt]'), box = s.el.querySelector('.tapt'), q = box.querySelector('input'), res = box.querySelector('.r'), akey = KEY + '-apt-' + s.n;
   let list = [], idx = 0, gen = 0;
-  s.aptShow = () => { const a = s.apt || home; b.textContent = a ? a[0] : 'APT'; b.classList.toggle('on', !!s.apt);
+  s.aptShow = () => { const a = s.apt || home; b.textContent = (a ? a[0] : 'APT') + ' ▾'; b.classList.toggle('on', !!s.apt);
     b.title = s.apt ? `This scope stays on ${s.apt[0]} (click to change it, or to follow the airport picked)` : `This scope follows the airport picked${home ? ' (' + home[0] + ')' : ''}: click to give it an airport of its own`; };
   s.setApt = (a, fly = true) => {
     s.apt = a; s.areaKey = ''; s.key = '';
@@ -425,7 +426,8 @@ function aptPicker(s) {
     const nv = norm(v), exact = aps.filter(a => norm(a[0]) === nv || norm(a[1]) === nv);
     list = [...exact, ...aps.filter(a => !exact.includes(a)), ...(s.apt ? ['follow'] : [])]; show();
   };
-  b.onclick = () => { box.hidden = !box.hidden; if (!box.hidden) { q.focus(); search(); } };
+  s.aptOpen = () => { box.hidden = false; q.focus(); search(); };
+  b.onclick = () => { if (box.hidden) s.aptOpen(); else close(); };
   q.oninput = search;
   q.onkeydown = e => {
     if (e.key === 'Escape') { close(); return; }
@@ -1788,6 +1790,9 @@ onCv('wheel', e => {
 }, { passive:false });
 }
 function pickAirport(ap) {
+  // a tap on the map of a split scope: its own airport there opens its airport box; another airport becomes its own
+  const sp = active && active !== scopes[0] && $('tiles').className !== 'one' && active.el.offsetWidth ? active : null;
+  if (sp) { if (ap[0] === (sp.apt || home || [])[0]) sp.aptOpen(); else sp.setApt(ap); return; }
   if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
   setHome(ap, false);
 }
