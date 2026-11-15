@@ -123,6 +123,7 @@
   .layers .sub.off { opacity:.45; }
   .layers input { accent-color:#8e8e93; margin:0; }
   .layers .tagsz { display:flex; align-items:center; padding-right:8px; color:var(--dim); }
+  .layers .othop { flex:1; justify-content:space-between; padding:3px 8px 3px 14px; color:var(--fg2); white-space:nowrap; }
   .layers .tagsz button { padding:3px 7px; color:var(--dim); } .layers .tagsz b { font-weight:normal; color:var(--fg); min-width:2em; text-align:center; cursor:pointer; }
   #listBtn { padding:5px 7px; } body.noApt #listBtn { display:none; } #listBtn.on { color:var(--fg); background:var(--alt); }
   #srvs { display:flex; gap:0; }
@@ -364,6 +365,14 @@ function setTagPx(v) {
   try { tagPx ? localStorage.setItem(KEY + '-tagpx', tagPx) : localStorage.removeItem(KEY + '-tagpx'); } catch (e) {}
   document.querySelectorAll('.tagsz b').forEach(b => b.textContent = tagSize());
 }
+// the opacity of the aircraft the filters leave out (OTHERS, the altitude filter): − / + 10 % at a time in the layers menu, remembered; tapping the number goes back to 100 %
+let othPct = (() => { try { return +localStorage.getItem(KEY + '-othpct') || 100; } catch (e) { return 100; } })();
+const othA = () => othPct / 100;
+function setOthPct(v) {
+  othPct = Math.min(100, Math.max(10, v));
+  try { othPct < 100 ? localStorage.setItem(KEY + '-othpct', othPct) : localStorage.removeItem(KEY + '-othpct'); } catch (e) {}
+  document.querySelectorAll('.othop b').forEach(b => b.textContent = othPct + '%'); mapKey = '';
+}
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
               alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
               final:'#2a2a2a', finalTxt:'#4a4a4a', ctr:'#2c4560', ctrTxt:'#4d6f94',
@@ -381,7 +390,7 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Map'], ['states', 'State and province lines'], ['borders', 'Borders'], ['coast', 'Coastlines'],
                 ['centers', 'Center airspaces (ARTCCs and FIRs)'], ['ctrnames', 'Names', 'centers'],
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
-                ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
+                ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['othop', 'Filtered-out aircraft opacity'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans'],
                 ['#', 'Weather'], ['radar', 'Radar'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
@@ -426,11 +435,13 @@ function makeScope(v) {
   const lp = el.querySelector('.layers');
   const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram') && (has('wx') || !WX_KEYS.includes(k))));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
+    k === 'othop' ? `<div class="lr"><span class="tagsz othop"><span>${t}</span><span><button data-oth="-10" title="Fainter" aria-label="Fainter">−</button><b data-oth="0" title="Opacity (click for 100%)">${othPct}%</b><button data-oth="10" title="Stronger" aria-label="Stronger">+</button></span></span></div>` :
     `<div class="lr${up ? ' sub' : ''}"${up ? ` data-up="${up}"` : ''}><label><input type="checkbox" data-l="${k}"${s.L[k] ? ' checked' : ''}><span>${t}</span></label>` +
     (k === 'tags' ? `<span class="tagsz"><button data-tsz="-1" title="Smaller" aria-label="Smaller tags">−</button><b data-tsz="0" title="Text size (click for the default)">${tagSize()}</b><button data-tsz="1" title="Larger" aria-label="Larger tags">+</button></span>` : '') + '</div>').join('');
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
-  lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
+  lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null);
+    const o = e.target.closest('[data-oth]'); if (o) setOthPct(+o.dataset.oth ? othPct + +o.dataset.oth : 100); });
   lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); loadCenters(); loadAirspace(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (e.target.dataset.l === 'radar') loadRadar(); if (!n && e.target.dataset.l === 'allproc') renderCard();
     s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
@@ -1307,15 +1318,16 @@ function drawAircraft() {
     const om = out ? othOf(!fltOk(a), !altOk(a.alt, a.ground)) : '';   // how: OTHERS (ARR / DEP) and the altitude filter's own setting
     if (om === 'hide') continue;                             // hidden: not drawn at all
     drawn.push({ a, px, py });
+    const oa = out ? othA() : 1;                             // their opacity (the layers menu)
     const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
     if (lines && L.trails && !SITE.no_history && !far && (!a.ground || view.half <= 6)) for (const [i, q] of trailDots(a, la, lo).entries()) {
       const [hx, hy, hz] = proj(q[0], q[1]); if (hz < 0) continue;
-      ctx.globalAlpha = 0.25 + i * 0.12; ctx.fillStyle = COL.hist; ctx.beginPath(); ctx.arc(hx, hy, (a.ground ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
+      ctx.globalAlpha = (0.25 + i * 0.12) * oa; ctx.fillStyle = COL.hist; ctx.beginPath(); ctx.arc(hx, hy, (a.ground ? 1.6 : 2.4) * d, 0, 7); ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = oa;
     if (lines && L.ptl && !a.ground && a.gs > 30 && ppn * a.gs / 60 > 4 * d) {      // one minute ahead
       const [ea, eo] = dest(la, lo, trk, a.gs / 60), [ex, ey] = proj(ea, eo);
-      ctx.strokeStyle = COL.ptl; ctx.globalAlpha = .5; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = COL.ptl; ctx.globalAlpha = .5 * oa; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = oa;
     }
     if (out) ctx.fillStyle = '#5a5a5a', ctx.beginPath(), ctx.arc(px, py, (far ? 1.4 : 2) * d, 0, 7), ctx.fill();
     if (out && om !== 'tag') {                                // SHORT: a short tag (altitude and wake category); DOTS: none
@@ -1350,6 +1362,7 @@ function drawAircraft() {
     const n = l3 ? 3 : 2;
     if (isSel || isHov) { ctx.fillText([a.type || '----', a.sq, a.route && a.route[3]].filter(Boolean).join(' '), bx, ly - 2*d + n*lh); if (a.reg || a.user) ctx.fillText(a.reg || a.user, bx, ly - 2*d + (n + 1)*lh); }
   }
+  ctx.globalAlpha = 1;
 }
 function shortTag(x, y, txt, col) {     // a short leader to the right, then the text level with the dot
   const d = dpr(); ctx.strokeStyle = ctx.fillStyle = col; ctx.lineWidth = d;
@@ -1420,16 +1433,17 @@ function drawWorld() {
   }
   const d = dpr(), rad = [1.3 * d, 1.1 * d, 1 * d], col = [COL.dbDim, '#3a3a3a', '#5a5f66'];
   for (const k of [2, 1, 0]) {
-    ctx.fillStyle = col[k]; ctx.beginPath();
+    ctx.globalAlpha = k === 1 ? othA() : 1; ctx.fillStyle = col[k]; ctx.beginPath();
     for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + rad[k], y); ctx.arc(x, y, rad[k], 0, 7); }
     ctx.fill();
   }
   ctx.lineWidth = 0.7 * d;
   for (const [k, c] of [[4, '#333'], [3, COL.dbDim]]) {   // estimated positions: hollow rings, about a dot's size
-    ctx.strokeStyle = c; ctx.beginPath();
+    ctx.globalAlpha = k === 4 ? othA() : 1; ctx.strokeStyle = c; ctx.beginPath();
     for (const w of worldPts) { if (w.k !== k) continue; const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue; ctx.moveTo(x + 1.3*d, y); ctx.arc(x, y, 1.3 * d, 0, 7); }
     ctx.stroke();
   }
+  ctx.globalAlpha = 1;
   const fOn = fltOn();
   if (L.tags && (view.half <= 300 || fOn)) {     // zoomed in (playing back the past): tag the dots like live traffic; ARR / DEP filter: only its own, at any zoom
     ctx.font = FONT(TAG(11)); ctx.lineWidth = d; let n = 0; const wl = (TAG(11) + 2) * d, fs = TAG(11), wk = w => 'w' + w.r[0];
@@ -1440,11 +1454,12 @@ function drawWorld() {
       const [hex, , , , gs, alt, , cs] = w.r, c = wo ? (w.est ? '#2c5a2c' : COL.dbDim) : w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
       if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d), wo ? 2 : fOn)) continue;
       if (++n > 400 && (!fOn || wo)) { if (!wo) tagMiss++; break; }
-      tagNow.add(wk(w));
+      tagNow.add(wk(w)); ctx.globalAlpha = wo ? othA() : 1;
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
       ctx.fillText(a3(alt * 100) + '  ' + String(Math.round(gs / 10)).padStart(2, '0'), lx + 3*d, ly - 2*d + wl);
     }
+    ctx.globalAlpha = othA();
     n = 0;                                       // outside the altitude (or ARR / DEP) filter: a short tag, the altitude, when set to SHORT
     for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if ((w.k !== 1 && w.k !== 4) || w.m !== 'short') continue;
@@ -1454,6 +1469,7 @@ function drawWorld() {
       tagNow.add(wk(w));
       shortTag(x, y, a3(w.r[5] * 100), w.est ? '#2c5a2c' : COL.dbDim);
     }
+    ctx.globalAlpha = 1;
   }
   if (worldHover) {                              // its tag: callsign, altitude and ground speed, as of the snapshot
     const [x, y, z] = proj(worldHover.p[0], worldHover.p[1]); if (z < 0) return;
