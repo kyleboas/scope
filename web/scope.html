@@ -357,7 +357,7 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Weather'], ['radar', 'Radar'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
 const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
-const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, ilsnames:true, airports:true, aptnames:false, small:true, runways:true,
+const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, ilsnames:false, airports:true, aptnames:false, small:true, runways:true,
             finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
             radar:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const APT_FAR = 150;                   // view half-width (nm) past which only the picked airport is drawn
@@ -391,8 +391,9 @@ function makeScope(v) {
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   s.save = () => { try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
-  // lv: the saved layers' version; airports went back on by default in 3, ground maps and ground traffic in 4, so a saved "off" from before is dropped once
-  try { const o = JSON.parse(localStorage.getItem(lkey) || '{}'); if (!(o.lv >= 3)) delete o.airports; if (!(o.lv >= 4)) { delete o.taxi; delete o.ground; } Object.assign(s.L, o, { lv: 4 }); } catch (e) {}
+  // lv: the saved layers' version; airports went back on by default in 3, ground maps and ground traffic in 4, so a saved "off" from before is dropped once;
+  // ILS names went off by default in 5, so a saved "on" from before is dropped once
+  try { const o = JSON.parse(localStorage.getItem(lkey) || '{}'); if (!(o.lv >= 3)) delete o.airports; if (!(o.lv >= 4)) { delete o.taxi; delete o.ground; } if (!(o.lv >= 5)) delete o.ilsnames; Object.assign(s.L, o, { lv: 5 }); } catch (e) {}
   const lp = el.querySelector('.layers');
   const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram') && (has('wx') || !WX_KEYS.includes(k))));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
