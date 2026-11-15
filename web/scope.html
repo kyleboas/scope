@@ -1011,7 +1011,7 @@ for (const [k, l] of Object.entries({
 // until you zoom in or hover them); tags placed last frame go first, so the same ones keep their tags as traffic moves
 let tagGrid = new Map(), tagWas = new Set(), tagNow = new Set();
 const TAG_CELL = 48;
-function tagReset(s) { tagGrid = new Map(); tagWas = s.tagNow || new Set(); tagNow = s.tagNow = new Set(); for (const b of uiBoxes(s)) tagFits(...b, true); }   // per scope (split views)
+function tagReset(s) { tagGrid = new Map(); tagWas = s.tagNow || new Set(); tagNow = s.tagNow = new Set(); tagShow = s.tagShow !== false; tagMiss = 0; for (const b of uiBoxes(s)) tagFits(...b, true); }   // per scope (split views)
 // the controls floating over the map (header, view buttons, ARR / DEP, the timelapse bar) count as taken, so no tag is drawn under
 // them; measured at most every half second
 function uiBoxes(s) {
@@ -1032,13 +1032,29 @@ function uiBoxes(s) {
   }
   return s.ui;
 }
-function tagFits(x0, y0, x1, y1, force) {   // the box is free (or force): reserve it and say yes
+// all or none: the tags are drawn only while every one of them fits (zoomed in to TAG_ALL_NM or closer: always, overlapping or not);
+// one that doesn't fit this frame turns them all off from the next, and they come back once all have fitted for a second and a half.
+// A forced one (selected, hovered, emergency, the ARR / DEP filter's own) is always drawn; one only under it or under a control
+// over the map is left off without turning off the rest
+const TAG_ALL_NM = 60;
+let tagShow = true, tagMiss = 0;
+function tagFits(x0, y0, x1, y1, force) {   // say whether to draw this tag (and reserve its box)
   const c0 = Math.floor(x0 / TAG_CELL), c1 = Math.floor(x1 / TAG_CELL), r0 = Math.floor(y0 / TAG_CELL), r1 = Math.floor(y1 / TAG_CELL);
+  let hit = false;
   if (!force) for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++)
-    for (const b of tagGrid.get(c + ',' + r) || []) if (x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1]) return false;
-  const b = [x0, y0, x1, y1];
+    for (const b of tagGrid.get(c + ',' + r) || []) if (x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1]) {
+      if (!b[4]) { tagMiss++; return tagShow && view.half <= TAG_ALL_NM; }
+      hit = true;
+    }
+  if (hit) return false;
+  const b = [x0, y0, x1, y1, force ? 1 : 0];
   for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) { const k = c + ',' + r, l = tagGrid.get(k); if (l) l.push(b); else tagGrid.set(k, [b]); }
-  return true;
+  return force || tagShow;
+}
+function tagDone(s) {                          // after a frame: whether the next one draws its tags
+  const now = performance.now();
+  if (tagMiss && view.half > TAG_ALL_NM) s.tagFitT = 0; else if (!s.tagFitT) s.tagFitT = now;
+  s.tagShow = !!s.tagFitT && (s.tagShow !== false || now - s.tagFitT > 1500);
 }
 const tagFirst = key => (a, b) => tagWas.has(key(b)) - tagWas.has(key(a));
 function drawAircraft() {
@@ -1181,7 +1197,7 @@ function drawWorld() {
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
       const [hex, , , , gs, alt, , cs] = w.r, c = w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
       if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d), fOn)) continue;
-      if (++n > 400 && !fOn) break;
+      if (++n > 400 && !fOn) { tagMiss++; break; }
       tagNow.add(wk(w));
       ctx.strokeStyle = c; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x + 4*d, y - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
       ctx.fillText(cs || hex.toUpperCase(), lx + 3*d, ly - 2*d);
@@ -1192,7 +1208,7 @@ function drawWorld() {
       if (w.k !== 1 && w.k !== 4) continue;
       const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
       if (!tagFits(x - 3*d, y - 6*d, x + (14 + 3 * .62 * TAG(10)) * d, y + 6*d)) continue;
-      if (++n > 400) break;
+      if (++n > 400) { tagMiss++; break; }
       tagNow.add(wk(w));
       shortTag(x, y, a3(w.r[5] * 100), w.est ? '#2c5a2c' : COL.dbDim);
     }
@@ -1570,7 +1586,7 @@ function frame() {
     const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
-    tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (measure && measure.s === s) drawMeasure();
+    tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); tagDone(s); if (measure && measure.s === s) drawMeasure();
     s.drawn = drawn;
   }
   use(scopes[0]);
