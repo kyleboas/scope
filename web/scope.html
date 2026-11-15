@@ -392,8 +392,8 @@ function makeScope(v) {
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
   const lkey = KEY + '-layers' + (n ? '-' + n : '');
   s.save = () => { try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
-  // lv: the saved layers' version; airports went back on by default in 3, so a saved "off" from before is dropped once
-  try { const o = JSON.parse(localStorage.getItem(lkey) || '{}'); if (!(o.lv >= 3)) delete o.airports; Object.assign(s.L, o, { lv: 3 }); } catch (e) {}
+  // lv: the saved layers' version; airports went back on by default in 3, ground maps and ground traffic in 4, so a saved "off" from before is dropped once
+  try { const o = JSON.parse(localStorage.getItem(lkey) || '{}'); if (!(o.lv >= 3)) delete o.airports; if (!(o.lv >= 4)) { delete o.taxi; delete o.ground; } Object.assign(s.L, o, { lv: 4 }); } catch (e) {}
   const lp = el.querySelector('.layers');
   const shown = LAYERS.filter(([k]) => k === '#' || ((has('world') || (k !== 'world' && k !== 'est')) && (has('flight') || has('fplan') || k !== 'plan') && !(SITE.no_history && k === 'trails') && !(has('flight') && k === 'est') && (has('ground') || k !== 'aprontags') && (has('boats') || k !== 'boats') && (has('diagram') || k !== 'diagram') && (has('wx') || !WX_KEYS.includes(k))));
   lp.innerHTML = shown.filter(([k], i) => k !== '#' || (shown[i + 1] && shown[i + 1][0] !== '#')).map(([k, t, up]) => k === '#' ? `<h4>${t}</h4>` :
