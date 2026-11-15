@@ -2759,9 +2759,8 @@ async function radioOpen(rec) {
   for (const [id, p] of Object.entries(RADIO.procs || {})) if (p) useGiven.set(id, { given: true, arr: new Map((p.arr || []).map(r => [r, new Set()])),
     arrSet: new Set(p.arr || []), dep: new Set(p.dep || []), use: new Set(['sid', 'star', 'approach'].flatMap(k => (p[k] || []).map(n => k + '|' + n))) });
   mapKey = ''; radioRender(); renderCard();   // the airport card lists them
-  if (!RADIO.opened) {                       // the log up from the start (phones: the sheet), the airport card shut until its button is pressed
-    RADIO.opened = true; if (home && !sel) homeCardShut = true;
-    if (small.matches) document.body.classList.add('listOpen');
+  if (!RADIO.opened) {                       // big screens: the log up from the start, the airport card shut until its button is pressed (phones: nothing up until it is)
+    RADIO.opened = true; if (home && !sel && !small.matches) homeCardShut = true;
     renderCard();
   }
 }

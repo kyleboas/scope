@@ -47,8 +47,7 @@ directory on `sys.path`, so `site.py` can `import` the site's other modules and 
     in a second or two instead of 10–15 s; anything else plays in a plain `<audio>`); `tl_home` (set the home
     airport from `start` even when the page opens on a recording, `?tl=`); `tl_bar: "strip"` (the timelapse
     controls as a strip along the bottom, with no slider: « 10s / 10s » buttons and ← → instead);
-    `airports` (a list of ICAOs: only these can be clicked or searched; on a phone a recording with radio
-    opens its airport card and radio log straight away)
+    `airports` (a list of ICAOs: only these can be clicked or searched)
 - `providers()` (or `providers(airports=None)` to get the shared `core.Airports`), which returns a dict:
   - `traffic` (required): an object whose `get(lat, lon, nm)` returns
     `{ok, t, center:[lat, lon], nm, src, aircraft:[...]}`. Each aircraft is
