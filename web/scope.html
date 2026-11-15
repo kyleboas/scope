@@ -1418,14 +1418,16 @@ function drawAircraft() {
     if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer && !talk) continue;
     if (a.ground && !L.aprontags && !isSel && !isHov && !emer && !talk && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
-    const col = emer ? COL.alert : isSel || talk ? COL.sel : out ? COL.dbDim : COL.db;
+    const col = isSel || talk ? COL.sel : out ? COL.dbDim : COL.db;   // an emergency's tag looks like any other, its label red after the callsign
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     const l3 = !a.ground && a.l3 ? a.l3 : '';                // a.l3: the site's third line (sim replays: assigned heading and altitude)
     if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep || talk || (out ? 2 : 0))) continue;
     tagNow.add(a.id);
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
-    ctx.fillText(a.cs + (radioTalk.has(a.cs) ? ' ◀' : '') + (emer ? ' ' + a.emer : ''), bx, ly - 2*d);
+    const l1 = a.cs + (radioTalk.has(a.cs) ? ' ◀' : '');
+    ctx.fillText(l1, bx, ly - 2*d);
+    if (emer) { ctx.fillStyle = COL.alert; ctx.fillText(' ' + a.emer, bx + ctx.measureText(l1).width, ly - 2*d); ctx.fillStyle = col; }
     const l2 = a.ground ? (a.gt != null ? a.gt : a.gs > 2 ? groundTag(a) : '') : a3(a.alt) + (a.vs > 300 ? '↑' : a.vs < -300 ? '↓' : ' ') + ' ' + String(Math.round(a.gs / 10)).padStart(2, '0');
     if (l2) ctx.fillText(l2, bx, ly - 2*d + lh);
     if (l3) ctx.fillText(l3, bx, ly - 2*d + 2*lh);
