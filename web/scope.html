@@ -385,7 +385,7 @@ function setOthPct(v) {
   document.querySelectorAll('.othop b').forEach(b => b.textContent = othPct + '%'); mapKey = '';
 }
 const COL = { coast:'#555', border:'#3a3a3a', state:'#262626', grat:'#161616', ring:'#3a3a3a', db:'#6ee36e', dbDim:'#3f8a3f', sel:'#fff',
-              alert:'#ff3b30', hist:'#8e8e93', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
+              alert:'#ff3b30', hist:'#2c46ff', ptl:'#bdbdbd', gnd:'#8b949e', apt:'#7a7a7a', aptDim:'#4a4a4a', rwy:'#8a8a8a', cover:'#2c4a6a',
               final:'#2a2a2a', finalTxt:'#4a4a4a', ctr:'#2c4560', ctrTxt:'#4d6f94',
               asB:'#2f5b94', asC:'#7c3f74', asD:'#2f5b94', asBTxt:'#5a86c0', asCTxt:'#a8669e', asDTxt:'#5a86c0' };
 const PROC = { star:['#2e2e2e', [2, 5]], transition:['#2e2e2e', [2, 5]], approach:['#555', null], sid:['#262626', [8, 6]] };
@@ -1892,12 +1892,12 @@ function drawFlight() {
   const d = dpr();
   if (FL.track && FL.track.length > 1) trackLine(FL.track);
   const pts = (FL.plan && FL.plan.pts) || [], line = FL.plan && FL.plan.line;
-  if (line && line.length > 1) geoLine(ctx, line, '#c86bd8', [6, 4], 1);
+  if (line && line.length > 1) geoLine(ctx, line, '#8e8e93', [6, 4], 1);
   if (pts.length > 1 || (line && line.length > 1)) {
-    if (!(line && line.length > 1)) geoLine(ctx, pts.map(p => [p[1], p[2]]), '#c86bd8', [6, 4], 1);
+    if (!(line && line.length > 1)) geoLine(ctx, pts.map(p => [p[1], p[2]]), '#8e8e93', [6, 4], 1);
     ctx.font = FONT(9);
     for (const [n, la, lo] of pts) { const [x, y, z] = proj(la, lo); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
-      ctx.fillStyle = '#c86bd8'; ctx.fillRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); if (view.half < 120) ctx.fillText(n, x + 4*d, y - 3*d); }
+      ctx.fillStyle = '#8e8e93'; ctx.fillRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); if (view.half < 120) ctx.fillText(n, x + 4*d, y - 3*d); }
   }
 }
 
