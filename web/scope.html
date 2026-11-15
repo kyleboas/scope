@@ -1309,8 +1309,14 @@ function uiBoxes(s) {
 // over the map is left off without turning off the rest. A soft one (force 2: a filtered-out aircraft's dim tag) never turns them
 // off: it is left off wherever it would cover another, and the others are drawn over it
 const TAG_ALL_NM = 60;
+const TAG_EDGE_L = 160, TAG_EDGE_B = 40;   // css px: how far a dot past the left / bottom edge can be with its tag (to its upper right) still in view
+const tagInView = (x, y, z) => { const d = dpr(); return z >= 0 && x >= -TAG_EDGE_L * d && y >= -8 * d && x <= P0.w && y <= P0.h + TAG_EDGE_B * d; };
 let tagShow = true, tagMiss = 0;
 function tagFits(x0, y0, x1, y1, force) {   // say whether to draw this tag (and reserve its box)
+  // only the part on the map counts: one wholly off it isn't drawn and covers nothing (an aircraft just past the edge
+  // turned every tag off, or knocked off the one next to it, with a tag no one could see)
+  if (x1 <= 0 || y1 <= 0 || x0 >= cv.width || y0 >= cv.height) return false;
+  x0 = Math.max(x0, 0); y0 = Math.max(y0, 0); x1 = Math.min(x1, cv.width); y1 = Math.min(y1, cv.height);
   const c0 = Math.floor(x0 / TAG_CELL), c1 = Math.floor(x1 / TAG_CELL), r0 = Math.floor(y0 / TAG_CELL), r1 = Math.floor(y1 / TAG_CELL);
   let hit = false;
   if (!force || force === 2) for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++)
@@ -1340,7 +1346,7 @@ function drawAircraft() {
   for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel && !(lsHeard.size && lsOn(a.cs))) continue;   // on the ground: only with GND on, selected or on the radio
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
-    if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
+    if (z < 0 || px < -TAG_EDGE_L * d || py < -80 || px > cv.width + 80 || py > cv.height + Math.max(80, TAG_EDGE_B * d)) continue;   // its tag may still be on the map
     const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer, talk = lsHeard.size > 0 && lsOn(a.cs);   // talk: on the radio (listen)
     const out = !matches(a) && !isSel && !isHov && !emer && !talk;   // filtered out: a grey dot and a short tag (altitude and wake category),
     const om = out ? othOf(!fltOk(a), !altOk(a.alt, a.ground)) : '';   // how: OTHERS (ARR / DEP) and the altitude filter's own setting
@@ -1478,7 +1484,7 @@ function drawWorld() {
     for (const w of worldPts.slice().sort((p, q) => (p.k === 1 || p.k === 4) - (q.k === 1 || q.k === 4) || tagFirst(wk)(p, q))) {   // the dim ones last
       const wo = w.k === 1 || w.k === 4;         // filtered out: a full tag only with TAGS, in dim green, never forced, not zoomed far out
       if (wo ? w.m !== 'tag' || view.half > 300 : w.k !== 0 && w.k !== 3) continue;
-      const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      const [x, y, z] = proj(w.p[0], w.p[1]); if (!tagInView(x, y, z)) continue;
       const [hex, , , , gs, alt, , cs] = w.r, c = wo ? (w.est ? '#2c5a2c' : COL.dbDim) : w.est ? COL.dbDim : COL.db, lx = x + 10*d, ly = y - 12*d;
       if (!tagFits(x - 3*d, ly - 2*d - fs * d, lx + 3*d + Math.max((cs || hex).length, 7) * .62 * fs * d, Math.max(y + 3*d, ly - 2*d + wl + 3*d), wo ? 2 : fOn)) continue;
       if (++n > 400 && (!fOn || wo)) { if (!wo) tagMiss++; break; }
@@ -1491,7 +1497,7 @@ function drawWorld() {
     n = 0;                                       // outside the altitude (or ARR / DEP) filter: a short tag, the altitude, when set to SHORT
     for (const w of worldPts.slice().sort(tagFirst(wk))) {
       if ((w.k !== 1 && w.k !== 4) || w.m !== 'short') continue;
-      const [x, y, z] = proj(w.p[0], w.p[1]); if (z < 0 || x < 0 || y < 0 || x > P0.w || y > P0.h) continue;
+      const [x, y, z] = proj(w.p[0], w.p[1]); if (!tagInView(x, y, z)) continue;
       if (!tagFits(x - 3*d, y - 6*d, x + (14 + 3 * .62 * TAG(10)) * d, y + 6*d, 2)) continue;
       if (++n > 400) break;
       tagNow.add(wk(w));
