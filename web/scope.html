@@ -1011,7 +1011,27 @@ for (const [k, l] of Object.entries({
 // until you zoom in or hover them); tags placed last frame go first, so the same ones keep their tags as traffic moves
 let tagGrid = new Map(), tagWas = new Set(), tagNow = new Set();
 const TAG_CELL = 48;
-function tagReset(s) { tagGrid = new Map(); tagWas = s.tagNow || new Set(); tagNow = s.tagNow = new Set(); }   // per scope (split views)
+function tagReset(s) { tagGrid = new Map(); tagWas = s.tagNow || new Set(); tagNow = s.tagNow = new Set(); for (const b of uiBoxes(s)) tagFits(...b, true); }   // per scope (split views)
+// the controls floating over the map (header, view buttons, ARR / DEP, the timelapse bar) count as taken, so no tag is drawn under
+// them; measured at most every half second
+function uiBoxes(s) {
+  const now = performance.now(); if (s.uiT && now - s.uiT < 500) return s.ui;
+  s.uiT = now; s.ui = [];
+  const r = s.cv.getBoundingClientRect(), d = dpr(), pad = 4;
+  const els = [...document.querySelectorAll('header > *, #flt > button, #tlbar, #gnote'), ...s.el.querySelectorAll('.views > button')];
+  for (const e of els) {
+    if (!e.offsetWidth || !e.offsetHeight) continue;
+    let b = e.getBoundingClientRect();
+    if (e.id === 'status' || e.id === 'hmetar') {   // stretched to fill the row: only its text
+      if (!e.textContent.trim()) continue;
+      const rg = document.createRange(); rg.selectNodeContents(e); const t = rg.getBoundingClientRect();
+      b = { left: t.left, top: b.top, right: Math.min(b.right, t.right), bottom: b.bottom };
+    }
+    if (b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom) continue;
+    s.ui.push([(b.left - r.left - pad) * d, (b.top - r.top - pad) * d, (b.right - r.left + pad) * d, (b.bottom - r.top + pad) * d]);
+  }
+  return s.ui;
+}
 function tagFits(x0, y0, x1, y1, force) {   // the box is free (or force): reserve it and say yes
   const c0 = Math.floor(x0 / TAG_CELL), c1 = Math.floor(x1 / TAG_CELL), r0 = Math.floor(y0 / TAG_CELL), r1 = Math.floor(y1 / TAG_CELL);
   if (!force) for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++)
