@@ -24,6 +24,7 @@ feeds are in that site's NOTICE):
 - **Map backgrounds** (the MAP button: street map and satellite) are Esri's tile services, loaded by the browser at run time:
   the Dark Gray Canvas (Esri, HERE, Garmin, © OpenStreetMap contributors) and World Imagery (Esri, Maxar, Earthstar Geographics).
   They are credited on the map while shown.
-- **Weather radar** (Layers: Radar) is RainViewer's (<https://www.rainviewer.com/api.html>), loaded by the browser at run
-  time and credited on the map while shown.
+- **Weather radar** (Layers: Radar) is RainViewer's (<https://www.rainviewer.com/api.html>) zoomed out, and close in near a
+  NEXRAD the nearest site's own scan (NOAA/NWS, US government data) through the Iowa Environmental Mesonet
+  (<https://mesonet.agron.iastate.edu>); both loaded by the browser at run time and credited on the map while shown.
 - **Icons** are from Tabler Icons (MIT).

@@ -559,8 +559,10 @@ function tileImg(B, li, z, x, y, load) {
   const k = `${B.id}${li}/${z}/${x}/${y}`; let im = tileCache.get(k);
   if (im) { tileCache.delete(k); tileCache.set(k, im); return im; }   // most recently used last
   if (!load || tilesWaiting > 48) return null;
-  im = new Image(); tilesWaiting++;
-  im.onload = () => { tilesWaiting--; im.ok = true; mapKey = ''; };
+  im = new Image(); tilesWaiting++; if (B.filter) im.crossOrigin = 'anonymous';
+  im.onload = () => { tilesWaiting--; mapKey = '';
+    if (B.filter) { try { const cv = B.filter(im); cv.ok = true; if (tileCache.get(k) === im) tileCache.set(k, cv); return; } catch (e) {} }   // the source's own pixels, redone
+    im.ok = true; };
   im.onerror = () => { tilesWaiting--; im.bad = true; setTimeout(() => tileCache.get(k) === im && tileCache.delete(k), 30000); };
   im.src = B.urls[li](z, x, y); tileCache.set(k, im);
   if (tileCache.size > 600) for (const [kk, v] of tileCache) { if (tileCache.size <= 500) break; if (v.ok || v.bad) tileCache.delete(kk); }
@@ -611,7 +613,7 @@ function drawTiles(c, B) {
     if (!(im && im.ok) && B.prev) { zz = z; ax = x; ay = ty_; im = tileImg(B.prev, li, z, x, ty_, false);
       while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(B.prev, li, zz, ax, ay, false); } }
     if (!(im && im.ok)) continue;
-    const f = 2 ** (z - zz), S0 = im.naturalWidth / f, u0 = (x - ax * f) * S0, v0 = (ty_ - ay * f) * S0;
+    const f = 2 ** (z - zz), S0 = (im.naturalWidth || im.width) / f, u0 = (x - ax * f) * S0, v0 = (ty_ - ay * f) * S0;
     const grid = [];
     for (let j = 0; j <= cells; j++) { const row = [], la = t2lat(ty_ + j / cells, z);
       for (let i = 0; i <= cells; i++) row.push(proj(la, t2lon(tx + i / cells, z))); grid.push(row); }
@@ -628,21 +630,66 @@ function drawTiles(c, B) {
   if (B.dim) { c.fillStyle = `rgba(0,0,0,${B.dim})`; c.fillRect(0, 0, w, h); }
 }
 function basemapCredit(c) {
-  const B = BASEMAPS[L.basemap], t = [B && B.credit, radarShown() && RADAR.credit].filter(Boolean).join(' · '); if (!t) return; const d = dpr();
+  const B = BASEMAPS[L.basemap], t = [B && B.credit, radarShown() && radarSrc().credit].filter(Boolean).join(' · '); if (!t) return; const d = dpr();
   c.font = `${10 * d}px ui-monospace, Menlo, monospace`; c.textAlign = 'right'; c.fillStyle = '#9a9a9a'; c.shadowColor = '#000'; c.shadowBlur = 3 * d;
   c.fillText(t, P0.w - 8 * d, P0.h - (PHONE.matches ? 52 : 40) * d); c.textAlign = 'left'; c.shadowBlur = 0;
 }
 // ------------------------------------------------------------------ weather radar (Layers: Radar; off by default)
-// RainViewer's composite of the world's radars (no key needed), its latest frame (every 10 min; the list of frames asked for
-// every 5 while a scope has the layer on), laid over the background. Its free tiles go to zoom 7: closer in they're scaled up.
-// Not shown when playing back a timelapse (it's now, not then).
-let RADAR = null, radarT = 0;
+// Zoomed out, or far from a NEXRAD: RainViewer's composite of the world's radars (no key needed), its latest frame (every
+// 10 min), its free tiles only to zoom 7 (closer in they're scaled up). Zoomed in to 150 nm or closer within 200 nm of a NEXRAD
+// (the US's, and the few in Korea and Japan): the nearest one's own latest scan (super-res base reflectivity, every 4-6 min,
+// sharp close in), through Iowa State's IEM. Both asked for every 5 min while a scope has the layer on; a source's last frame
+// stays up while its new one loads. Not shown when playing back a timelapse (it's now, not then).
+let RADAR = null, radarT = 0, NEXRAD = null;   // NEXRAD: [{id, icao, lat, lon, src}] once their places are in
+const NX_HALF = 150, NX_NM = 200, IEM = 'https://mesonet.agron.iastate.edu';
+// IEM's N0Q colour ramp (0.5 dBZ a step from -32): a single radar's scan is full of weak clear-air and ground returns, so
+// pixels under NX_DBZ (their nearest colour on the ramp) are dropped
+const NX_RAMP = '00000084708e84708e85728c86748a86748a877688887886887886897a848a7c838a7c838b7e818c807f8c807f8d827d8e847b8e847b8f867a908878908878918a76928c749590529793569a965a9c995f9f9c63a29f67a4a26ca7a570a9a875acab79afae7db1b182b6b78bb9ba8fbcbd93bec098c1c39cc3c7a1c7caa5cacda9ccd0aed2d4b3cfd2b3c9ccb3c5c9b3c2c7b3bfc3b3bcc0b3b8bdb3b5bab3b2b8b3afb5b3acb2b3a9afb3a3aab39fa7b39ca4b399a1b3969fb3939cb39099b3939ab48f97b38b94b28791b17f8baf7b88ae7785ad7382ab6f7faa6b7ca96678a86275a75e72a65a6fa5566ca34e66a14a63a046609f425d9e405a9d4260a14467a5476ea94975ad4c7cb14e83b5508aba5598c2589ec75aa5cb5daccf5fb3d461bad864c1dc66c9e069d0e46ed6e867d6d758d6b251d6a14ad68f42d67d3bd66c34d65a11d51711d11610cd1610c81510c3150fbb140fb6130eb2130eae130eaa130da5120da1120d9d110c98110c94100c90100b870f0b830e0a7f0e0a7b0d0a760d09720c096e0c096a0b08650b08610a095d09317208457c085a87076e9107839c0697a706acb105c0bc05d6c704ead204ffe200ffd800ffd300ffce00ffc900ffc300ffbf00ffba00ffb500ffb000ffab00ffa600ffa100ff9800ff9300ff8e00ff8900ff8400ff7f00ff0000f80000f10000ea0000e30000d50000cd0000c50000be0000b70000b00000a90000a200009a00009300008c00007e0000770000700000fffffffff5ffffeaffffdfffffd4ffffc9ffffbdffffb2ffff9cffff91ffff74fffc6afdf95ffaf655f7f34af4f03ff1ed35efea2aece71fe9e10be3b100ffab00fca300f79a00f49200ef8700ea8200e87800e27100dd6800db05ecf005ecf005ecf005dde005dde005dde005cdd005cdd004bcbf04bcbf04bcbf04adaf04adaf049d9f049d9f049d9f038d8f038d8f038d8f037d7f037d7f036e6f036e6f036e6f025e5f025e5f024e4f024e4f024e4f023e3f023e3f023e3f012f2f012f2f011f1f011f1f011f1f3966b43966b43966b43966b4ffffff', NX_DBZ = 15, nxDbz = new Map();
+let nxRamp = null;
+function nxFilter(im) {
+  if (!nxRamp) { nxRamp = []; for (let i = 0; i < NX_RAMP.length; i += 6) nxRamp.push([0, 2, 4].map(o => parseInt(NX_RAMP.substr(i + o, 2), 16))); }
+  const cv = document.createElement('canvas'); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+  const c = cv.getContext('2d', { willReadFrequently:true }); c.drawImage(im, 0, 0);
+  const id = c.getImageData(0, 0, cv.width, cv.height), p = id.data;
+  for (let i = 0; i < p.length; i += 4) { if (!p[i + 3]) continue;
+    const key = p[i] << 16 | p[i + 1] << 8 | p[i + 2]; let v = nxDbz.get(key);
+    if (v === undefined) { let bd = 1e9; for (let j = 1; j < nxRamp.length; j++) { const q = nxRamp[j], e = (q[0] - p[i]) ** 2 + (q[1] - p[i + 1]) ** 2 + (q[2] - p[i + 2]) ** 2; if (e < bd) { bd = e; v = j / 2 - 32; } }
+      nxDbz.set(key, v); }
+    if (v < NX_DBZ) p[i + 3] = 0; }
+  c.putImageData(id, 0, 0); return cv;
+}
+const nxIcao = (id, st, co) => (co === 'KR' || co === 'JP' ? 'R' : st === 'AK' || st === 'HI' || st === 'GU' ? 'P' : st === 'PR' ? 'T' : 'K') + id;
+async function loadNexrad() {
+  if (!NEXRAD) {
+    const g = await (await fetch(IEM + '/geojson/network/NEXRAD.geojson')).json();
+    NEXRAD = g.features.filter(f => f.properties.online !== false).map(f => ({ id:f.id, icao:nxIcao(f.id, f.properties.state, f.properties.country),
+      lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], src:null }));
+  }
+  const j = await (await fetch(IEM + '/json/ridge_current.py?product=N0B')).json(), by = new Map(j.meta.map(m => [m.site, m.valid]));
+  for (const x of NEXRAD) {
+    const v = by.get(x.id); if (!v || (x.src && x.src.v === v)) continue;
+    // the scan's own tiles (by its time): IEM's "latest" ones are cached apart, so neighbours can be from different scans
+    const hm = v.slice(11, 16).replace(':', ''), ts = v.slice(0, 16).replace(/\D/g, '');
+    x.src = { id:'nx' + x.id + v, v, urls:[(z, tx, ty) => `${IEM}/cache/tile.py/1.0.0/ridge::${x.id}-N0B-${ts}/${z}/${tx}/${ty}.png`], max:8, alpha:.75, filter:nxFilter,
+              prev:x.src && { ...x.src, prev:null }, credit:`radar ${x.icao} ${hm}Z (NWS, IEM)` };
+  }
+  mapKey = '';
+}
+// the nearest NEXRAD's frame for the view, when it's close enough in; else null
+function nexradFor() {
+  if (!NEXRAD || view.half > NX_HALF) return null;
+  let best = null, bd = NX_NM;
+  for (const x of NEXRAD) { if (!x.src) continue; const g = gc(view.lat, view.lon, x.lat, x.lon); if (g < bd) { bd = g; best = x; } }
+  return best && best.src;
+}
+const radarSrc = () => nexradFor() || RADAR;
 const RADAR_MS = 5 * 60000;
 const radarOn = () => !RP && eachScope(s => s.L.radar).some(Boolean);
-const radarShown = () => RADAR && L.radar && !RP;
+const radarShown = () => L.radar && !RP && !!radarSrc();
 async function loadRadar() {
   if (!radarOn() || Date.now() - radarT < RADAR_MS) return;
   radarT = Date.now();
+  loadNexrad().catch(() => {});
   try {
     const j = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json(), f = j.radar && j.radar.past && j.radar.past.slice(-1)[0];
     if (!f || !j.host) throw 0;
@@ -655,7 +702,7 @@ async function loadRadar() {
 }
 function drawRadar(c) {
   if (!radarShown()) return;
-  c.save(); c.globalAlpha = RADAR.alpha; drawTiles(c, RADAR); c.restore();
+  const B = radarSrc(); c.save(); c.globalAlpha = B.alpha; drawTiles(c, B); c.restore();
 }
 function drawMap() {
   const c = mctx, d = dpr();
