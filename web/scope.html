@@ -64,6 +64,13 @@
   .tile { position:relative; min-width:0; min-height:0; background:#000; overflow:hidden; }
   #tiles:not(.one) ~ .flt { bottom:auto; top:var(--top); }
   .views [data-layout] { display:flex; align-items:center; } .views [data-layout] svg { width:14px; height:14px; }
+  /* a split scope's own airport: its button in the view bar, and a search box over the scope */
+  #tiles.one .views [data-apt] { display:none; }
+  .views [data-apt] { color:#bbb; border:1px solid #444; margin:0 4px; padding:3px 7px; } .views [data-apt]:hover { border-color:#777; } .views [data-apt].on { color:#4fb3ff; border-color:#4fb3ff; }
+  .tapt { position:absolute; left:8px; bottom:38px; z-index:4; width:min(300px, calc(100% - 16px)); background:rgba(28,28,30,.98); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 24px #0008; }
+  .tapt[hidden] { display:none; } .tapt input { width:100%; box-sizing:border-box; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); font:12px var(--mono); padding:8px 10px; outline:none; }
+  .tapt .r { max-height:min(40vh, 240px); overflow:auto; } .tapt .r div { padding:6px 10px; cursor:pointer; font:12px var(--mono); color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tapt .r div b { color:var(--fg); margin-right:6px; } .tapt .r div:hover, .tapt .r div.on { background:var(--soft); } .tapt .r .dim { color:var(--dim); cursor:default; }
   #side { grid-column:2; grid-row:1 / 3; border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
   #card { flex-shrink:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:9px 10px; border-bottom:1px solid var(--line); font:12px/1.55 var(--mono); color:var(--fg2); background:var(--card); display:none; }
   #card b { color:var(--fg); font-size:13px; }
@@ -208,6 +215,15 @@
   #fhprof .tip { position:absolute; top:2px; pointer-events:none; background:#1c1c1e; border:1px solid var(--line); border-radius:5px; padding:1px 7px;
                  font:11px/1.4 var(--mono); color:var(--fg); white-space:nowrap; } #fhprof .tip i { font-style:normal; color:var(--dim); }
   body.tl #gnote { top:calc(var(--top) + 36px); }
+  /* listen (header button): the input picker, and what was heard last */
+  #lsBtn.on { color:var(--fg); } #lsBtn.hear { color:#fff; text-shadow:0 0 6px #fff8; }
+  #lsp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(340px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
+         border:1px solid var(--line); border-radius:10px; padding:8px 0; font:12px/1.45 var(--mono); color:var(--fg2); box-shadow:0 6px 24px #0008; }
+  #lsp[hidden] { display:none; }
+  #lsp .hd { padding:2px 12px 6px; color:var(--dim); white-space:normal; } #lsp .row { display:flex; gap:6px; align-items:center; padding:3px 12px; }
+  #lsp .row b { flex:1; color:var(--fg); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #lsp select { flex:1; min-width:0; background:var(--alt); color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:12px var(--mono); }
+  #lsp .st, #lsp .tip { padding:4px 12px 0; color:var(--dim); white-space:normal; } #lsp .last { padding:6px 12px 0; white-space:normal; } #lsp .last b { color:#fff; }
   /* ATC (header button): the airports with ATC open and their inbound flights */
   #atcBtn.on { color:#5ac8fa; }
   #atcp { position:absolute; right:8px; top:var(--top); z-index:4; width:min(360px, calc(100% - 16px)); max-height:calc(100% - var(--top) - 8px); overflow:auto; background:var(--bg);
@@ -275,6 +291,7 @@
   <span id="status"></span>
   <button id="lwBtn" hidden title="Close the LiveATC tab (a feed's player opened from it has its own window: close that there)"></button>
   <button id="radioBtn" hidden title="Stop the live audio"></button>
+  <button id="lsBtn" hidden title="Listen to LiveATC (or any radio) and turn the tag of the aircraft on the frequency white">LISTEN</button>
   <button id="atcBtn" hidden title="Airports with ATC open and their inbound flights">ATC</button>
   <button id="tlBtn" hidden title="Timelapses: record this area on the server and play it back sped up"></button>
   <button id="playBtn"></button>
@@ -286,6 +303,7 @@
   <div id="gnote"></div>
   <div id="tlp" hidden></div>
   <div id="atcp" hidden></div>
+  <div id="lsp" hidden></div>
   <div id="tlbar" hidden></div>
   <div id="pgbar" hidden></div>
   <div id="idle">Paused after a while without input.<br>Tap anywhere to resume.</div>
@@ -341,21 +359,22 @@ const LAYERS = [['#', 'Procedures'], ['star', 'STARs'], ['approach', 'Approaches
                 ['#', 'Traffic'], ['tags', 'Data tags'], ['aprontags', 'On aircraft on aprons', 'tags'], ['plan', "Selected flight's route"], ['trails', 'History trails'],
                 ['ptl', 'One-minute track lines'], ['fltrails', 'On filtered-out aircraft', 'trails ptl'], ['ground', 'Ground traffic'], ['boats', 'Boats (AIS)'],
                 ['world', 'Worldwide when zoomed out'], ['est', 'Estimated over the oceans'],
-                ['#', 'Weather'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
+                ['#', 'Weather'], ['radar', 'Radar'], ['sigmet', 'SIGMETs'], ['airmet', 'G-AIRMETs (US)'], ['cwa', 'Center weather advisories (US)'],
                 ['pirep', 'PIREPs'], ['airep', 'With airline position reports (AIREPs)', 'pirep']];
 const WX_KEYS = ['sigmet', 'airmet', 'cwa', 'pirep', 'airep'];
 const L_DEFAULT = { star:true, approach:true, sid:true, allproc:false, nearby:false, fixes:false, fixnames:false, rings:true, airports:false, aptnames:false, small:true, runways:true,
             finals:true, diagram:false, taxi:true, taxinames:false, gatenames:false, states:true, borders:true, coast:true, plan:true, trails:true, ptl:true, fltrails:true, tags:true, aprontags:false, ground:true, boats:false, world:true, est:true, basemap:'',
-            sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
+            radar:false, sigmet:false, airmet:false, cwa:false, pirep:false, airep:false };
 const MAX_LIVE_NM = 250, HALF_MIN = 0.05, HALF_GLOBE = R_NM * 1.12;
 
 // scope tiles (one, big + small, even split, as on atcscope): each has its own canvas, view and layers;
 // use(s) points cv / ctx / map / view / drawn / L at one of them. Outside drawing and input handlers they
 // point at the main scope, which also drives the feed, the URL and the list.
-let cv, ctx, map, mctx, view, L, mapKey = '', drawn = [];
+let cv, ctx, map, mctx, view, L, apt = null, mapKey = '', drawn = [];   // apt: the scope's own airport (a split scope's), else null
 const scopes = [];
 let active = null;                     // the scope the pointer was last in (keyboard zoom)
-function use(s) { cv = s.cv; ctx = s.ctx; map = s.map; mctx = s.mctx; view = s.view; L = s.L; drawn = s.drawn; }
+function use(s) { cv = s.cv; ctx = s.ctx; map = s.map; mctx = s.mctx; view = s.view; L = s.L; apt = s.apt || null; drawn = s.drawn; }
+const mineApt = id => !!((home && home[0] === id) || (apt && apt[0] === id));   // the picked airport, or this scope's own
 const ICO = { layers:'<path d="M12 4L4 8l8 4l8-4zm-8 8l8 4l8-4M4 16l8 4l8-4"/>', one:'<path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
               big:'<path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm11-2v16"/>', even:'<path d="M3 4a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zm9-1v18"/>' };
 const ico = n => `<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">${ICO[n]}</g></svg>`;
@@ -368,8 +387,9 @@ function setLayout(m) {
 function makeScope(v) {
   const el = document.createElement('div'), n = scopes.length; el.className = 'tile';
   el.innerHTML = `<canvas></canvas><div class="layers" hidden></div><div class="views">${n ? '' : '<button data-layout></button>'}` +
-    `<button data-layers title="Layers" aria-label="Layers">${ico('layers')}</button>` +
-    '<button data-bm title="Map background: the scope (black), a street map or satellite imagery (click to change)"></button><button data-v="0.8">GND</button><button data-v="3">FLD</button><button data-v="40">APP</button><button data-v="250">CTR</button><button data-v="globe">GLOBE</button></div>';
+    `<button data-layers title="Layers" aria-label="Layers">${ico('layers')}</button>` + (n ? '<button data-apt></button>' : '') +
+    '<button data-bm title="Map background: the scope (black), a street map or satellite imagery (click to change)"></button><button data-v="0.8">GND</button><button data-v="3">FLD</button><button data-v="40">APP</button><button data-v="250">CTR</button><button data-v="globe">GLOBE</button></div>' +
+    (n ? '<div class="tapt" hidden><input placeholder="Airport for this scope..." autocomplete="off" spellcheck="false"><div class="r"></div></div>' : '');
   $('tiles').appendChild(el);
   const c = el.querySelector('canvas'), m = document.createElement('canvas');
   const s = { el, n, cv:c, ctx:c.getContext('2d'), map:m, mctx:m.getContext('2d'), view:{ ...v }, L:{ ...L_DEFAULT }, drawn:[], key:'' };
@@ -385,7 +405,7 @@ function makeScope(v) {
   const dimSubs = () => lp.querySelectorAll('[data-up]').forEach(r => r.classList.toggle('off', !r.dataset.up.split(' ').some(k => s.L[k])));
   dimSubs();
   lp.addEventListener('click', e => { const b = e.target.closest('[data-tsz]'); if (b) setTagPx(+b.dataset.tsz ? tagSize() + +b.dataset.tsz : null); });
-  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (!n && e.target.dataset.l === 'allproc') renderCard();
+  lp.addEventListener('change', e => { s.L[e.target.dataset.l] = e.target.checked; s.key = ''; dimSubs(); worldPtsT = 0; loadWorld(); loadGround(); loadDiagrams(); if (e.target.dataset.l === 'boats') { boatsT = 0; loadBoats(); } if (WX_KEYS.includes(e.target.dataset.l)) { loadWx(); wxClose(); } if (e.target.dataset.l === 'radar') loadRadar(); if (!n && e.target.dataset.l === 'allproc') renderCard();
     s.save(); });
   el.querySelector('[data-layers]').onclick = () => { lp.hidden = !lp.hidden; };
   document.addEventListener('pointerdown', e => { if (!lp.hidden && !lp.contains(e.target) && !e.target.closest('[data-layers]')) lp.hidden = true; });
@@ -396,10 +416,52 @@ function makeScope(v) {
     try { localStorage.setItem(lkey, JSON.stringify(s.L)); } catch (err) {} };
   el.querySelectorAll('.views [data-v]').forEach(b => b.onclick = () => {
     use(s); const v = b.dataset.v; view.half = v === 'globe' ? R_NM * 1.05 : +v;
-    if (v !== 'globe' && home && gc(view.lat, view.lon, home[5], home[6]) < 600) { view.lat = home[5]; view.lon = home[6]; }
+    const h = s.apt || home; if (v !== 'globe' && h && gc(view.lat, view.lon, h[5], h[6]) < 600) { view.lat = h[5]; view.lon = h[6]; }
     viewChanged(true); use(scopes[0]);
   });
+  if (n) aptPicker(s);
   scopes.push(s); return s;
+}
+// a split scope's airport: it follows the airport picked (the header's search, a tap on the map) until it's given one of its
+// own here, then it stays there (its traffic fetched too if that's past the main scope's feed); "follow" goes back
+function aptPicker(s) {
+  const b = s.el.querySelector('[data-apt]'), box = s.el.querySelector('.tapt'), q = box.querySelector('input'), res = box.querySelector('.r'), akey = KEY + '-apt-' + s.n;
+  let list = [], idx = 0, gen = 0;
+  s.aptShow = () => { const a = s.apt || home; b.textContent = (a ? a[0] : 'APT') + ' ▾'; b.classList.toggle('on', !!s.apt);
+    b.title = s.apt ? `This scope stays on ${s.apt[0]} (click to change it, or to follow the airport picked)` : `This scope follows the airport picked${home ? ' (' + home[0] + ')' : ''}: click to give it an airport of its own`; };
+  s.setApt = (a, fly = true) => {
+    s.apt = a; s.areaKey = ''; s.key = '';
+    try { a ? localStorage.setItem(akey, a[0]) : localStorage.removeItem(akey); } catch (e) {}
+    const c = a || home; if (fly && c) Object.assign(s.view, { lat:c[5], lon:c[6], half:c[8] === 'L' ? 3 : 2 });
+    s.aptShow(); if (a && !procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
+    viewChanged(true);
+  };
+  const show = () => {
+    res.innerHTML = list.length ? list.map((a, i) => `<div data-i="${i}" class="${i === idx ? 'on' : ''}">` + (a === 'follow' ? `<b>Follow</b>the airport picked${home ? ' (' + esc(home[0]) + ')' : ''}`
+      : `<b>${esc(a[0])}</b>${a[1] ? esc(a[1]) + ' · ' : ''}${esc(a[2])}${a[3] ? ', ' + esc(a[3]) : ''} ${esc(a[4])}`) + '</div>').join('') : q.value.trim() ? '<div class="dim">Nothing found</div>' : '';
+    res.querySelectorAll('[data-i]').forEach(el => el.onmousedown = e => { e.preventDefault(); choose(list[+el.dataset.i]); });
+  };
+  const choose = a => { if (!a) return; close(); s.setApt(a === 'follow' ? null : a); };
+  const close = () => { box.hidden = true; q.value = ''; q.blur(); };
+  const search = async () => {
+    const v = q.value.trim(), my = ++gen; idx = 0;
+    if (!v) { list = s.apt ? ['follow'] : []; show(); return; }
+    let aps = []; try { aps = await (await fetch('/api/live/search?q=' + encodeURIComponent(v))).json(); } catch (e) {}
+    if (my !== gen) return;
+    if (SITE.airports) aps = aps.filter(a => SITE.airports.includes(a[0]));
+    const nv = norm(v), exact = aps.filter(a => norm(a[0]) === nv || norm(a[1]) === nv);
+    list = [...exact, ...aps.filter(a => !exact.includes(a)), ...(s.apt ? ['follow'] : [])]; show();
+  };
+  s.aptOpen = () => { box.hidden = false; q.focus(); search(); };
+  b.onclick = () => { if (box.hidden) s.aptOpen(); else close(); };
+  q.oninput = search;
+  q.onkeydown = e => {
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.length) { idx = (idx + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length; show(); } return; }
+    if (e.key === 'Enter') { e.preventDefault(); choose(list[idx]); }
+  };
+  document.addEventListener('pointerdown', e => { if (!box.hidden && !box.contains(e.target) && !e.target.closest('[data-apt]')) close(); });
+  s.aptShow();
 }
 // every scope's canvas gets the handler, run with that scope in use
 function eachScope(fn) { const out = []; for (const s of scopes) if (s.el.offsetWidth) { use(s); out.push(fn(s)); } use(scopes[0]); return out; }
@@ -489,18 +551,18 @@ const BM_ORDER = ['', 'map', 'sat'];
 // Esri's (no key needed): the dark grey canvas with its labels on top, and world imagery darkened so the scope stays readable
 const esri = s => (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/${z}/${y}/${x}`;
 const BASEMAPS = {
-  map: { urls:[esri('Canvas/World_Dark_Gray_Base'), esri('Canvas/World_Dark_Gray_Reference')], max:16, credit:'Esri, HERE, Garmin, © OpenStreetMap contributors' },
-  sat: { urls:[esri('World_Imagery')], max:19, dim:.35, credit:'Imagery © Esri, Maxar, Earthstar Geographics' } };
+  map: { id:'map', urls:[esri('Canvas/World_Dark_Gray_Base'), esri('Canvas/World_Dark_Gray_Reference')], max:16, credit:'Esri, HERE, Garmin, © OpenStreetMap contributors' },
+  sat: { id:'sat', urls:[esri('World_Imagery')], max:19, dim:.35, credit:'Imagery © Esri, Maxar, Earthstar Geographics' } };
 const tileCache = new Map();           // 'style/z/x/y' -> Image (complete once loaded; .bad when it failed)
 let tilesWaiting = 0;
-function tileImg(st, li, z, x, y, load) {
-  const k = `${st}${li}/${z}/${x}/${y}`; let im = tileCache.get(k);
+function tileImg(B, li, z, x, y, load) {
+  const k = `${B.id}${li}/${z}/${x}/${y}`; let im = tileCache.get(k);
   if (im) { tileCache.delete(k); tileCache.set(k, im); return im; }   // most recently used last
   if (!load || tilesWaiting > 48) return null;
   im = new Image(); tilesWaiting++;
   im.onload = () => { tilesWaiting--; im.ok = true; mapKey = ''; };
   im.onerror = () => { tilesWaiting--; im.bad = true; setTimeout(() => tileCache.get(k) === im && tileCache.delete(k), 30000); };
-  im.src = BASEMAPS[st].urls[li](z, x, y); tileCache.set(k, im);
+  im.src = B.urls[li](z, x, y); tileCache.set(k, im);
   if (tileCache.size > 600) for (const [kk, v] of tileCache) { if (tileCache.size <= 500) break; if (v.ok || v.bad) tileCache.delete(kk); }
   return im;
 }
@@ -517,8 +579,8 @@ function drawTri(c, im, a, b, e, ua, ub, ue) {
   c.setTransform(m11, m12, m21, m22, a[0] - m11 * ua[0] - m21 * ua[1], a[1] - m12 * ua[0] - m22 * ua[1]);
   c.drawImage(im, 0, 0); c.restore();
 }
-function drawBasemap(c) {
-  const st = L.basemap, B = BASEMAPS[st]; if (!B) return;
+function drawBasemap(c) { if (BASEMAPS[L.basemap]) drawTiles(c, BASEMAPS[L.basemap]); }
+function drawTiles(c, B) {
   const d = dpr(), w = P0.w, h = P0.h;
   // the zoom whose tile pixels are about screen pixels, at the centre's latitude
   const mpp = 2 * view.half * 1852 / Math.min(w, h) * d, tpx = 256;   // per CSS pixel, so labels stay legible on retina
@@ -542,9 +604,12 @@ function drawBasemap(c) {
   list.sort((p, q) => Math.hypot(p[0] + .5 - cx, p[1] + .5 - cy) - Math.hypot(q[0] + .5 - cx, q[1] + .5 - cy));
   for (let li = 0; li < B.urls.length; li++) for (const [tx, ty_] of list) {
     const x = ((tx % n) + n) % n;
-    // the tile itself, else its nearest loaded ancestor and where this tile sits in it
-    let im = tileImg(st, li, z, x, ty_, true), zz = z, ax = x, ay = ty_;
-    while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(st, li, zz, ax, ay, false); }
+    // the tile itself, else its nearest loaded ancestor and where this tile sits in it (then the same from the source it
+    // replaced, B.prev: the radar's last frame while the new one loads)
+    let im = tileImg(B, li, z, x, ty_, true), zz = z, ax = x, ay = ty_;
+    while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(B, li, zz, ax, ay, false); }
+    if (!(im && im.ok) && B.prev) { zz = z; ax = x; ay = ty_; im = tileImg(B.prev, li, z, x, ty_, false);
+      while (!(im && im.ok) && zz > Math.max(0, z - 6)) { zz--; ax >>= 1; ay >>= 1; im = tileImg(B.prev, li, zz, ax, ay, false); } }
     if (!(im && im.ok)) continue;
     const f = 2 ** (z - zz), S0 = im.naturalWidth / f, u0 = (x - ax * f) * S0, v0 = (ty_ - ay * f) * S0;
     const grid = [];
@@ -563,14 +628,40 @@ function drawBasemap(c) {
   if (B.dim) { c.fillStyle = `rgba(0,0,0,${B.dim})`; c.fillRect(0, 0, w, h); }
 }
 function basemapCredit(c) {
-  const B = BASEMAPS[L.basemap]; if (!B) return; const d = dpr();
+  const B = BASEMAPS[L.basemap], t = [B && B.credit, radarShown() && RADAR.credit].filter(Boolean).join(' · '); if (!t) return; const d = dpr();
   c.font = `${10 * d}px ui-monospace, Menlo, monospace`; c.textAlign = 'right'; c.fillStyle = '#9a9a9a'; c.shadowColor = '#000'; c.shadowBlur = 3 * d;
-  c.fillText(B.credit, P0.w - 8 * d, P0.h - (PHONE.matches ? 52 : 40) * d); c.textAlign = 'left'; c.shadowBlur = 0;
+  c.fillText(t, P0.w - 8 * d, P0.h - (PHONE.matches ? 52 : 40) * d); c.textAlign = 'left'; c.shadowBlur = 0;
+}
+// ------------------------------------------------------------------ weather radar (Layers: Radar; off by default)
+// RainViewer's composite of the world's radars (no key needed), its latest frame (every 10 min; the list of frames asked for
+// every 5 while a scope has the layer on), laid over the background. Its free tiles go to zoom 7: closer in they're scaled up.
+// Not shown when playing back a timelapse (it's now, not then).
+let RADAR = null, radarT = 0;
+const RADAR_MS = 5 * 60000;
+const radarOn = () => !RP && eachScope(s => s.L.radar).some(Boolean);
+const radarShown = () => RADAR && L.radar && !RP;
+async function loadRadar() {
+  if (!radarOn() || Date.now() - radarT < RADAR_MS) return;
+  radarT = Date.now();
+  try {
+    const j = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json(), f = j.radar && j.radar.past && j.radar.past.slice(-1)[0];
+    if (!f || !j.host) throw 0;
+    if (RADAR && RADAR.id === f.path) return;
+    const u = j.host + f.path, hm = new Date(f.time * 1000).toISOString().slice(11, 16).replace(':', '');
+    RADAR = { id:f.path, urls:[(z, x, y) => `${u}/256/${z}/${x}/${y}/2/1_1.png`], max:7, alpha:.7, prev:RADAR && { ...RADAR, prev:null },
+              credit:`radar ${hm}Z RainViewer` };
+    mapKey = '';
+  } catch (e) { radarT = Date.now() - RADAR_MS + 30000; }
+}
+function drawRadar(c) {
+  if (!radarShown()) return;
+  c.save(); c.globalAlpha = RADAR.alpha; drawTiles(c, RADAR); c.restore();
 }
 function drawMap() {
   const c = mctx, d = dpr();
   c.fillStyle = '#000'; c.fillRect(0, 0, map.width, map.height);
   drawBasemap(c);
+  drawRadar(c);
   const ppn = pxPerNm();
   if (view.half > 400) {              // the globe's edge and a 15° graticule
     c.strokeStyle = '#222'; c.lineWidth = d; c.beginPath(); c.arc(P0.w / 2, P0.h / 2, P0.k, 0, 7); c.stroke();
@@ -590,7 +681,8 @@ function drawMap() {
   if (L.diagram && view.half < 4) drawDiagrams(c);
   if (L.taxi && view.half < 4) drawGround(c);
   // range rings around the airport you picked
-  if (L.rings && home && view.half < 150) { for (let r = 10; r <= 50; r += 10) geoCircle(c, home[5], home[6], r, r === 50 ? '#555' : COL.ring); }
+  const rc = apt || home;
+  if (L.rings && rc && view.half < 150) { for (let r = 10; r <= 50; r += 10) geoCircle(c, rc[5], rc[6], r, r === 50 ? '#555' : COL.ring); }
   // airports: the big ones from afar, every strip close in, runways to scale
   const close = view.half < 80;
   const list = close ? [...areaAps.values()] : MAJOR;
@@ -599,7 +691,7 @@ function drawMap() {
     const kd = a[8];
     if (!close && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
-    if (!L.airports && !(home && a[0] === home[0])) continue;
+    if (!L.airports && !mineApt(a[0])) continue;
     // runways reach a few nm from the airport's reference point: keep it while they can still be on screen
     const rw = a[9] || [], m = 40 + (close && L.runways && rw.length ? 4 * ppn : 0);
     const [x, y, z] = proj(a[5], a[6]); if (z < 0 || x < -m || y < -m || x > P0.w + m || y > P0.h + m) continue;
@@ -612,7 +704,7 @@ function drawMap() {
     } else if (view.half > 400) { c.strokeStyle = '#3a3a3a'; c.lineWidth = d; c.strokeRect(x - 1.5*d, y - 1.5*d, 3*d, 3*d); }
     else { c.strokeStyle = kd === 'L' ? COL.apt : COL.aptDim; c.lineWidth = d; c.strokeRect(x - 2*d, y - 2*d, 4*d, 4*d); }
     const label = kd === 'L' ? view.half < 1200 : kd === 'M' ? view.half < 150 : view.half < 25;
-    if (label && (L.aptnames || (home && a[0] === home[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
+    if (label && (L.aptnames || mineApt(a[0])) && !(drawRwy && ppn > 120 * d)) { c.fillStyle = kd === 'L' ? COL.apt : COL.aptDim; c.fillText(a[0], x + 5*d, y - 5*d); }
   }
   basemapCredit(c);
 }
@@ -680,7 +772,7 @@ const groundAsked = new Map();
 async function loadGround() {
   const ids = [];
   eachScope(() => { if (!L.taxi || view.half >= 4) return; const vn = viewNm() + 3;
-    if (home && !ids.includes(home[0]) && gc(view.lat, view.lon, home[5], home[6]) < vn) ids.push(home[0]);
+    for (const h of [apt, home]) if (h && !ids.includes(h[0]) && gc(view.lat, view.lon, h[5], h[6]) < vn) ids.push(h[0]);
     for (const a of areaAps.values()) if ('LM'.includes(a[8]) && !ids.includes(a[0]) && gc(view.lat, view.lon, a[5], a[6]) < vn) ids.push(a[0]); });
   for (const id of ids.slice(0, 3)) {
     const g = ground.get(id); if (g && g !== 'pending') continue;
@@ -727,7 +819,7 @@ function drawGround(c) {
   const d = dpr(), ppn = pxPerNm(), vn = viewNm() + 3;
   for (const [id, g] of ground) {
     if (typeof g !== 'object') continue;
-    const a = areaAps.get(id) || (home && home[0] === id ? home : null); if (a && gc(view.lat, view.lon, a[5], a[6]) > vn) continue;
+    const a = areaAps.get(id) || (home && home[0] === id ? home : apt && apt[0] === id ? apt : null); if (a && gc(view.lat, view.lon, a[5], a[6]) > vn) continue;
     if (L.diagram && diagShown(id)) continue;             // its FAA diagram is drawn instead
     for (const p of g.ap) polyFill(c, p, '#121212');
     for (const [, p] of g.tm) polyFill(c, p, '#242424');
@@ -1078,13 +1170,13 @@ function drawAircraft() {
   drawn = [];
   if (!S) return;
   const fOn = fltOn();   // ARR / DEP filter on: only its arrivals / departures are tagged, and always (any zoom, no declutter)
-  const pri = a => a.id === sel || a.id === hover || a.emer ? 2 : tagWas.has(a.id) ? 1 : 0;
+  const pri = a => a.id === sel || a.id === hover || a.emer || lsOn(a.cs) ? 2 : tagWas.has(a.id) ? 1 : 0;
   for (const a of S.aircraft.slice().sort((p, q) => pri(q) - pri(p))) {
     if (a.ground && !L.ground && a.id !== sel) continue;
     const [la, lo, trk] = pos(a), [px, py, z] = proj(la, lo);
     if (z < 0 || px < -80 || py < -80 || px > cv.width + 80 || py > cv.height + 80) continue;
-    const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer;
-    const out = !matches(a) && !isSel && !isHov && !emer;   // filtered out: a grey dot and a short tag (altitude and wake category),
+    const isSel = sel === a.id, isHov = hover === a.id, emer = !!a.emer, talk = lsHeard.size > 0 && lsOn(a.cs);   // talk: on the radio (listen)
+    const out = !matches(a) && !isSel && !isHov && !emer && !talk;   // filtered out: a grey dot and a short tag (altitude and wake category),
     if (out && fOn && fltHide) continue;                     // ARR / DEP filter with the others hidden: not drawn at all
     drawn.push({ a, px, py });
     const lines = !out || L.fltrails;                         // with its trail and track line unless that layer is off
@@ -1104,20 +1196,20 @@ function drawAircraft() {
       continue;
     }
     const keep = fOn && L.tags && matches(a) && (flowOf(a) === 'arr' || flowOf(a) === 'dep');      // one the ARR / DEP filter picked: tagged whatever the zoom
-    const blend = far && worldShown() && !isSel && !isHov && !emer && !keep;   // zoomed out with the worldwide dots: look like them
-    ctx.fillStyle = emer ? COL.alert : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
+    const blend = far && worldShown() && !isSel && !isHov && !emer && !keep && !talk;   // zoomed out with the worldwide dots: look like them
+    ctx.fillStyle = emer ? COL.alert : talk ? COL.sel : a.ps && !blend ? (isSel ? COL.sel : a.ps[1]) : a.ground ? COL.gnd : isSel ? COL.sel : blend ? COL.dbDim : far ? COL.db : '#d0d0d0';
     if (a.ps && !blend && !far) {        // a.ps [letter, colour]: the STARS position symbol (the controlling position) instead of the dot
       ctx.font = FONT(TAG(a.ground ? 9 : 11)); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.ps[0], px, py + .5*d);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     } else { ctx.beginPath(); ctx.arc(px, py, (a.ground && !isSel && !isHov ? (far ? 1 : view.half > 6 ? 1.5 : 2.4) : blend ? 1.3 : far ? 1.6 : 2.4) * d, 0, 7); ctx.fill(); }
-    if ((far || !L.tags) && !isSel && !isHov && !emer && !keep) continue;
-    if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer) continue;
-    if (a.ground && !L.aprontags && !isSel && !isHov && !emer && onApron(la, lo)) continue;   // parked or pushing back: no tag
+    if ((far || !L.tags) && !isSel && !isHov && !emer && !keep && !talk) continue;
+    if (a.ground && view.half > 1.5 && !isSel && !isHov && !emer && !talk) continue;
+    if (a.ground && !L.aprontags && !isSel && !isHov && !emer && !talk && onApron(la, lo)) continue;   // parked or pushing back: no tag
     // data block: callsign, then altitude (hundreds of feet) with a climb/descent arrow and ground speed (tens of knots)
-    const col = emer ? COL.alert : isSel ? COL.sel : COL.db;
+    const col = emer ? COL.alert : isSel || talk ? COL.sel : COL.db;
     const lx = px + 10*d, ly = py - 12*d, bx = lx + 3*d, fs = TAG(a.ground ? 10 : 11), lh = (fs + 2) * d;
     const l3 = !a.ground && a.l3 ? a.l3 : '';                // a.l3: the site's third line (sim replays: assigned heading and altitude)
-    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep)) continue;
+    if (!tagFits(px - 3*d, ly - 2*d - fs * d, bx + Math.max(a.cs.length, 7) * .62 * fs * d, Math.max(py + 3*d, ly - 2*d + (l3 ? 2 : 1) * lh + 3*d), isSel || isHov || emer || keep || talk)) continue;
     tagNow.add(a.id);
     ctx.strokeStyle = col; ctx.lineWidth = d; ctx.beginPath(); ctx.moveTo(px + 4*d, py - 4*d); ctx.lineTo(lx, ly); ctx.stroke();
     ctx.font = FONT(fs); ctx.fillStyle = col;
@@ -1145,7 +1237,7 @@ function hitAircraftAll(mx, my, r) {  // every aircraft within r px, nearest fir
 }
 function hitAirports(mx, my, r) {      // every airport drawn within r px, nearest first
   const list = view.half < 80 ? [...areaAps.values()] : MAJOR, R = r * dpr(), out = [];
-  for (const a of list) { const kd = a[8], mine = home && a[0] === home[0];
+  for (const a of list) { const kd = a[8], mine = mineApt(a[0]);
     if (view.half >= 80 && (view.half > 400 ? kd !== 'L' : kd !== 'L' && kd !== 'M')) continue;
     if ((kd === 'S' || kd === 'W') && (view.half > 25 || !L.small)) continue;
     if (!L.airports && !mine) continue;
@@ -1599,7 +1691,7 @@ function frame() {
   for (const s of scopes) {
     if (!s.cv.width || !s.cv.height || !s.el.offsetWidth) continue;
     use(s); setFrame();
-    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], S && S.center && S.center.join(), S && S.nm].join();
+    const key = [view.lat.toFixed(5), view.lon.toFixed(5), view.half.toFixed(4), cv.width, cv.height, !!LINES, MAJOR.length, areaAps.size, procs.size, groundGen, atcGen, JSON.stringify(L), procSel && procSel.join(), home && home[0], apt && apt[0], S && S.center && S.center.join(), S && S.nm].join();
     if (key !== s.key) { s.key = key; drawMap(); }
     ctx.drawImage(map, 0, 0);
     tagReset(s); drawWx(); drawWorld(); drawBoats(); drawFlight(); fhDraw(); drawAircraft(); if (PG) pgDraw(s); tagDone(s); if (measure && measure.s === s) drawMeasure();
@@ -1728,6 +1820,9 @@ onCv('wheel', e => {
 }, { passive:false });
 }
 function pickAirport(ap) {
+  // a tap on the map of a split scope: its own airport there opens its airport box; another airport becomes its own
+  const sp = active && active !== scopes[0] && $('tiles').className !== 'one' && active.el.offsetWidth ? active : null;
+  if (sp) { if (ap[0] === (sp.apt || home || [])[0]) sp.aptOpen(); else sp.setApt(ap); return; }
   if (home && ap[0] === home[0]) { homeCardShut = false; select(null); renderCard(); return; }   // the picked airport: reopen its card
   setHome(ap, false);
 }
@@ -1787,7 +1882,7 @@ function setHome(a, fly, half) {
   if (!procs.has(a[0])) loadProcs(a[5], a[6], 30, a[0]);
   fetch('/api/live/airport?id=' + encodeURIComponent(a[0])).then(r => r.json()).then(j => { homeInfo = j; mapKey = ''; renderCard(); }).catch(() => {});
   if (fly) { view.lat = a[5]; view.lon = a[6]; view.half = half || 40; }
-  if (scopes[1]) Object.assign(scopes[1].view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 });
+  for (const s of scopes.slice(1)) { if (!s.apt) Object.assign(s.view, { lat:a[5], lon:a[6], half:a[8] === 'L' ? 3 : 2 }); s.aptShow(); }
   renderCard(); viewChanged(true);
 }
 // the side panel holds the airport card (or the selected aircraft's): nothing picked, no side panel
@@ -2216,9 +2311,17 @@ async function poll() {
   const worldOnly = !RP && has('world') && WORLD && WORLD.ok && !sel && !aroundHome && eachScope(worldShown).every(Boolean);
   if (RP || PG) { loadRoutes(); loadGround(); loadDiagrams(); setGroundNote(); }
   else if (worldOnly) { S = { ok: true, t: Date.now() / 1000, src: S && S.src, srv: S && S.srv, aircraft: [] };
-    ingest(); loadWorld(); loadBoats(); loadWx(); loadAtc(); }
+    ingest(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadAtc(); }
   else try {
-    const s = await (await fetch(`/api/live?${srvQ()}lat=${(aroundHome ? home[5] : view.lat).toFixed(3)}&lon=${(aroundHome ? home[6] : view.lon).toFixed(3)}&nm=${(aroundHome ? MAX_LIVE_NM : nm).toFixed(0)}`)).json();
+    const la0 = aroundHome ? home[5] : view.lat, lo0 = aroundHome ? home[6] : view.lon, nm0 = aroundHome ? MAX_LIVE_NM : nm;
+    // a split scope showing somewhere past that (its own airport, or panned away): its area is asked too, and merged in
+    const more = eachScope(o => o !== scopes[0] && viewNm() <= MAX_LIVE_NM * 1.05 && gc(view.lat, view.lon, la0, lo0) + viewNm() > nm0
+      ? [view.lat, view.lon, Math.max(10, Math.min(250, viewNm() * 1.05))] : null).filter(Boolean);
+    const live = (la, lo, n) => fetch(`/api/live?${srvQ()}lat=${la.toFixed(3)}&lon=${lo.toFixed(3)}&nm=${n.toFixed(0)}`).then(r => r.json());
+    const [s, ...ex] = await Promise.all([live(la0, lo0, nm0), ...more.map(m => live(...m).catch(() => null))]);
+    s.areas = [[la0, lo0, nm0]];
+    if (s.ok) for (const [i, x] of ex.entries()) { if (!x || !x.ok) continue; s.areas.push(more[i]);
+      const ids = new Set(s.aircraft.map(a => a.id)); for (const a of x.aircraft) if (!ids.has(a.id)) s.aircraft.push(a); }
     if (RP || PG) throw 0;                         // a timelapse (or play) started while this was on its way
     if (S && S.srv && s.srv && S.srv.key !== s.srv.key) { S = null; motion.clear(); }
     if (S && s.t !== S.t) {
@@ -2228,9 +2331,9 @@ async function poll() {
     }
     // a report that stops (out of the area, or gone quiet) still glides for its 20 s of dead reckoning; then it's dropped
     if (S && s.ok) { const ids = new Set(s.aircraft.map(a => a.id));
-      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && gc(o.lat, o.lon, s.center[0], s.center[1]) < s.nm) s.aircraft.push(o); }
+      for (const o of S.aircraft) if (!ids.has(o.id) && Date.now() / 1000 - o.ts < STALE_S && s.areas.some(([la, lo, n]) => gc(o.lat, o.lon, la, lo) < n)) s.aircraft.push(o); }
     S = s;
-    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
+    ingest(); loadRoutes(); loadWorld(); loadBoats(); loadWx(); loadRadar(); loadGround(); loadDiagrams(); setGroundNote(); loadAtis(); loadAtc(); loadFlight(); loadDetail(); loadAcars(); loadHistory();
   } catch (e) { /* server restarting */ }
   // airports with runways (and procedures) near what each scope shows
   const areas = eachScope(s => { if (view.half >= 80) return null;
@@ -3349,6 +3452,249 @@ function fhDraw() {                              // the replayed flight's whole 
   for (const p of [P[0], P[P.length - 1]]) { const [x, y, z] = proj(p[1], p[2]); if (z < 0) continue; ctx.fillStyle = '#ff9f0a'; ctx.fillRect(x - 2 * dpr(), y - 2 * dpr(), 4 * dpr(), 4 * dpr()); }
 }
 
+// ------------------------------------------------------------------ listen (SITE feature 'listen'): white tags for the aircraft on the radio
+// The page hears LiveATC through an audio input (any browser, Safari too: the mic hearing the speakers, or a loopback
+// device such as BlackHole carrying the Mac's sound) or, in Chrome / Edge, a tab shared with its audio.
+// Nothing leaves the browser. The audio is cut into transmissions at the pauses, and Whisper (transformers.js, in a worker;
+// WebGPU where there is one) writes each one down, a partial one every second and a half while it goes on. An aircraft
+// whose callsign is in it gets a white tag for LS_HOLD_S after its last mention.
+const LS_ASR = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js', LS_MODEL = 'onnx-community/whisper-base.en';
+const LS_HOLD_S = 6;
+const LS_WORKER = `import { pipeline } from '${LS_ASR}';
+let asr = null;
+const ready = (async () => {
+  const gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null));
+  const opt = gpu ? { device:'webgpu', dtype:{ encoder_model:'fp32', decoder_model_merged:'q4' } } : { device:'wasm', dtype:'q8' };
+  asr = await pipeline('automatic-speech-recognition', '${LS_MODEL}', { ...opt, progress_callback: p => p.status === 'progress' && postMessage({ progress: [p.file, p.loaded, p.total] }) });
+  await asr(new Float32Array(16000));      // the first run compiles the model: done now, not on the first transmission
+  postMessage({ ready: gpu ? 'WebGPU' : 'CPU' });
+})().catch(e => postMessage({ error: String(e && e.message || e) }));
+onmessage = async ({ data }) => {
+  await ready; if (!asr) return;
+  try { const r = await asr(data.audio); postMessage({ id: data.id, text: (r.text || '').trim() }); }
+  catch (e) { postMessage({ id: data.id, text: '', error: String(e && e.message || e) }); }
+};`;
+const lsHeard = new Map();                 // cs -> when its tag stops being white (performance.now() ms)
+const lsOn = cs => (lsHeard.get(cs) || 0) > performance.now();
+let LS = null;                             // the running listener: {stream, ctx, worker, ...}
+let lsMsg = '', lsLast = null;             // the panel's status line; the last transmission {text, cs}
+const lsSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
+const lsTabOk = !lsSafari && !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !/android|iphone|ipad/i.test(navigator.userAgent);
+let lsDev = (() => { try { return localStorage.getItem(KEY + '-listen-dev') || ''; } catch (e) { return ''; } })();
+let lsDevs = [];
+async function lsDevices() {
+  try { lsDevs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch (e) { lsDevs = []; }
+}
+function lsRender() {
+  const b = $('lsBtn'); b.classList.toggle('on', !!LS); b.classList.toggle('hear', !!(LS && LS.speech));
+  b.textContent = LS ? 'LISTEN ●' : 'LISTEN';
+  const p = $('lsp'); if (p.hidden) return;
+  const opts = `<option value="">Default input</option>` + lsDevs.map(d => `<option value="${esc(d.deviceId)}"${d.deviceId === lsDev ? ' selected' : ''}>${esc(d.label || 'Input ' + d.deviceId.slice(0, 6))}</option>`).join('');
+  p.innerHTML = `<div class="hd">Tags turn white while their aircraft is on the radio. Play LiveATC, then let the page hear it. The audio stays on this computer.</div>` +
+    (LS ? `<div class="row"><b>${esc(LS.label)}</b><button data-ls="stop">Stop</button></div>`
+        : `<div class="row"><select id="lsDev" title="The microphone, hearing LiveATC from the speakers, or a loopback device (BlackHole) carrying the Mac's sound">${opts}</select><button data-ls="mic">Listen</button></div>` +
+          (lsTabOk ? `<div class="row"><button data-ls="tab" title="Pick LiveATC's tab and tick “Share tab audio”">Share a tab's audio…</button></div>` : '')) +
+    `<div class="st">${esc(lsMsg)}</div>` +
+    (lsLast ? `<div class="last"><b>${esc(lsLast.cs.join(' ') || '—')}</b> ${esc(lsLast.text)}</div>` : '') +
+    (lsSafari && !LS ? `<div class="tip">Safari can't hear another tab, so play LiveATC through the speakers and pick the microphone, or for a clean feed install BlackHole and send the Mac's sound to it (Audio MIDI Setup → Multi-Output Device) and pick BlackHole here.</div>` : '');
+}
+$('lsBtn').onclick = async () => {
+  const p = $('lsp'); p.hidden = !p.hidden; if (p.hidden) return;
+  await lsDevices(); lsRender();
+};
+$('lsp').onclick = e => {
+  const k = e.target.dataset && e.target.dataset.ls; if (!k) return;
+  if (k === 'stop') return lsStop();
+  if (k === 'mic') { lsDev = $('lsDev').value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} }
+  lsStart(k);
+};
+$('lsp').onchange = e => { if (e.target.id === 'lsDev') { lsDev = e.target.value; try { localStorage.setItem(KEY + '-listen-dev', lsDev); } catch (er) {} } };
+function lsStop(msg) {
+  if (LS) { try { LS.stream.getTracks().forEach(t => t.stop()); } catch (e) {} try { LS.ctx.close(); } catch (e) {} }
+  LS = null; lsMsg = msg || ''; lsRender();
+}
+let lsWorker = null, lsReady = '', lsProg = new Map();
+function lsWorkerUp() {                    // one worker for the page: the model loads once, and stays loaded after Stop
+  if (lsWorker) return lsWorker;
+  lsWorker = new Worker(URL.createObjectURL(new Blob([LS_WORKER], { type: 'text/javascript' })), { type: 'module' });
+  lsWorker.onmessage = ({ data }) => {
+    if (data.progress) {
+      const [f, a, t] = data.progress; lsProg.set(f, [a, t]);
+      let A = 0, T = 0; for (const [x, y] of lsProg.values()) { A += x; T += y || 0; }
+      if (!lsReady) { lsMsg = `loading the speech model… ${T ? Math.round(A / T * 100) : 0}% of ${Math.round(T / 1e6)} MB (once; it's kept for next time)`; lsRender(); }
+    } else if (data.ready) { lsReady = data.ready; lsMsg = LS ? `listening (speech model on ${lsReady})` : ''; lsRender(); }
+    else if (data.error && data.id == null) { lsWorker = null; lsStop('the speech model failed to load: ' + data.error); }
+    else if (data.id != null) lsDone(data);
+  };
+  lsWorker.onerror = e => { lsWorker = null; lsStop('the speech model failed to load' + (e.message ? ': ' + e.message : '')); };
+  return lsWorker;
+}
+async function lsStart(src) {
+  if (LS) lsStop();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();                    // made in the click, so Safari lets it run
+  const raw = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  let stream, label;
+  try {
+    if (src === 'tab') {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: raw, selfBrowserSurface: 'exclude', systemAudio: 'include', preferCurrentTab: false });
+      if (!stream.getAudioTracks().length) { stream.getTracks().forEach(t => t.stop()); ctx.close(); lsMsg = 'no sound in that share: pick the tab again and tick “Share tab audio”'; return lsRender(); }
+      stream.getVideoTracks().forEach(t => t.enabled = false);
+      label = 'a shared tab';
+    } else {
+      const ask = id => navigator.mediaDevices.getUserMedia({ audio: { ...raw, ...(id ? { deviceId: { exact: id } } : {}) } });
+      stream = await ask(lsDev).catch(e => { if (lsDev && e && e.name === 'OverconstrainedError') { lsDev = ''; return ask(''); } throw e; });   // that input gone (Safari renames them)
+      label = stream.getAudioTracks()[0].label || 'microphone';
+      await lsDevices();                   // the inputs' names, now that the page may see them
+    }
+  } catch (e) { ctx.close(); lsMsg = e && e.name === 'NotAllowedError' ? 'not allowed: the browser was told no' : 'no audio: ' + (e && e.message || e); return lsRender(); }
+  stream.getAudioTracks()[0].onended = () => LS && LS.stream === stream && lsStop('the audio ended');
+  if (ctx.state === 'suspended') ctx.resume();
+  const node = ctx.createScriptProcessor(4096, 1, 1), mute = ctx.createGain(); mute.gain.value = 0;
+  ctx.createMediaStreamSource(stream).connect(node); node.connect(mute); mute.connect(ctx.destination);
+  LS = { stream, ctx, label, step: ctx.sampleRate / 16000, acc: 0, n: 0, pos: 0, frame: [], floor: null, speech: false, quiet: 0,
+         pre: [], seg: [], segN: 0, partT: 0, id: 0, busy: false, queue: [] };
+  node.onaudioprocess = e => LS && LS.ctx === ctx && lsAudio(e.inputBuffer.getChannelData(0));
+  lsMsg = lsReady ? `listening (speech model on ${lsReady})` : 'loading the speech model…';
+  lsWorkerUp(); lsRender();
+}
+// 16 kHz in 30 ms frames; a frame is speech when it is well over the noise floor (followed down fast, up slowly between
+// transmissions). A transmission ends after LS_GAP of quiet, or at LS_MAX; it keeps 300 ms from before it started.
+const LS_FR = 480, LS_GAP = 20, LS_MIN = 15, LS_MAX = 600;      // in frames: 0.6 s, 0.45 s, 18 s
+function lsAudio(x) {
+  const s = LS;
+  for (let i = 0; i < x.length; i++) {     // to 16 kHz, averaging the samples that make each one
+    s.acc += x[i]; s.n++;
+    if (++s.pos >= s.step) { s.frame.push(s.acc / s.n); s.acc = 0; s.n = 0; s.pos -= s.step; if (s.frame.length === LS_FR) { lsFrame(Float32Array.from(s.frame)); s.frame = []; } }
+  }
+}
+function lsFrame(f) {
+  const s = LS;
+  let e = 0; for (const v of f) e += v * v; const rms = Math.sqrt(e / f.length);
+  if (s.floor == null) s.floor = rms;
+  const loud = rms > Math.max(s.floor * 3, 0.004);
+  if (!s.speech) {
+    s.floor += (rms - s.floor) * (rms < s.floor ? 0.2 : 0.01);
+    s.pre.push(f); if (s.pre.length > 10) s.pre.shift();
+    if (loud) { s.speech = true; s.seg = s.pre.slice(); s.pre = []; s.quiet = 0; s.segN = 0; s.partT = performance.now(); s.cs = new Set(); lsRender(); }
+    return;
+  }
+  s.seg.push(f); s.segN++;
+  s.quiet = rms > Math.max(s.floor * 2, 0.003) ? 0 : s.quiet + 1;
+  if (s.quiet >= LS_GAP || s.seg.length >= LS_MAX) {
+    s.speech = false; lsRender();
+    if (s.segN >= LS_MIN) lsSend(s.seg, true, s.cs);
+    s.seg = []; return;
+  }
+  if (performance.now() - s.partT > 1500 && !s.busy) { s.partT = performance.now(); lsSend(s.seg, false, s.cs); }   // a partial one: the tag goes white before the transmission ends
+}
+function lsSend(frames, final, cs) {
+  const s = LS, n = frames.reduce((a, f) => a + f.length, 0), audio = new Float32Array(n);
+  let o = 0; for (const f of frames) { audio.set(f, o); o += f.length; }
+  const job = { id: ++s.id, audio, final, cs };
+  if (s.busy) { if (final) { s.queue = s.queue.filter(j => j.final).slice(-3); s.queue.push(job); } return; }
+  s.busy = true; lsWorkerUp().postMessage({ id: job.id, audio }, [audio.buffer]); s.job = job;
+}
+function lsDone(r) {
+  const s = LS; if (!s || !s.job || s.job.id !== r.id) return;
+  const job = s.job; s.busy = false; s.job = null;
+  const text = r.text || '', all = new Set();
+  for (const sc of scopes) for (const x of sc.drawn || []) all.add(x.a.cs);
+  if (!all.size && S) for (const a of S.aircraft) all.add(a.cs);
+  const hit = text ? lsMatch(text, [...all].filter(Boolean)) : [];
+  const until = performance.now() + LS_HOLD_S * 1000 + (job.final ? 0 : 3000);
+  for (const cs of hit) { lsHeard.set(cs, until); job.cs.add(cs); }
+  if (job.final && text && !/^\[.*\]$|^\(.*\)$/.test(text)) { lsLast = { text, cs: [...job.cs] }; lsRender(); }
+  const next = s.queue.shift();
+  if (next) { s.busy = true; s.job = next; lsWorkerUp().postMessage({ id: next.id, audio: next.audio }, [next.audio.buffer]); }
+}
+// which aircraft a transmission is from or to: the words Whisper wrote down are turned into spoken callsigns (airline
+// telephony + number, "november" + letters and digits, a bare group like "three alpha bravo") and matched against the
+// callsigns on the scope. Exact matches win; else a near one (a digit off, a GA callsign shortened to its last three),
+// and only if no other aircraft matches as well.
+const LS_TEL = Object.fromEntries(Object.entries({
+  AAL:'american', DAL:'delta', UAL:'united', SWA:'southwest', JBU:'jetblue', ASA:'alaska', NKS:'spirit wings', FFT:'frontier flight',
+  HAL:'hawaiian', SKW:'skywest', RPA:'brickyard', ENY:'envoy', EDV:'endeavor', JIA:'blue streak', PDT:'piedmont', GJS:'lindbergh',
+  AWI:'wisconsin', CPZ:'compass', QXE:'horizon', SCX:'sun country', AAY:'allegiant', MXY:'moxy', UCA:'commutair', ASH:'air shuttle',
+  FDX:'fedex', UPS:'ups', GTI:'giant', ABX:'abex', ATN:'air transport', CKS:'connie', PAC:'polar', AJT:'amerijet', SOO:'southern air',
+  WGN:'western global', CLX:'cargolux', GEC:'lufthansa cargo', BOX:'german cargo', AMF:'ameriflight', CFS:'empire', MTN:'mountain',
+  EJA:'execjet', LXJ:'flexjet', EJM:'jet speed', RCH:'reach', SAM:'sam', CNS:'cobra', KAL:'korean air', AAR:'asiana', JAL:'japan air',
+  ANA:'all nippon', CPA:'cathay', CCA:'air china', CES:'china eastern', CSN:'china southern', SIA:'singapore', QFA:'qantas',
+  ANZ:'new zealand', ACA:'air canada', JZA:'jazz', WJA:'westjet', ROU:'rouge', TSC:'air transat', POE:'porter', BAW:'speedbird',
+  VIR:'virgin', EZY:'easy', RYR:'ryanair', DLH:'lufthansa', AFR:'air france', KLM:'klm', IBE:'iberia', ITY:'itarrow', SWR:'swiss',
+  AUA:'austrian', SAS:'scandinavian', FIN:'finnair', ICE:'iceair', EIN:'shamrock', TAP:'air portugal', THY:'turkish', UAE:'emirates',
+  QTR:'qatari', ETD:'etihad', SVA:'saudia', ELY:'el al', AMX:'aeromexico', VOI:'volaris', VIV:'aerobus', CMP:'copa', AVA:'avianca',
+  LAN:'lan', TAM:'tam', AZU:'azul', ARG:'argentina', AIC:'air india', PAL:'philippine', EVA:'eva', CAL:'dynasty', THA:'thai',
+  MAS:'malaysian', GIA:'indonesia', HVN:'vietnam airlines', ETH:'ethiopian', MSR:'egyptair', RAM:'royal air maroc', SAA:'springbok',
+  KQA:'kenya', WZZ:'wizz air', NAX:'nor shuttle', VLG:'vueling', EWG:'eurowings', BEL:'beeline', LOT:'pollot', AEE:'aegean',
+  BTI:'air baltic', CJT:'cargojet', FLE:'flair', SWG:'sunwing', NOK:'nok air', TVF:'france soleil', EXS:'channex', TOM:'tomjet',
+}).map(([k, v]) => [v.replace(/ /g, ''), k]));
+LS_TEL.fedexpress = 'FDX';
+const LS_NUM = { zero:0, oh:0, one:1, two:2, to:null, too:null, three:3, tree:3, four:4, for:null, fower:4, five:5, fife:5, six:6, seven:7, eight:8, nine:9, niner:9 };
+const LS_TEEN = { ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19 };
+const LS_TENS = { twenty:2, thirty:3, forty:4, fourty:4, fifty:5, sixty:6, seventy:7, eighty:8, ninety:9 };
+const LS_NATO = { alpha:'A', alfa:'A', bravo:'B', charlie:'C', delta:'D', echo:'E', foxtrot:'F', fox:'F', golf:'G', hotel:'H', india:'I',
+  juliet:'J', juliett:'J', kilo:'K', lima:'L', mike:'M', november:'N', oscar:'O', papa:'P', quebec:'Q', romeo:'R', sierra:'S', tango:'T',
+  uniform:'U', victor:'V', whiskey:'W', whisky:'W', xray:'X', yankee:'Y', zulu:'Z' };
+function lsSpoken(text) {                // -> [{tel, n, g}]: each group of letters/digits, with the airline (or 'november') said before it
+  const w = String(text).toLowerCase().replace(/(\d)[,.](?=\d)/g, '$1').replace(/x-ray/g, 'xray').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const tok = [];                          // {v: digits / a letter / an alphanumeric, tel: an airline code, word}
+  const unit = s => s in LS_NUM && LS_NUM[s] != null && LS_NUM[s] > 0 ? LS_NUM[s] : null;
+  for (let i = 0; i < w.length; i++) {
+    const s = w[i];
+    let tel = null, k = 0;                 // the longest airline name starting here, up to three words ("air canada", "jet blue", "south west")
+    for (let n = 3; n >= 1 && !tel; n--) if (i + n <= w.length) { const c = LS_TEL[w.slice(i, i + n).join('')]; if (c) { tel = c; k = n; } }
+    const next = w[i + k];
+    if (tel && next && (/^\d/.test(next) || next in LS_NUM && LS_NUM[next] != null || next in LS_TEEN || next in LS_TENS)) { tok.push({ tel }); i += k - 1; continue; }
+    if (s in LS_NUM && LS_NUM[s] != null) tok.push({ v: String(LS_NUM[s]) });
+    else if (s in LS_TEEN) tok.push({ v: String(LS_TEEN[s]) });
+    else if (s in LS_TENS) { const u = unit(w[i + 1]); tok.push({ v: String(LS_TENS[s] * 10 + (u || 0)) }); if (u) i++; }
+    else if (s === 'hundred' && tok.length && tok[tok.length - 1].v && /^\d$/.test(tok[tok.length - 1].v)) tok[tok.length - 1].v += '00';
+    else if (s in LS_NATO) tok.push({ v: LS_NATO[s], nato: true, word: s });
+    else if (/^\d+[a-z]{0,3}$/.test(s) || /^[a-z]\d+[a-z]{0,3}$/.test(s) && s.length >= 3) tok.push({ v: s.toUpperCase() });
+    else tok.push({ word: s });
+  }
+  const out = [];
+  for (let i = 0; i < tok.length; i++) {
+    if (!tok[i].v) continue;
+    const before = tok[i - 1] || {};
+    let j = i, g = '';
+    while (j < tok.length && tok[j].v) g += tok[j++].v;
+    const nov = tok[i].word === 'november' && g.length > 1;   // "november one two three ..." (the N itself is in g)
+    out.push({ tel: before.tel || null, n: nov, g: nov ? g.slice(1) : g, raw: g });
+    // a NATO letter that started it may be an airline-free group's first character, or not part of it at all ("delta 12" without telephony)
+    if (tok[i].nato && !nov && g.length > 1) out.push({ tel: before.tel || null, n: false, g: g.slice(1), raw: g.slice(1) });
+    i = j - 1;
+  }
+  return out;
+}
+function lsLev1(a, b) {                   // whether a and b are at most one edit apart
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0; while (i < a.length && a[i] === b[i]) i++;
+  return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i);
+}
+function lsScore(cs, sp) {                // how well one spoken group fits callsign cs (0: not at all, 3: exactly)
+  const m = cs.match(/^([A-Z]{3})(\d[0-9A-Z]*)$/);
+  if (m) {                                 // an airline's: code + flight number
+    if (sp.tel === m[1]) return sp.g === m[2] ? 3 : m[2].length >= 2 && lsLev1(sp.g, m[2]) ? 2 : 0;
+    return !sp.tel && sp.g === m[2] && m[2].length >= 3 ? 1 : 0;    // the airline's name missed, the number heard
+  }
+  if (sp.tel) return 0;
+  const g = sp.n ? 'N' + sp.g : sp.raw;    // a registration: N123AB, C-GABC sent as CGABC, ...
+  if (g === cs || cs[0] === 'N' && sp.g === cs.slice(1)) return 3;
+  if (sp.g.length >= 3 && /[A-Z]/.test(sp.g) && cs.endsWith(sp.g)) return 2;      // shortened: "three alpha bravo"
+  return 0;
+}
+function lsMatch(text, css) {             // -> the callsigns among css the transmission is about
+  const sp = lsSpoken(text);
+  const best = new Map();
+  for (const cs of new Set(css)) { let b = 0; for (const s of sp) b = Math.max(b, lsScore(cs, s)); if (b) best.set(cs, b); }
+  const top = Math.max(0, ...best.values());
+  const hits = [...best].filter(([, v]) => v === top).map(([cs]) => cs);
+  return top === 3 ? hits : hits.length === 1 ? hits : [];
+}
+
 // ------------------------------------------------------------------ start: #KSFO, #KSFO/40 or #lat,lon,half
 (async () => {
   makeScope({ lat:37.62, lon:-122.38, half:52 }); makeScope({ lat:37.62, lon:-122.38, half:3 }); use(scopes[0]);
@@ -3365,6 +3711,7 @@ function fhDraw() {                              // the replayed flight's whole 
   else Object.assign(view, { lat:38, lon:-35, half:R_NM * 1.05 });        // SITE.start null: the whole globe
   if (has('servers')) { renderServers(); loadServers(); }
   if (has('atc')) atcInit();
+  if (has('listen')) $('lsBtn').hidden = false;
   const tlq = new URLSearchParams(location.search).get('tl');
   const fhq = new URLSearchParams(location.search).get('fh');
   if (has('history') && fhq && !tlq) fhOpen(fhq, +new URLSearchParams(location.search).get('t') || 0, !m && !h);
@@ -3379,6 +3726,13 @@ function fhDraw() {                              // the replayed flight's whole 
     if (!a) { try { a = (await (await fetch('/api/live/search?q=' + encodeURIComponent(id))).json())[0]; } catch (e) {} }
     if (a) setHome(a, true, want[1] ? +want[1] : 40);
     schedule(0);
+  }
+  // a split scope given an airport of its own last time
+  for (const s of scopes.slice(1)) {
+    const id = (() => { try { return localStorage.getItem(KEY + '-apt-' + s.n); } catch (e) { return null; } })(); if (!id) continue;
+    let a = MAJOR.find(x => x[0] === id);
+    if (!a) { try { a = (await (await fetch('/api/live/search?q=' + encodeURIComponent(id))).json()).find(x => x[0] === id); } catch (e) {} }
+    if (a) s.setApt(a);
   }
 })();
 </script>
